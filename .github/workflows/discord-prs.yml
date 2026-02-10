@@ -48,4 +48,4 @@ jobs:
               body: JSON.stringify({ embeds: [embed] })
             });
         env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
+          WEBHOOK_URL: ${{ secrets.PRS_DISCORD_WEBHOOK }}
