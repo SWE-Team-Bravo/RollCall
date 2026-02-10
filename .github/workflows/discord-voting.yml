@@ -1,0 +1,41 @@
+name: Discord Issue Label Notification
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const label = context.payload.label.name;
+            const trackedLabels = ['tj'];
+            
+            if (!trackedLabels.includes(label.toLowerCase())) {
+              console.log(`Label "${label}" not tracked, skipping`);
+              return;
+            }
+            
+            
+            const embed = {
+              title: `⭕ "${label}" added to: ${issue.title}`,
+              description: issue.body || "No description",
+              url: issue.html_url,
+              color: 9807270,
+              fields: [
+                { name: "Label", value: label, inline: true },
+                { name: "Author", value: issue.user.login, inline: true }
+              ]
+            };
+            
+            await fetch(process.env.WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ embeds: [embed] })
+            });
+        env:
+          WEBHOOK_URL: ${{ secrets.VOTING_DISCORD_WEBHOOK }}
