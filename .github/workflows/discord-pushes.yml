@@ -1,0 +1,43 @@
+name: Discord Push Notification
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const payload = context.payload;
+            const commits = payload.commits;
+            const pusher = payload.pusher.name;
+            
+            let commitText = commits
+              .map(c => `• ${c.message.split('\n')[0]} (${c.author.name})`)
+              .join('\n');
+            
+            if (commitText.length > 1024) {
+              commitText = commitText.substring(0, 1021) + '...';
+            }
+            
+            const embed = {
+              title: `Pushed to main`,
+              description: commitText || "No commits",
+              url: `${{ github.server_url }}/${{ github.repository }}/commits/${{ github.sha }}`,
+              color: 7419530,
+              fields: [
+                { name: "Pusher", value: pusher, inline: true },
+                { name: "Commits", value: commits.length.toString(), inline: true }
+              ]
+            };
+            
+            await fetch(process.env.WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ embeds: [embed] })
+            });
+        env:
+          WEBHOOK_URL: ${{ secrets.PUSHES_DISCORD_WEBHOOK }}
