@@ -13,7 +13,7 @@ jobs:
           script: |
             const issue = context.payload.issue;
             const label = context.payload.label.name;
-            const trackedLabels = ['tj', 'tt', 'cg', 'es', 'pg'];
+            const trackedLabels = ['tj', 'tt', 'cg', 'es', 'pg', 'bs'];
             
             if (!trackedLabels.includes(label.toLowerCase())) {
               console.log(`Label "${label}" not tracked, skipping`);
