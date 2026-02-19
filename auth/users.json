@@ -1,0 +1,28 @@
+{
+  "usernames": {
+    "admin1": {
+      "email": "admin1@rollcall.local",
+      "name": "Admin User",
+      "password": "$2b$12$qQcYwjUdSrBOhiRi36v/L.KhFrvWtwcpftWmvzAwG.FQkFD68DCY2",
+      "role": "admin"
+    },
+    "cadre1": {
+      "email": "cadre1@rollcall.local",
+      "name": "Cadre User",
+      "password": "$2b$12$eOmMxMRotv4c96QAPIqaY./nQT6ixv2RahK3ZWGwIrtNNsWaPZ3gm",
+      "role": "cadre"
+    },
+    "fc1": {
+      "email": "fc1@rollcall.local",
+      "name": "Flight Commander",
+      "password": "$2b$12$4WXbhG47TY7Vux32iKlwYuAfhezUa7Pcm6rVTFW.1oGmjvzFRk2mG",
+      "role": "flight_commander"
+    },
+    "cadet1": {
+      "email": "cadet1@rollcall.local",
+      "name": "Test Cadet",
+      "password": "$2b$12$U9yfPvo4tFVNXI0gw3fRae51m52OwFtqen92Rs16tHWdqa3Nfoq/2",
+      "role": "cadet"
+    }
+  }
+}
