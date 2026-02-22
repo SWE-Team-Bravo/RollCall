@@ -1,29 +1,29 @@
-import json
-import os
 import streamlit as st
 import streamlit_authenticator as stauth
 from config.settings import AUTH_COOKIE_KEY
-
-
-_USERS_PATH = os.path.join(os.path.dirname(__file__), "..", "auth", "users.json")
+from utils.db import get_collection
 
 
 def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
-    # TODO: Replace me with loading from mongo!
-    with open(_USERS_PATH) as f:
-        data = json.load(f)
+    collection = get_collection("users")
+    if collection is None:
+        st.error("Database unavailable — cannot authenticate.")
+        st.stop()
+
+    raw = {"usernames": {}}
     credentials = {"usernames": {}}
-    for username, info in data["usernames"].items():
+    for doc in collection.find({}, {"_id": 0}):
+        username = doc["username"]
+        raw["usernames"][username] = doc
         credentials["usernames"][username] = {
-            "email": info.get("email", ""),
-            "name": info["name"],
-            "password": info["password"],
+            "email": doc.get("email", ""),
+            "name": doc["name"],
+            "password": doc["password"],
         }
-    return credentials, data
+    return credentials, raw
 
 
 def init_auth():
-    """Load users and render the login widget. Call once per page that needs auth."""
     if "authenticator" not in st.session_state:
         credentials, raw = _load_credentials()
         authenticator = stauth.Authenticate(
@@ -43,7 +43,6 @@ def init_auth():
 
 
 def get_current_user() -> dict[str, str] | None:
-    """Return {"username", "name", "role"} if authenticated, else None."""
     if not st.session_state.get("authentication_status"):
         return None
     username = st.session_state.get("username")
@@ -57,13 +56,11 @@ def get_current_user() -> dict[str, str] | None:
 
 
 def require_auth():
-    """Redirect to login if not authenticated. Call at top of protected pages."""
     if not st.session_state.get("authentication_status"):
         st.switch_page("pages/0_Login.py")
 
 
 def require_role(*roles):
-    """Redirect to login if not authenticated or if user lacks one of the given roles."""
     require_auth()
     user = get_current_user()
     if user is None or user["role"] not in roles:

@@ -3,8 +3,6 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 from config.settings import MONGODB_URI, MONGODB_DB
 
-from utils.create_indexes import create_indexes
-
 __client = None
 
 
@@ -35,6 +33,6 @@ def get_collection(collection_name: str) -> Collection | None:
     return db[collection_name]
 
 
-# we create the indexes so that we can enforce unique constraints on the fields
 def _ensure_indexes() -> None:
+    from utils.create_indexes import create_indexes
     create_indexes()
