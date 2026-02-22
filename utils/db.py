@@ -1,8 +1,9 @@
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
-from pymongo.results import InsertOneResult
 from config.settings import MONGODB_URI, MONGODB_DB
+
+from utils.create_indexes import create_indexes
 
 __client = None
 
@@ -15,6 +16,7 @@ def get_client() -> MongoClient | None:
 
     if __client is None:
         __client = MongoClient(MONGODB_URI)
+        _ensure_indexes()
 
     return __client
 
@@ -33,15 +35,6 @@ def get_collection(collection_name: str) -> Collection | None:
     return db[collection_name]
 
 
-def insert_one(collection_name: str, document: dict) -> InsertOneResult | None:
-    collection = get_collection(collection_name)
-    if collection is None:
-        return None
-    return collection.insert_one(document)
-
-
-def find_one(collection_name: str, query: dict) -> dict | None:
-    collection = get_collection(collection_name)
-    if collection is None:
-        return None
-    return collection.find_one(query)
+# we create the indexes so that we can enforce unique constraints on the fields
+def _ensure_indexes() -> None:
+    create_indexes()
