@@ -28,10 +28,13 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
 def init_auth():
     if "authenticator" not in st.session_state:
         credentials, raw = _load_credentials()
+
+        assert AUTH_COOKIE_KEY is not None
+
         authenticator = stauth.Authenticate(
             credentials,
             cookie_name="rollcall_auth",
-            cookie_key=AUTH_COOKIE_KEY or "dev_cookie_key",
+            cookie_key=AUTH_COOKIE_KEY,
             cookie_expiry_days=1,
             auto_hash=False,
         )
