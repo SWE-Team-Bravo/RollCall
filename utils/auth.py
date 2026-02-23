@@ -1,3 +1,5 @@
+from typing import Any
+
 import streamlit as st
 import streamlit_authenticator as stauth
 from config.settings import AUTH_COOKIE_KEY
@@ -9,6 +11,7 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
     if collection is None:
         st.error("Database unavailable — cannot authenticate.")
         st.stop()
+    assert collection is not None
 
     raw = {"usernames": {}}
     credentials = {"usernames": {}}
@@ -26,6 +29,7 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
 def init_auth():
     if "authenticator" not in st.session_state:
         credentials, raw = _load_credentials()
+        assert AUTH_COOKIE_KEY is not None, "AUTH_COOKIE_KEY must be set in environment"
         authenticator = stauth.Authenticate(
             credentials,
             cookie_name="rollcall_auth",
@@ -42,7 +46,7 @@ def init_auth():
     return authenticator
 
 
-def get_current_user() -> dict[str, str] | None:
+def get_current_user() -> dict[str, Any] | None:
     if not st.session_state.get("authentication_status"):
         return None
     username = st.session_state.get("username")
