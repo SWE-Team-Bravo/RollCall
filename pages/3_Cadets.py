@@ -5,6 +5,8 @@ from utils.db_schema_crud import (
     update_cadet,
     delete_cadet,
 )
+
+from utils.db import get_collection
 import re
 import time
 
@@ -44,12 +46,16 @@ def check_input(name: str, last_name: str, email: str) -> tuple[bool, str]:
     return check, msg
 
 
-def add_cadet_to_db(email: str, rank: str):
+def add_cadet_to_db(email: str, rank: str, first_name: str, last_name: str):
     user = get_user_by_email(email)
+    print(user)
     if user is None:
         st.error("User not found!")
+        print("dsaj;lkfjs")
+        return False
     else:
-        create_cadet(user["_id"], rank)
+        create_cadet(user["_id"], rank, first_name, last_name)
+        return True
 
 
 def add_cadet():
@@ -73,11 +79,11 @@ def add_cadet():
         if submit_button:
             check, msg = check_input(cadet_name, cadet_lastname, cadet_email)
             if check:
-                add_cadet_to_db(cadet_email, cadet_rank)
-                st.session_state.show_form = False
-                st.session_state.success_msg = "New cadet added successfully!"
-                st.session_state.success_time = time.time()
-                st.rerun()
+                if add_cadet_to_db(cadet_email, cadet_rank, cadet_name, cadet_lastname):
+                    st.session_state.show_form = False
+                    st.session_state.success_msg = "New cadet added successfully!"
+                    st.session_state.success_time = time.time()
+                    st.rerun()
             else:
                 st.error(msg)
     else:
