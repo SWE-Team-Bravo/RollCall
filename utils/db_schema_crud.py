@@ -61,16 +61,25 @@ def delete_user(user_id: str | ObjectId) -> DeleteResult | None:
 # -- Cadets
 
 
-def create_cadet(user_id: str | ObjectId, rank: str) -> InsertOneResult | None:
+def create_cadet(
+    user_id: str | ObjectId,
+    rank: str,
+    flight_id: str | ObjectId | None = None,
+) -> InsertOneResult | None:
     col = get_collection("cadets")
     if col is None:
         return None
-    return col.insert_one(
-        {
-            "user_id": ObjectId(user_id),
-            "rank": rank,
-        }
-    )
+
+    cadet_doc = {
+        "user_id": ObjectId(user_id),
+        "rank": rank,
+    }
+
+    if flight_id:
+        cadet_doc["flight_id"] = ObjectId(flight_id)
+
+    return col.insert_one(cadet_doc)
+
 
 
 def get_cadet_by_id(cadet_id: str | ObjectId) -> dict | None:
@@ -99,6 +108,31 @@ def delete_cadet(cadet_id: str | ObjectId) -> DeleteResult | None:
     if col is None:
         return None
     return col.delete_one({"_id": ObjectId(cadet_id)})
+
+
+def create_cadet_if_not_exists(
+    user_id: str | ObjectId,
+    rank: int = 100,  # default freshman
+) -> InsertOneResult | None:
+    """
+    Creates a cadet profile for a user if one does not already exist.
+    Rank follows ROTC level system (100, 200, 300, 400, 700, etc.)
+    """
+    col = get_collection("cadets")
+    if col is None:
+        return None
+
+    existing = col.find_one({"user_id": ObjectId(user_id)})
+    if existing:
+        return None
+
+    return col.insert_one(
+        {
+            "user_id": ObjectId(user_id),
+            "rank": rank,
+        }
+    )
+
 
 
 # -- Events
@@ -379,3 +413,47 @@ def delete_waiver_approval(approval_id: str | ObjectId) -> DeleteResult | None:
     if col is None:
         return None
     return col.delete_one({"_id": ObjectId(approval_id)})
+
+# -- Flights
+
+def create_flight(name: str, commander_cadet_id: str | ObjectId):
+    col = get_collection("flights")
+    if col is None:
+        return None
+    return col.insert_one(
+        {
+            "name": name,
+            "commander_cadet_id": ObjectId(commander_cadet_id),
+        }
+    )
+
+
+def get_all_flights():
+    col = get_collection("flights")
+    if col is None:
+        return []
+    return list(col.find())
+
+
+def update_flight(flight_id: str | ObjectId, updates: dict):
+    col = get_collection("flights")
+    if col is None:
+        return None
+    return col.update_one({"_id": ObjectId(flight_id)}, {"$set": updates})
+
+
+def delete_flight(flight_id: str | ObjectId):
+    col = get_collection("flights")
+    if col is None:
+        return None
+    return col.delete_one({"_id": ObjectId(flight_id)})
+
+def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
+    col = get_collection("cadets")
+    if col is None:
+        return None
+
+    return col.update_one(
+        {"_id": ObjectId(cadet_id)},
+        {"$set": {"flight_id": ObjectId(flight_id)}},
+    )
