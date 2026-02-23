@@ -19,52 +19,10 @@ RANK_OPTIONS = (
 
 
 def get_all_cadets() -> list:
-    # col = get_collection("cadets")
-    # if col is None:
-    #     return []
-    # return list(col.find())
-    return [
-        {
-            "_id": "1",
-            "user_id": "u1",
-            "rank": "100/150 (freshman)",
-            "first_name": "John",
-            "last_name": "Smith",
-            "email": "john.smith@email.com",
-        },
-        {
-            "_id": "2",
-            "user_id": "u2",
-            "rank": "200/250/500 (sophomore)",
-            "first_name": "Emily",
-            "last_name": "Johnson",
-            "email": "emily.johnson@email.com",
-        },
-        {
-            "_id": "3",
-            "user_id": "u3",
-            "rank": "300 (junior)",
-            "first_name": "Michael",
-            "last_name": "Brown",
-            "email": "michael.brown@email.com",
-        },
-        {
-            "_id": "4",
-            "user_id": "u4",
-            "rank": "400 (senior)",
-            "first_name": "Sarah",
-            "last_name": "Davis",
-            "email": "sarah.davis@email.com",
-        },
-        {
-            "_id": "5",
-            "user_id": "u5",
-            "rank": "700/800/900 (super senior)",
-            "first_name": "Alex",
-            "last_name": "Wilson",
-            "email": "alex.wilson@email.com",
-        },
-    ]
+    col = get_collection("cadets")
+    if col is None:
+        return []
+    return list(col.find())
 
 
 def check_input(name: str, last_name: str, email: str) -> tuple[bool, str]:
