@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
+from streamlit_authenticator import Hasher
 
 from utils.db import get_collection
 
@@ -10,7 +11,7 @@ def create_user(
     first_name: str,
     last_name: str,
     email: str,
-    password_hash: str,
+    password: str,
     roles: list[str],
 ) -> InsertOneResult | None:
     col = get_collection("users")
@@ -21,7 +22,7 @@ def create_user(
             "first_name": first_name,
             "last_name": last_name,
             "email": email,
-            "password_hash": password_hash,
+            "password_hash": Hasher.hash(password),
             "roles": roles,
             "created_at": datetime.now(timezone.utc),
         }
