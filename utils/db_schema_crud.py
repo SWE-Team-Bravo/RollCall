@@ -81,7 +81,6 @@ def create_cadet(
     return col.insert_one(cadet_doc)
 
 
-
 def get_cadet_by_id(cadet_id: str | ObjectId) -> dict | None:
     col = get_collection("cadets")
     if col is None:
@@ -132,7 +131,6 @@ def create_cadet_if_not_exists(
             "rank": rank,
         }
     )
-
 
 
 # -- Events
@@ -414,7 +412,9 @@ def delete_waiver_approval(approval_id: str | ObjectId) -> DeleteResult | None:
         return None
     return col.delete_one({"_id": ObjectId(approval_id)})
 
+
 # -- Flights
+
 
 def create_flight(name: str, commander_cadet_id: str | ObjectId):
     col = get_collection("flights")
@@ -447,6 +447,7 @@ def delete_flight(flight_id: str | ObjectId):
     if col is None:
         return None
     return col.delete_one({"_id": ObjectId(flight_id)})
+
 
 def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
     col = get_collection("cadets")
