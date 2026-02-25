@@ -17,6 +17,7 @@ st.title("Flight Management")
 # Helper Functions
 # ----------------------------
 
+
 def get_all_cadets():
     col = get_collection("cadets")
     if col is None:
@@ -131,7 +132,9 @@ for flight in flights:
         for cadet in cadets_in_flight:
             user = get_user_by_id(cadet["user_id"])
             if user:
-                name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+                name = (
+                    f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+                )
                 rank = cadet.get("rank", "")
                 st.write(f"- {name} ({rank})")
     else:
