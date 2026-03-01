@@ -10,6 +10,8 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
         st.error("Database unavailable — cannot authenticate.")
         st.stop()
 
+    assert collection is not None
+
     raw = {"usernames": {}}
     credentials = {"usernames": {}}
     for doc in collection.find({}, {"_id": 0}):
@@ -26,6 +28,9 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
 def init_auth():
     if "authenticator" not in st.session_state:
         credentials, raw = _load_credentials()
+
+        assert AUTH_COOKIE_KEY is not None
+
         authenticator = stauth.Authenticate(
             credentials,
             cookie_name="rollcall_auth",
@@ -49,9 +54,9 @@ def get_current_user() -> dict[str, str] | None:
     raw = st.session_state.get("_raw_users", {})
     user_info = raw.get("usernames", {}).get(username, {})
     return {
-        "username": username,
-        "name": st.session_state.get("name", ""),
-        "role": user_info.get("role", "unknown"),
+        "username": str(username),
+        "name": str(st.session_state.get("name", "")),
+        "role": str(user_info.get("role", "unknown")),
     }
 
 

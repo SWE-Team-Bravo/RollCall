@@ -74,3 +74,17 @@ def create_indexes() -> None:
             IndexModel([("approver_id", ASCENDING)], name="approver_id"),
         ]
     )
+
+    db["flights"].create_indexes(
+        [
+            IndexModel([("name", ASCENDING)], name="flight_name_unique", unique=True),
+            IndexModel([("commander_cadet_id", ASCENDING)], name="commander_cadet_id"),
+        ]
+    )
+
+    db["cadets"].create_indexes(
+        [
+            IndexModel([("user_id", ASCENDING)], name="user_id_unique", unique=True),
+            IndexModel([("flight_id", ASCENDING)], name="flight_id"),
+        ]
+    )
