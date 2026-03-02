@@ -15,12 +15,12 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
     raw = {"usernames": {}}
     credentials = {"usernames": {}}
     for doc in collection.find({}, {"_id": 0}):
-        username = doc["username"]
-        raw["usernames"][username] = doc
-        credentials["usernames"][username] = {
-            "email": doc.get("email", ""),
-            "name": doc["name"],
-            "password": doc["password"],
+        email = doc["email"]
+        raw["usernames"][email] = doc
+        credentials["usernames"][email] = {
+            "email": email,
+            "name": f"{doc['first_name']} {doc['last_name']}".strip(),
+            "password": doc["password_hash"],
         }
     return credentials, raw
 
@@ -47,17 +47,17 @@ def init_auth():
     return authenticator
 
 
-def get_current_user() -> dict[str, str] | None:
+def get_current_user() -> dict | None:
     if not st.session_state.get("authentication_status"):
         return None
-    username = st.session_state.get("username")
+    email = st.session_state.get("username")
     raw = st.session_state.get("_raw_users", {})
-    user_info = raw.get("usernames", {}).get(username, {})
+    user_info = raw.get("usernames", {}).get(email, {})
     return {
-        "username": str(username),
-        "name": str(st.session_state.get("name", "")),
-        "role": str(user_info.get("role", "unknown")),
-        "email": str(user_info.get("email", "")),
+        "email": str(email),
+        "first_name": str(user_info.get("first_name", "")),
+        "last_name": str(user_info.get("last_name", "")),
+        "roles": list(user_info.get("roles", [])),
     }
 
 
@@ -66,9 +66,9 @@ def require_auth():
         st.switch_page("pages/0_Login.py")
 
 
-def require_role(*roles):
+def require_role(*roles: str):
     require_auth()
     user = get_current_user()
-    if user is None or user["role"] not in roles:
+    if user is None or not set(user["roles"]) & set(roles):
         st.error("You do not have permission to view this page.")
         st.stop()
