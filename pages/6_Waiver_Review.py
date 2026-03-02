@@ -107,7 +107,12 @@ for waiver in waivers:
         if user_id is not None:
             user = get_user_by_id(user_id)
 
-    cadet_name = user.get("name") if user else "Unknown cadet"
+    if user:
+        first = user.get("first_name", "")
+        last = user.get("last_name", "")
+        cadet_name = f"{first} {last}".strip() or "Unknown cadet"
+    else:
+        cadet_name = "Unknown cadet"
     cadet_email = user.get("email") if user else ""
 
     # Flight
