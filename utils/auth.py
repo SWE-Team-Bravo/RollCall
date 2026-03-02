@@ -57,6 +57,7 @@ def get_current_user() -> dict[str, str] | None:
         "username": str(username),
         "name": str(st.session_state.get("name", "")),
         "role": str(user_info.get("role", "unknown")),
+        "email": str(user_info.get("email", "")),
     }
 
 

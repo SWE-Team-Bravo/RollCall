@@ -158,8 +158,6 @@ if st.session_state.success_time:
 current_user = get_current_user()
 assert current_user is not None
 
-# raw = st.session_state.get("_raw_users", {})
-# email = raw.get("usernames", {}).get(current_user["username"], {}).get("email")
 email = current_user["email"]
 if not email:
     st.error("Could not find an account with this email.")
