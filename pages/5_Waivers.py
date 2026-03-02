@@ -137,8 +137,8 @@ def waiver_form(user_id: str, cadet_id: str):
         st.switch_page("pages/2_Attendance_Submission.py")
 
 
-st.title("Submit Waiver Request")
 require_role("cadet")
+st.title("Submit Waiver Request")
 
 if "waiver_record_id" not in st.session_state:
     st.session_state.waiver_record_id = None
@@ -149,7 +149,6 @@ success_placeholder = st.empty()
 if st.session_state.success_time:
     if time.time() - st.session_state.success_time < 3:
         success_placeholder.success("Waiver request submitted successfully!")
-        time.sleep(1)
         st.rerun()
     else:
         success_placeholder.empty()
@@ -159,8 +158,9 @@ if st.session_state.success_time:
 current_user = get_current_user()
 assert current_user is not None
 
-raw = st.session_state.get("_raw_users", {})
-email = raw.get("usernames", {}).get(current_user["username"], {}).get("email")
+# raw = st.session_state.get("_raw_users", {})
+# email = raw.get("usernames", {}).get(current_user["username"], {}).get("email")
+email = current_user["email"]
 if not email:
     st.error("Could not find an account with this email.")
     st.stop()
