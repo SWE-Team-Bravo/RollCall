@@ -7,6 +7,7 @@ from utils.db_schema_crud import (
     get_attendance_by_cadet,
     get_waiver_by_attendance_record,
     create_waiver,
+    get_approvals_by_waiver,
 )
 import time
 
@@ -58,6 +59,12 @@ def show_waivers(cadet_id: str):
         col[1].write(waiver.get("_event_date"))
         status = waiver.get("status") or ""
         col[2].write(STATUS_BADGE.get(status.lower(), status))
+        approvals = get_approvals_by_waiver(waiver["_id"])
+        if approvals:
+            approval = approvals[0]
+            comments = approval.get("comments")
+            if comments:
+                col[2].write(comments)
         st.markdown(f"**Reason:** {waiver['reason']}")
         st.divider()
 

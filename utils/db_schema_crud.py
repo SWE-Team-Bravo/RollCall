@@ -61,7 +61,11 @@ def delete_user(user_id: str | ObjectId) -> DeleteResult | None:
 
 
 def create_cadet(
-    user_id: str | ObjectId, rank: str, first_name: str, last_name: str, flight_id: str | ObjectId | None = None,
+    user_id: str | ObjectId,
+    rank: str,
+    first_name: str,
+    last_name: str,
+    flight_id: str | ObjectId | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("cadets")
     if col is None:
@@ -78,7 +82,6 @@ def create_cadet(
         cadet_doc["flight_id"] = ObjectId(flight_id)
 
     return col.insert_one(cadet_doc)
-
 
 
 def get_cadet_by_id(cadet_id: str | ObjectId) -> dict | None:
@@ -314,7 +317,7 @@ def create_waiver(
     col = get_collection("waivers")
     if col is None:
         return None
-    return col.insert_one(
+    result = col.insert_one(
         {
             "attendance_record_id": ObjectId(attendance_record_id),
             "reason": reason,
@@ -323,6 +326,54 @@ def create_waiver(
             "created_at": datetime.now(timezone.utc),
         }
     )
+    is_valid, why = validate_waiver(attendance_record_id)
+    if not is_valid:
+        col.update_one({"_id": result.inserted_id}, {"$set": {"status": "denied"}})
+
+        create_waiver_approval(
+            waiver_id=result.inserted_id,
+            approver_id=submitted_by_user_id,
+            decision="denied",
+            comments=f"Auto-denied: {why}",
+        )
+
+    return result
+
+
+def validate_waiver(attendance_record_id: str | ObjectId) -> tuple[bool, str]:
+    from bson import ObjectId
+
+    rec_col = get_collection("attendance_records")
+    evt_col = get_collection("events")
+
+    if rec_col is None or evt_col is None:
+        return False, "Database unavailable."
+
+    attendance_oid = ObjectId(attendance_record_id)
+
+    record = rec_col.find_one({"_id": attendance_oid})
+    if not record:
+        return False, "Attendance record not found."
+
+    event = evt_col.find_one({"_id": record["event_id"]})
+    if not event:
+        return False, "Event not found."
+
+    start_date = event.get("start_date")
+    now = datetime.now(timezone.utc)
+
+    if not isinstance(start_date, datetime):
+        return False, "Invalid event date."
+
+    if start_date.year != now.year:
+        return False, "Event is not in the current year."
+
+    event_type = (event.get("event_type") or "").lower()
+
+    if event_type not in ("pt", "lab"):
+        return False, f"Waivers are not allowed for event type '{event_type}'."
+
+    return True, ""
 
 
 def get_waiver_by_id(waiver_id: str | ObjectId) -> dict | None:
