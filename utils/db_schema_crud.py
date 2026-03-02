@@ -5,8 +5,6 @@ from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
 
 from utils.db import get_collection
 
-# -- Users
-
 
 def create_user(
     first_name: str,
@@ -62,9 +60,7 @@ def delete_user(user_id: str | ObjectId) -> DeleteResult | None:
 
 
 def create_cadet(
-    user_id: str | ObjectId,
-    rank: str,
-    flight_id: str | ObjectId | None = None,
+    user_id: str | ObjectId, rank: str, first_name: str, last_name: str, flight_id: str | ObjectId | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("cadets")
     if col is None:
@@ -73,12 +69,15 @@ def create_cadet(
     cadet_doc = {
         "user_id": ObjectId(user_id),
         "rank": rank,
+        "first_name": first_name,
+        "last_name": last_name,
     }
 
     if flight_id:
         cadet_doc["flight_id"] = ObjectId(flight_id)
 
     return col.insert_one(cadet_doc)
+
 
 
 def get_cadet_by_id(cadet_id: str | ObjectId) -> dict | None:
