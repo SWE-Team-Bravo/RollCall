@@ -326,13 +326,16 @@ def create_waiver(
             "created_at": datetime.now(timezone.utc),
         }
     )
-    is_valid, why = validate_waiver(attendance_record_id)
+    is_valid, why = validate_waiver(ObjectId(attendance_record_id))
     if not is_valid:
-        col.update_one({"_id": result.inserted_id}, {"$set": {"status": "denied"}})
+        col.update_one(
+            {"_id": result.inserted_id},
+            {"$set": {"status": "denied", "auto_denied": True}},
+        )
 
         create_waiver_approval(
             waiver_id=result.inserted_id,
-            approver_id=submitted_by_user_id,
+            approver_id=None,
             decision="denied",
             comments=f"Auto-denied: {why}",
         )
@@ -341,7 +344,6 @@ def create_waiver(
 
 
 def validate_waiver(attendance_record_id: str | ObjectId) -> tuple[bool, str]:
-    from bson import ObjectId
 
     rec_col = get_collection("attendance_records")
     evt_col = get_collection("events")
@@ -418,22 +420,24 @@ def delete_waiver(waiver_id: str | ObjectId) -> DeleteResult | None:
 
 def create_waiver_approval(
     waiver_id: str | ObjectId,
-    approver_id: str | ObjectId,
+    approver_id: str | ObjectId | None,
     decision: str,
     comments: str,
 ) -> InsertOneResult | None:
     col = get_collection("waiver_approvals")
     if col is None:
         return None
-    return col.insert_one(
-        {
-            "waiver_id": ObjectId(waiver_id),
-            "approver_id": ObjectId(approver_id),
-            "decision": decision,
-            "comments": comments,
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
+
+    doc = {
+        "waiver_id": ObjectId(waiver_id),
+        "decision": decision,
+        "comments": comments,
+        "created_at": datetime.now(timezone.utc),
+    }
+    if approver_id is not None:
+        doc["approver_id"] = ObjectId(approver_id)
+
+    return col.insert_one(doc)
 
 
 def get_waiver_approval_by_id(approval_id: str | ObjectId) -> dict | None:
