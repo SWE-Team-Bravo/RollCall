@@ -4,7 +4,7 @@ import os
 from utils.auth import require_role
 from utils.db import get_db
 
-require_role("admin", "flight_commander")
+require_role("admin", "cadre")
 
 st.title("Event Schedule Configuration")
 
