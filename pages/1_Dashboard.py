@@ -77,7 +77,7 @@ if not cadet_docs:
     st.stop()
 
 user_ids = [c["user_id"] for c in cadet_docs if "user_id" in c]
-user_docs = list(users.find({"_id": {"$in": user_ids}}, {"_id": 1, "name": 1}))
+user_docs = list(users.find({"_id": {"$in": user_ids}}, {"_id": 1, "first_name": 1, "last_name": 1}))
 name_by_user_id = {
     u["_id"]: f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or "Unknown"
     for u in user_docs
