@@ -61,7 +61,11 @@ def delete_user(user_id: str | ObjectId) -> DeleteResult | None:
 
 
 def create_cadet(
-    user_id: str | ObjectId, rank: str, first_name: str, last_name: str, flight_id: str | ObjectId | None = None,
+    user_id: str | ObjectId,
+    rank: str,
+    first_name: str,
+    last_name: str,
+    flight_id: str | ObjectId | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("cadets")
     if col is None:
@@ -80,12 +84,18 @@ def create_cadet(
     return col.insert_one(cadet_doc)
 
 
-
 def get_cadet_by_id(cadet_id: str | ObjectId) -> dict | None:
     col = get_collection("cadets")
     if col is None:
         return None
     return col.find_one({"_id": ObjectId(cadet_id)})
+
+
+def get_all_cadets() -> list[dict]:
+    col = get_collection("cadets")
+    if col is None:
+        return []
+    return list(col.find())
 
 
 def get_cadet_by_user_id(user_id: str | ObjectId) -> dict | None:
@@ -348,6 +358,13 @@ def get_waivers_by_status(status: str) -> list[dict]:
     return list(col.find({"status": status}))
 
 
+def get_all_waivers() -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(col.find())
+
+
 def update_waiver(waiver_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("waivers")
     if col is None:
@@ -433,6 +450,13 @@ def get_all_flights():
     if col is None:
         return []
     return list(col.find())
+
+
+def get_flight_by_id(flight_id: str | ObjectId) -> dict | None:
+    col = get_collection("flights")
+    if col is None:
+        return None
+    return col.find_one({"_id": ObjectId(flight_id)})
 
 
 def update_flight(flight_id: str | ObjectId, updates: dict):
