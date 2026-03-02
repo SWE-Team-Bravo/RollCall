@@ -1,12 +1,15 @@
 import streamlit as st
-from pymongo import MongoClient
 import os
+
+from utils.auth import require_role
+from utils.db import get_db
+
+require_role("admin", "flight_commander")
 
 st.title("Event Schedule Configuration")
 
 # --- Connect to DB ---
-client = MongoClient(os.getenv("MONGO_URI"))
-db = client["rollcall"]
+db = get_db()
 
 # --- Load Existing Config ---
 config = db.event_config.find_one({})
