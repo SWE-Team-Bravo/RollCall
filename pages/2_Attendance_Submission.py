@@ -3,6 +3,10 @@ import random
 import secrets
 from datetime import datetime
 
+from utils.auth import require_auth
+
+require_auth()
+
 st.title("Attendance Submission Page")
 
 # Generate variables once per session

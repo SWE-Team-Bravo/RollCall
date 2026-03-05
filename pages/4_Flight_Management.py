@@ -1,6 +1,7 @@
 import streamlit as st
 from bson import ObjectId
 
+from utils.auth import require_role
 from utils.db_schema_crud import (
     create_flight,
     get_all_flights,
@@ -10,6 +11,8 @@ from utils.db_schema_crud import (
     get_cadet_by_id,
 )
 from utils.db import get_collection
+
+require_role("admin", "cadre")
 
 st.title("Flight Management")
 

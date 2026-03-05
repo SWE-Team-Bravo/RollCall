@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.auth import require_role
 from utils.db_schema_crud import (
     get_user_by_email,
     create_cadet,
@@ -10,6 +11,8 @@ from utils.db import get_collection
 import re
 import time
 
+
+require_role("admin", "cadre")
 
 RANK_OPTIONS = (
     "100/150 (freshman)",
