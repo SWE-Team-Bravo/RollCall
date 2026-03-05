@@ -1,14 +1,9 @@
-import streamlit as st
-from utils.db_schema_crud import (
-    get_user_by_email,
-    create_cadet,
-    update_cadet,
-    delete_cadet,
-)
-
-from utils.db import get_collection
-import re
 import time
+
+import streamlit as st
+
+from services.cadets import add_cadet_for_user, get_all_cadets, validate_cadet_input
+from utils.db_schema_crud import delete_cadet, update_cadet
 
 
 RANK_OPTIONS = (
@@ -18,44 +13,6 @@ RANK_OPTIONS = (
     "400 (senior)",
     "700/800/900 (super senior)",
 )
-
-
-def get_all_cadets() -> list:
-    col = get_collection("cadets")
-    if col is None:
-        return []
-    return list(col.find())
-
-
-def check_input(name: str, last_name: str, email: str) -> tuple[bool, str]:
-    check = False
-    msg = ""
-    names_check = r"[A-Za-z'-]+(?: [A-Za-z'-]+)*"
-    email_check = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
-    if name != "" and last_name != "" and email != "":
-        if not re.fullmatch(names_check, name):
-            msg = "Please enter a valid first name! First name can only contain letters, apostrophes, and hyphens."
-        elif not re.fullmatch(names_check, last_name):
-            msg = "Please enter a valid last name! Last name can only contain letters, apostrophes, and hyphens."
-        elif not re.fullmatch(email_check, email):
-            msg = "Please enter a valid email!"
-        else:
-            check = True
-    else:
-        msg = "Please fill all the fields!"
-    return check, msg
-
-
-def add_cadet_to_db(email: str, rank: str, first_name: str, last_name: str):
-    user = get_user_by_email(email)
-    print(user)
-    if user is None:
-        st.error("User not found!")
-        print("dsaj;lkfjs")
-        return False
-    else:
-        create_cadet(user["_id"], rank, first_name, last_name)
-        return True
 
 
 def add_cadet():
@@ -77,13 +34,15 @@ def add_cadet():
             st.rerun()
 
         if submit_button:
-            check, msg = check_input(cadet_name, cadet_lastname, cadet_email)
+            check, msg = validate_cadet_input(cadet_name, cadet_lastname, cadet_email)
             if check:
-                if add_cadet_to_db(cadet_email, cadet_rank, cadet_name, cadet_lastname):
+                if add_cadet_for_user(cadet_email, cadet_rank, cadet_name, cadet_lastname):
                     st.session_state.show_form = False
                     st.session_state.success_msg = "New cadet added successfully!"
                     st.session_state.success_time = time.time()
                     st.rerun()
+                else:
+                    st.error("User not found!")
             else:
                 st.error(msg)
     else:
@@ -102,30 +61,16 @@ def edit_cadet(cadet):
     rank_index = RANK_OPTIONS.index(current_rank) if current_rank in RANK_OPTIONS else 0
     cadet_id = str(cadet["_id"])
 
-    new_first = st.text_input(
-        "First Name", cadet.get("first_name", ""), key=f"first_{cadet_id}"
-    )
-    new_last = st.text_input(
-        "Last Name", cadet.get("last_name", ""), key=f"last_{cadet_id}"
-    )
+    new_first = st.text_input("First Name", cadet.get("first_name", ""), key=f"first_{cadet_id}")
+    new_last = st.text_input("Last Name", cadet.get("last_name", ""), key=f"last_{cadet_id}")
     new_email = st.text_input("Email", cadet.get("email", ""), key=f"email_{cadet_id}")
-    new_rank = st.selectbox(
-        "Rank", RANK_OPTIONS, index=rank_index, key=f"rank_{cadet_id}"
-    )
+    new_rank = st.selectbox("Rank", RANK_OPTIONS, index=rank_index, key=f"rank_{cadet_id}")
 
     col1, col2, spacer = st.columns([2, 2, 10])
     if col1.button("Save", key=f"save_{cadet_id}"):
-        check, msg = check_input(new_first, new_last, new_email)
+        check, msg = validate_cadet_input(new_first, new_last, new_email)
         if check:
-            update_cadet(
-                cadet_id,
-                {
-                    "first_name": new_first,
-                    "last_name": new_last,
-                    "email": new_email,
-                    "rank": new_rank,
-                },
-            )
+            update_cadet(cadet_id, {"first_name": new_first, "last_name": new_last, "email": new_email, "rank": new_rank})
             st.session_state.editing_id = None
             st.rerun()
         else:
@@ -138,9 +83,7 @@ def edit_cadet(cadet):
 
 def remove_cadet(cadet):
     cadet_id = str(cadet["_id"])
-    st.warning(
-        f"Are you sure you want to delete {cadet.get('first_name', '')} {cadet.get('last_name', '')}?"
-    )
+    st.warning(f"Are you sure you want to delete {cadet.get('first_name', '')} {cadet.get('last_name', '')}?")
     col1, col2, spacer = st.columns([2, 2, 10])
 
     if col1.button("Yes", key=f"confirm_{cadet_id}"):
@@ -184,57 +127,56 @@ def show_cadets():
     cadets = get_all_cadets()
     if not cadets:
         st.warning("No cadets found.")
-    else:
-        if st.session_state.success_time:
-            if time.time() - st.session_state.success_time < 3:
-                st.success(st.session_state.success_msg)
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.session_state.success_time = None
-                st.session_state.success_msg = None
+        return
 
-        st.subheader(f"Total Number of Cadets: {len(cadets)}")
-        header = st.columns([1, 2, 2, 3, 3, 4])
-        header[0].markdown("**No.**")
-        header[1].markdown("**First Name**")
-        header[2].markdown("**Last Name**")
-        header[3].markdown("**Email**")
-        header[4].markdown("**Rank**")
-        header[5].markdown("**Actions**")
+    if st.session_state.success_time:
+        if time.time() - st.session_state.success_time < 3:
+            st.success(st.session_state.success_msg)
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.session_state.success_time = None
+            st.session_state.success_msg = None
+
+    st.subheader(f"Total Number of Cadets: {len(cadets)}")
+    header = st.columns([1, 2, 2, 3, 3, 4])
+    header[0].markdown("**No.**")
+    header[1].markdown("**First Name**")
+    header[2].markdown("**Last Name**")
+    header[3].markdown("**Email**")
+    header[4].markdown("**Rank**")
+    header[5].markdown("**Actions**")
+    st.divider()
+
+    for i, cadet in enumerate(cadets):
+        if st.session_state.editing_id == str(cadet["_id"]):
+            edit_cadet(cadet)
+        else:
+            show_row(i, cadet)
+        if st.session_state.confirm_delete_id == str(cadet["_id"]):
+            remove_cadet(cadet)
         st.divider()
-
-        for i, cadet in enumerate(cadets):
-            if st.session_state.editing_id == str(cadet["_id"]):
-                edit_cadet(cadet)
-            else:
-                show_row(i, cadet)
-            if st.session_state.confirm_delete_id == str(cadet["_id"]):
-                remove_cadet(cadet)
-            st.divider()
 
 
 st.title("Cadet Management")
-flag = False
+
 try:
     get_all_cadets()
     st.success("Database connection established successfully!")
-    flag = True
 except Exception:
     st.warning("Database is not configured as of now.")
+    st.stop()
 
+if "show_form" not in st.session_state:
+    st.session_state.show_form = False
+if "success_time" not in st.session_state:
+    st.session_state.success_time = None
+if "success_msg" not in st.session_state:
+    st.session_state.success_msg = None
 
-if flag:
-    if "show_form" not in st.session_state:
-        st.session_state.show_form = False
-    if "success_time" not in st.session_state:
-        st.session_state.success_time = None
-    if "success_msg" not in st.session_state:
-        st.session_state.success_msg = None
+if st.button("Add Cadet"):
+    st.session_state.show_form = True
+if st.session_state.show_form or st.session_state.success_time:
+    add_cadet()
 
-    if st.button("Add Cadet"):
-        st.session_state.show_form = True
-    if st.session_state.show_form or st.session_state.success_time:
-        add_cadet()
-
-    show_cadets()
+show_cadets()

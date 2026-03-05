@@ -1,20 +1,23 @@
+import time
+
 import streamlit as st
+
+from services.waivers import (
+    get_absent_records_without_waiver,
+    get_all_waivers_for_cadet,
+    resubmit_auto_denied_waiver,
+)
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
-    get_cadet_by_user_id,
-    get_user_by_email,
-    get_event_by_id,
-    get_waiver_by_id,
-    get_attendance_by_cadet,
-    get_waiver_by_attendance_record,
     create_waiver,
-    validate_waiver,
-    create_waiver_approval,
-    update_waiver,
     get_approvals_by_waiver,
+    get_cadet_by_user_id,
+    get_event_by_id,
+    get_user_by_email,
+    get_waiver_by_attendance_record,
+    get_waiver_by_id,
 )
-from datetime import datetime, timezone
-import time
+from datetime import datetime
 
 
 STATUS_BADGE = {
@@ -22,25 +25,6 @@ STATUS_BADGE = {
     "approved": "🟢 Approved",
     "denied": "🔴 Denied",
 }
-
-
-def get_all_waivers_for_cadet(cadet_id: str) -> list[dict]:
-    records = get_attendance_by_cadet(cadet_id)
-    waivers = []
-    for record in records:
-        waiver = get_waiver_by_attendance_record(record["_id"])
-        if waiver:
-            event_id = record.get("event_id")
-            event = get_event_by_id(event_id) if event_id else None
-            waiver["_event_name"] = (
-                event.get("event_name") if event else "Unknown event"
-            )
-            start_date = event.get("start_date") if event else None
-            waiver["_event_date"] = (
-                start_date.strftime("%Y-%m-%d") if start_date else "Unknown date"
-            )
-            waivers.append(waiver)
-    return waivers
 
 
 def show_waivers(cadet_id: str):
@@ -66,9 +50,7 @@ def show_waivers(cadet_id: str):
         col[2].write(STATUS_BADGE.get(status.lower(), status))
         approvals = get_approvals_by_waiver(waiver["_id"])
         if approvals:
-            approvals.sort(
-                key=lambda a: a.get("created_at") or datetime.min, reverse=True
-            )
+            approvals.sort(key=lambda a: a.get("created_at") or datetime.min, reverse=True)
             latest = approvals[0]
             comments = latest.get("comments")
             if comments:
@@ -88,28 +70,11 @@ def dropdown_row(record: dict) -> str:
     return str(record["_id"])
 
 
-def get_absent_records(cadet_id: str) -> list[dict]:
-    records = get_attendance_by_cadet(cadet_id)
-    absent = [r for r in records if r.get("status") == "absent"]
-
-    no_waiver = []
-    for record in absent:
-        existing = get_waiver_by_attendance_record(record["_id"])
-        if not existing:
-            no_waiver.append(record)
-        else:
-            status = (existing.get("status") or "").lower()
-            auto_denied = bool(existing.get("auto_denied"))
-            if status == "denied" and auto_denied:
-                no_waiver.append(record)
-    return no_waiver
-
-
 def waiver_form(user_id: str, cadet_id: str):
     record_id = st.session_state.waiver_record_id
     st.session_state.waiver_record_id = None
 
-    absent_records = get_absent_records(cadet_id)
+    absent_records = get_absent_records_without_waiver(cadet_id)
     if not absent_records:
         st.info("You don't have any absent records to submit a waiver for.")
         return
@@ -136,68 +101,27 @@ def waiver_form(user_id: str, cadet_id: str):
             submit = st.form_submit_button("Submit")
         with col2:
             cancel = st.form_submit_button("Cancel", type="secondary")
+
     if submit:
         if not reason.strip():
             st.error("Please provide a reason for your waiver request.")
         else:
             selected_record = record_labels[label]
-
             existing = get_waiver_by_attendance_record(selected_record["_id"])
-            # If there is an existing denied waiver, as a resubmit
+
             if (
                 existing
                 and (existing.get("status") or "").lower() == "denied"
                 and bool(existing.get("auto_denied"))
             ):
-                is_valid, why = validate_waiver(selected_record["_id"])
-
-                if not is_valid:
-                    # Keep denied, update the reason text
-                    update_waiver(
-                        existing["_id"],
-                        {
-                            "reason": reason,
-                            "status": "denied",
-                            "auto_denied": True,
-                            "created_at": datetime.now(timezone.utc),
-                        },
-                    )
-
-                    create_waiver_approval(
-                        waiver_id=existing["_id"],
-                        approver_id=None,
-                        decision="denied",
-                        comments=f"Auto-denied (resubmit): {why}",
-                    )
-
-                    st.error(
-                        f"Waiver is still invalid and was auto-denied again: {why}"
-                    )
-                    st.rerun()
-
+                became_pending, why = resubmit_auto_denied_waiver(existing, selected_record["_id"], reason)
+                if not became_pending:
+                    st.error(f"Waiver is still invalid and was auto-denied again: {why}")
                 else:
-                    # Now valid -> set to pending and clear auto_denied flag
-                    update_waiver(
-                        existing["_id"],
-                        {
-                            "reason": reason,
-                            "status": "pending",
-                            "auto_denied": False,
-                            "created_at": datetime.now(timezone.utc),
-                        },
-                    )
-
-                    create_waiver_approval(
-                        waiver_id=existing["_id"],
-                        approver_id=None,
-                        decision="pending",
-                        comments="Resubmitted successfully.",
-                    )
                     st.session_state.success_time = time.time()
-                    st.rerun()
+                st.rerun()
 
             else:
-                # Normal first-time submit path
                 result = create_waiver(
                     attendance_record_id=selected_record["_id"],
                     reason=reason,
@@ -210,17 +134,14 @@ def waiver_form(user_id: str, cadet_id: str):
                     created_status = (created.get("status") if created else "") or ""
                     if created_status.lower() == "denied":
                         st.session_state.success_time = None
-                        st.error(
-                            "Waiver was auto-denied. See notes under your waiver status."
-                        )
-                        st.rerun()
+                        st.error("Waiver was auto-denied. See notes under your waiver status.")
                     else:
                         st.session_state.success_time = time.time()
-                        st.rerun()
+                    st.rerun()
                 else:
                     st.error("Failed to submit waiver. Please try again.")
+
     if cancel:
-        # i'm confused from where we're supposed to access waiver submission form, this can be changed later
         st.switch_page("pages/2_Attendance_Submission.py")
 
 
@@ -245,8 +166,6 @@ if st.session_state.success_time:
 current_user = get_current_user()
 assert current_user is not None
 
-# raw = st.session_state.get("_raw_users", {})
-# email = raw.get("usernames", {}).get(current_user["username"], {}).get("email")
 email = current_user["email"]
 if not email:
     st.error("Could not find an account with this email.")
