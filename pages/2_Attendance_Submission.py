@@ -2,17 +2,11 @@ import streamlit as st
 import secrets
 from datetime import datetime, timedelta
 import pymongo
+from utils.db import get_collection  # <-- use shared db helper
 
 #=====Database stuff=====#
 def getPassword():
-    # Mongo client object with connection URL
-    myclient = pymongo.MongoClient("mongodb://localhost:27017")
-
-    # The actual database
-    mydb = myclient["Password-Timeout"]
-
-    # Creates collection for password
-    pswdData = mydb["Password"]
+    pswdData = get_collection("Password")  # uses MONGODB_URI + MONGODB_DB from config
 
     # Checks that password collection has data
     count = pswdData.count_documents({})
