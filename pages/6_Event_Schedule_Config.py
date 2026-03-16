@@ -1,46 +1,33 @@
 import streamlit as st
-import os
 
+from services.event_config import get_event_config, save_event_config
 from utils.auth import require_role
-from utils.db import get_db
 
 require_role("admin", "cadre")
 
 st.title("Event Schedule Configuration")
 
-# --- Connect to DB ---
-db = get_db()
-
-# --- Load Existing Config ---
-config = db.event_config.find_one({})
-
-if not config:
-    db.event_config.insert_one({
-        "pt_days": ["Monday", "Tuesday", "Thursday"],
-        "llab_days": ["Friday"]
-    })
-    config = db.event_config.find_one({})
+config = get_event_config()
 
 days_of_week = [
     "Monday", "Tuesday", "Wednesday",
-    "Thursday", "Friday", "Saturday", "Sunday"
+    "Thursday", "Friday", "Saturday", "Sunday",
 ]
 
 pt_days = st.multiselect(
     "Select PT Days",
     days_of_week,
-    default=config.get("pt_days", [])
+    default=config.get("pt_days", []),
 )
 
 llab_days = st.multiselect(
     "Select LLAB Days",
     days_of_week,
-    default=config.get("llab_days", [])
+    default=config.get("llab_days", []),
 )
 
 if st.button("Save Configuration"):
-    db.event_config.update_one(
-        {},
-        {"$set": {"pt_days": pt_days, "llab_days": llab_days}}
-    )
-    st.success("Configuration saved successfully!")
+    if save_event_config(pt_days, llab_days):
+        st.success("Configuration saved successfully!")
+    else:
+        st.error("Database unavailable — could not save configuration.")

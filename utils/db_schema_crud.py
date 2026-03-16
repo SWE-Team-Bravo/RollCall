@@ -534,3 +534,13 @@ def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
         {"_id": ObjectId(cadet_id)},
         {"$set": {"flight_id": ObjectId(flight_id)}},
     )
+
+def unassign_cadet_from_flight(cadet_id: str | ObjectId):
+    col = get_collection("cadets")
+    if col is None:
+        return None
+
+    return col.update_one(
+        {"_id": ObjectId(cadet_id)},
+        {"$unset": {"flight_id": ""}},
+    )
