@@ -9,6 +9,7 @@ st.title("Attendance Submission Page")
 if "password" not in st.session_state:
     st.session_state.password = generate_attendance_password()
     st.session_state.correctPassword = False
+password = st.session_state.password
 correctPassword = st.session_state.correctPassword
 
 # Writes the password for testing purposes
