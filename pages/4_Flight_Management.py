@@ -1,59 +1,19 @@
 import streamlit as st
-from bson import ObjectId
 
+from services.cadets import build_cadet_display_map, get_cadets_by_flight
 from utils.db_schema_crud import (
+    assign_cadet_to_flight,
     create_flight,
-    get_all_flights,
     delete_flight,
+    get_all_flights,
     assign_cadet_to_flight,
     unassign_cadet_from_flight,
     get_user_by_id,
     get_cadet_by_id,
+    get_user_by_id,
 )
-from utils.db import get_collection
 
 st.title("Flight Management")
-
-# ----------------------------
-# Helper Functions
-# ----------------------------
-
-
-def get_all_cadets():
-    col = get_collection("cadets")
-    if col is None:
-        return []
-    return list(col.find())
-
-
-def get_cadets_by_flight(flight_id):
-    col = get_collection("cadets")
-    if col is None:
-        return []
-    return list(col.find({"flight_id": ObjectId(flight_id)}))
-
-
-def build_cadet_display_map():
-    """
-    Returns:
-        {
-            "John Smith (300)": "cadet_id_string",
-            ...
-        }
-    """
-    cadets = get_all_cadets()
-    display_map = {}
-
-    for cadet in cadets:
-        user = get_user_by_id(cadet["user_id"])
-        if user:
-            name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-            rank = cadet.get("rank", "")
-            display_text = f"{name} ({rank})"
-            display_map[display_text] = str(cadet["_id"])
-
-    return display_map
-
 
 # ----------------------------
 # Create Flight Section
@@ -96,7 +56,6 @@ for flight in flights:
     st.markdown("---")
     st.write(f"### {flight['name']}")
 
-    # Show Commander Name Instead of ID
     commander = get_cadet_by_id(flight["commander_cadet_id"])
     if commander:
         user = get_user_by_id(commander["user_id"])
@@ -105,7 +64,6 @@ for flight in flights:
             rank = commander.get("rank", "")
             st.write(f"Commander: {name} ({rank})")
 
-    # Assign / Reassign Cadet
     st.write("Assign / Reassign Cadet")
 
     cadet_display_map = build_cadet_display_map()
@@ -150,11 +108,6 @@ for flight in flights:
                         st.rerun()
     else:
         st.write("No cadets assigned yet.")
-
-
-
-    
-
 
 
     # Delete Flight
