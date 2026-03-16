@@ -9,7 +9,6 @@ st.title("Attendance Submission Page")
 if "password" not in st.session_state:
     st.session_state.password = generate_attendance_password()
     st.session_state.correctPassword = False
-password = st.session_state.password
 correctPassword = st.session_state.correctPassword
 
 # Writes the password for testing purposes
@@ -17,7 +16,7 @@ st.info("testing password: " + password)
 
 # Current day of the week
 weekDay = datetime.now().strftime("%A")
-st.info(weekDay)
+#st.info(weekDay)
 
 # Default message for attendance status
 attendanceStatus = st.empty()
