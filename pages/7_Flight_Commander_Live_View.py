@@ -12,8 +12,13 @@ from utils.db_schema_crud import (
     get_cadet_by_user_id,
     get_events_by_type,
     get_user_by_email,
+    get_user_by_id,
 )
-from utils.flight_commander_view import build_checkin_view, get_active_events
+from utils.flight_commander_view import (
+    _ensure_utc,
+    build_checkin_view,
+    get_active_events,
+)
 
 
 def _cadet_display_name(cadet: dict[str, Any]) -> str:
@@ -21,12 +26,6 @@ def _cadet_display_name(cadet: dict[str, Any]) -> str:
     last = str(cadet.get("last_name", "")).strip()
     full = f"{first} {last}".strip()
     return full or "Unknown cadet"
-
-
-def _ensure_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 require_role("flight_commander")
@@ -60,17 +59,36 @@ if flight_id is None:
     st.info("You are not assigned to a flight.")
     st.stop()
 
-all_cadets = get_all_cadets()
-flight_cadets = [c for c in all_cadets if c.get("flight_id") == flight_id]
-
-if not flight_cadets:
-    st.info("No cadets found for your flight.")
-    st.stop()
-
 
 @st.fragment(run_every="10s")
 def live_checkin_fragment() -> None:
     now = datetime.now(timezone.utc)
+
+    all_cadets = get_all_cadets()
+    flight_cadets = [c for c in all_cadets if c.get("flight_id") == flight_id]
+
+    if not flight_cadets:
+        st.info("No cadets found for your flight.")
+        return
+
+    # Enrich cadet docs with names from the users collection when missing.
+    enriched_flight_cadets: list[dict[str, Any]] = []
+    for cadet_doc in flight_cadets:
+        first = str(cadet_doc.get("first_name", "") or "").strip()
+        last = str(cadet_doc.get("last_name", "") or "").strip()
+
+        if not first and not last:
+            user_id = cadet_doc.get("user_id")
+            if user_id is not None:
+                user_doc = get_user_by_id(user_id)
+                if user_doc is not None:
+                    cadet_doc = dict(cadet_doc)
+                    cadet_doc["first_name"] = user_doc.get("first_name", "")
+                    cadet_doc["last_name"] = user_doc.get("last_name", "")
+
+        enriched_flight_cadets.append(cadet_doc)
+
+    flight_cadets = enriched_flight_cadets
 
     events = get_events_by_type("pt") + get_events_by_type("lab")
     active_events: list[dict[str, Any]] = get_active_events(events, now)
@@ -96,7 +114,6 @@ def live_checkin_fragment() -> None:
             )
         return name
 
-    # Determine default index based on previous selection, if possible.
     default_index = 0
     if previous_event_id is not None:
         for idx, ev in enumerate(active_events):
