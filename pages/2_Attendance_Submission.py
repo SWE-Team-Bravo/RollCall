@@ -1,25 +1,54 @@
 import streamlit as st
-import random
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
+import pymongo
+
+#=====Database stuff=====#
+def getPassword():
+    # Mongo client object with connection URL
+    myclient = pymongo.MongoClient("mongodb://localhost:27017")
+
+    # The actual database
+    mydb = myclient["Password-Timeout"]
+
+    # Creates collection for password
+    pswdData = mydb["Password"]
+
+    # Checks that password collection has data
+    count = pswdData.count_documents({})
+    if (count > 0):
+        # Grabs the most recent password
+        mostrecent = pswdData.find_one(sort=[("$natural", -1)])
+        
+        # Check if xx time has passed
+        if(datetime.now() - mostrecent["timestamp"] >= timedelta(seconds=10)): # Use timedelta(minutes=30) for
+            # Creates and adds new password if set time has passed
+            pswd = {"password": f"{secrets.randbelow(1000000):06}", "timestamp": datetime.now()}
+            pswdData.insert_one(pswd)
+    else:
+        # Adds initial data to the database
+        pswd = {"password": 123456, "timestamp": datetime.now()}
+        pswdData.insert_one(pswd)
+
+    return str(pswdData.find_one(sort=[("$natural", -1)])["password"])
+
+#=====Streamlit stuff=====#
 
 st.title("Attendance Submission Page")
 
 # Generate variables once per session
 if "password" not in st.session_state:
-    st.session_state.password = f"{secrets.randbelow(1000000):06}"
     st.session_state.correctPassword = False
-password = st.session_state.password
 correctPassword = st.session_state.correctPassword
 
-# Writes the password for testing puprposes
-st.info("testing password: " + password)
+# Writes the password for testing purposes
+st.info("testing password: " + getPassword())
 
 # Current day of the week
 weekDay = datetime.now().strftime("%A")
-st.info(weekDay)
+#st.info(weekDay)
 
-# Default message for attendanc status
+# Default message for attendance status
 attendanceStatus = st.empty()
 if correctPassword:
     attendanceStatus.markdown("Attendance Staus: Reported")
@@ -30,7 +59,7 @@ else:
 answer = st.text_input("Password", type="password")
 
 if(st.button("Report In") and not correctPassword):
-    if answer == password:
+    if answer == getPassword():
         st.success("correct password")
         st.balloons()
         st.session_state.correctPassword = True
