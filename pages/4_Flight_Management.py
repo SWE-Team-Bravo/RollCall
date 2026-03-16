@@ -1,5 +1,6 @@
 import streamlit as st
 
+from utils.auth import require_role
 from services.cadets import build_cadet_display_map, get_cadets_by_flight
 from utils.db_schema_crud import (
     assign_cadet_to_flight,
@@ -12,6 +13,8 @@ from utils.db_schema_crud import (
     get_cadet_by_id,
     get_user_by_id,
 )
+
+require_role("admin", "cadre")
 
 st.title("Flight Management")
 

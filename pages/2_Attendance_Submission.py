@@ -1,6 +1,9 @@
 import streamlit as st
 from datetime import datetime
 
+from utils.auth import require_auth
+
+require_auth()
 from services.attendance import generate_attendance_password
 
 st.title("Attendance Submission Page")

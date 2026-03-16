@@ -3,7 +3,7 @@ import streamlit as st
 from services.event_config import get_event_config, save_event_config
 from utils.auth import require_role
 
-require_role("admin", "flight_commander")
+require_role("admin", "cadre")
 
 st.title("Event Schedule Configuration")
 
