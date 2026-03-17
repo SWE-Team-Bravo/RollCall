@@ -50,7 +50,9 @@ def show_waivers(cadet_id: str):
         col[2].write(STATUS_BADGE.get(status.lower(), status))
         approvals = get_approvals_by_waiver(waiver["_id"])
         if approvals:
-            approvals.sort(key=lambda a: a.get("created_at") or datetime.min, reverse=True)
+            approvals.sort(
+                key=lambda a: a.get("created_at") or datetime.min, reverse=True
+            )
             latest = approvals[0]
             comments = latest.get("comments")
             if comments:
@@ -114,9 +116,13 @@ def waiver_form(user_id: str, cadet_id: str):
                 and (existing.get("status") or "").lower() == "denied"
                 and bool(existing.get("auto_denied"))
             ):
-                became_pending, why = resubmit_auto_denied_waiver(existing, selected_record["_id"], reason)
+                became_pending, why = resubmit_auto_denied_waiver(
+                    existing, selected_record["_id"], reason
+                )
                 if not became_pending:
-                    st.error(f"Waiver is still invalid and was auto-denied again: {why}")
+                    st.error(
+                        f"Waiver is still invalid and was auto-denied again: {why}"
+                    )
                 else:
                     st.session_state.success_time = time.time()
                 st.rerun()
@@ -134,7 +140,9 @@ def waiver_form(user_id: str, cadet_id: str):
                     created_status = (created.get("status") if created else "") or ""
                     if created_status.lower() == "denied":
                         st.session_state.success_time = None
-                        st.error("Waiver was auto-denied. See notes under your waiver status.")
+                        st.error(
+                            "Waiver was auto-denied. See notes under your waiver status."
+                        )
                     else:
                         st.session_state.success_time = time.time()
                     st.rerun()

@@ -13,6 +13,7 @@ def get_all_cadets() -> list[dict]:
 
 def get_cadets_by_flight(flight_id) -> list[dict]:
     from bson import ObjectId
+
     col = get_collection("cadets")
     if col is None:
         return []
@@ -32,15 +33,23 @@ def build_cadet_display_map() -> dict[str, str]:
     return display_map
 
 
-def validate_cadet_input(first_name: str, last_name: str, email: str) -> tuple[bool, str]:
+def validate_cadet_input(
+    first_name: str, last_name: str, email: str
+) -> tuple[bool, str]:
     names_pattern = r"[A-Za-z'-]+(?: [A-Za-z'-]+)*"
     email_pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
     if not first_name or not last_name or not email:
         return False, "Please fill all the fields!"
     if not re.fullmatch(names_pattern, first_name):
-        return False, "Please enter a valid first name! First name can only contain letters, apostrophes, and hyphens."
+        return (
+            False,
+            "Please enter a valid first name! First name can only contain letters, apostrophes, and hyphens.",
+        )
     if not re.fullmatch(names_pattern, last_name):
-        return False, "Please enter a valid last name! Last name can only contain letters, apostrophes, and hyphens."
+        return (
+            False,
+            "Please enter a valid last name! Last name can only contain letters, apostrophes, and hyphens.",
+        )
     if not re.fullmatch(email_pattern, email):
         return False, "Please enter a valid email!"
     return True, ""

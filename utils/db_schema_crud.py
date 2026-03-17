@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
-from streamlit_authenticator import Hasher
 
 from utils.db import get_collection
+from utils.password import hash_password
 
 
 def create_user(
@@ -22,7 +22,7 @@ def create_user(
             "first_name": first_name,
             "last_name": last_name,
             "email": email,
-            "password_hash": Hasher.hash(password),
+            "password_hash": hash_password(password),
             "roles": roles,
             "created_at": datetime.now(timezone.utc),
         }
@@ -534,6 +534,7 @@ def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
         {"_id": ObjectId(cadet_id)},
         {"$set": {"flight_id": ObjectId(flight_id)}},
     )
+
 
 def unassign_cadet_from_flight(cadet_id: str | ObjectId):
     col = get_collection("cadets")

@@ -7,7 +7,9 @@ authenticator = init_auth()
 
 user = get_current_user()
 if user:
-    st.success(f"Logged in as **{user['first_name']} {user['last_name']}** ({', '.join(user['roles'])})")
+    st.success(
+        f"Logged in as **{user['first_name']} {user['last_name']}** ({', '.join(user['roles'])})"
+    )
     if st.button("Go to Home"):
         st.switch_page("Home.py")
     authenticator.logout("Logout", location="main")

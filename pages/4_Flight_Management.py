@@ -3,13 +3,11 @@ import streamlit as st
 from utils.auth import require_role
 from services.cadets import build_cadet_display_map, get_cadets_by_flight
 from utils.db_schema_crud import (
-    assign_cadet_to_flight,
     create_flight,
     delete_flight,
     get_all_flights,
     assign_cadet_to_flight,
     unassign_cadet_from_flight,
-    get_user_by_id,
     get_cadet_by_id,
     get_user_by_id,
 )
@@ -85,7 +83,6 @@ for flight in flights:
             st.success("Cadet assigned successfully!")
             st.rerun()
 
-
     # Show Cadets in Flight
     st.write("Cadets in this Flight:")
 
@@ -96,7 +93,9 @@ for flight in flights:
             user = get_user_by_id(cadet["user_id"])
 
             if user:
-                name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+                name = (
+                    f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+                )
                 rank = cadet.get("rank", "")
 
                 col1, col2 = st.columns([4, 1])
@@ -111,7 +110,6 @@ for flight in flights:
                         st.rerun()
     else:
         st.write("No cadets assigned yet.")
-
 
     # Delete Flight
     if st.button("Delete Flight", key=f"delete_{flight['_id']}"):

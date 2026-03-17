@@ -12,13 +12,15 @@ def get_event_config() -> dict:
 
     config = db.event_config.find_one({})
     if not config:
-        db.event_config.insert_one({
-            "pt_days": _DEFAULT_PT_DAYS,
-            "llab_days": _DEFAULT_LLAB_DAYS,
-        })
+        db.event_config.insert_one(
+            {
+                "pt_days": _DEFAULT_PT_DAYS,
+                "llab_days": _DEFAULT_LLAB_DAYS,
+            }
+        )
         config = db.event_config.find_one({})
 
-    return config
+    return config or {"pt_days": _DEFAULT_PT_DAYS, "llab_days": _DEFAULT_LLAB_DAYS}
 
 
 def save_event_config(pt_days: list[str], llab_days: list[str]) -> bool:
