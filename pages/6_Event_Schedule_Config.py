@@ -10,8 +10,13 @@ st.title("Event Schedule Configuration")
 config = get_event_config()
 
 days_of_week = [
-    "Monday", "Tuesday", "Wednesday",
-    "Thursday", "Friday", "Saturday", "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
 ]
 
 pt_days = st.multiselect(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from services.dashboard import build_attendance_grid, normalize_status
+from services.dashboard import build_attendance_grid
 from utils.auth import require_role
 from utils.db import get_collection, get_db
 
@@ -37,13 +37,22 @@ if any(x is None for x in (users_col, cadets_col, events_col, attendance_col)):
     st.error("Database unavailable.")
     st.stop()
 
+assert users_col is not None
+assert cadets_col is not None
+assert events_col is not None
+assert attendance_col is not None
+
 cadet_docs = list(cadets_col.find({}, {"_id": 1, "user_id": 1}))
 if not cadet_docs:
     st.info("No cadets found yet.")
     st.stop()
 
 user_ids = [c["user_id"] for c in cadet_docs if "user_id" in c]
-user_docs = list(users_col.find({"_id": {"$in": user_ids}}, {"_id": 1, "first_name": 1, "last_name": 1}))
+user_docs = list(
+    users_col.find(
+        {"_id": {"$in": user_ids}}, {"_id": 1, "first_name": 1, "last_name": 1}
+    )
+)
 
 event_docs = list(events_col.find({}, {"_id": 1, "start_date": 1, "event_name": 1}))
 if not event_docs:

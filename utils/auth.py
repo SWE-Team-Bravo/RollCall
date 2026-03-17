@@ -1,6 +1,11 @@
 import streamlit as st
 import streamlit_authenticator as stauth
 from config.settings import AUTH_COOKIE_KEY
+from utils.auth_logic import (
+    build_credentials_from_docs,
+    extract_user_from_raw,
+    user_has_any_role,
+)
 from utils.db import get_collection
 
 
@@ -12,17 +17,7 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
 
     assert collection is not None
 
-    raw = {"usernames": {}}
-    credentials = {"usernames": {}}
-    for doc in collection.find({}, {"_id": 0}):
-        email = doc["email"]
-        raw["usernames"][email] = doc
-        credentials["usernames"][email] = {
-            "email": email,
-            "name": f"{doc['first_name']} {doc['last_name']}".strip(),
-            "password": doc["password_hash"],
-        }
-    return credentials, raw
+    return build_credentials_from_docs(list(collection.find({}, {"_id": 0})))
 
 
 def init_auth():
@@ -52,13 +47,7 @@ def get_current_user() -> dict | None:
         return None
     email = st.session_state.get("username")
     raw = st.session_state.get("_raw_users", {})
-    user_info = raw.get("usernames", {}).get(email, {})
-    return {
-        "email": str(email),
-        "first_name": str(user_info.get("first_name", "")),
-        "last_name": str(user_info.get("last_name", "")),
-        "roles": list(user_info.get("roles", [])),
-    }
+    return extract_user_from_raw(email, raw)
 
 
 def require_auth():
@@ -70,6 +59,6 @@ def require_auth():
 def require_role(*roles: str):
     require_auth()
     user = get_current_user()
-    if user is None or not set(user["roles"]) & set(roles):
+    if not user_has_any_role(user, roles):
         st.error("You do not have permission to view this page.")
         st.stop()

@@ -35,4 +35,5 @@ def get_collection(collection_name: str) -> Collection | None:
 
 def _ensure_indexes() -> None:
     from utils.create_indexes import create_indexes
+
     create_indexes()

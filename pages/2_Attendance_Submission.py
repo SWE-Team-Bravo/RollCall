@@ -2,10 +2,9 @@ import streamlit as st
 from datetime import datetime
 
 from utils.auth import require_auth
-
-require_auth()
 from services.attendance import generate_attendance_password
 
+require_auth()
 st.title("Attendance Submission Page")
 
 # Generate password once per session
@@ -20,7 +19,7 @@ st.info("testing password: " + password)
 
 # Current day of the week
 weekDay = datetime.now().strftime("%A")
-#st.info(weekDay)
+# st.info(weekDay)
 
 # Default message for attendance status
 attendanceStatus = st.empty()
