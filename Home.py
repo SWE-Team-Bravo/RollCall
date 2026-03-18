@@ -12,20 +12,23 @@ if not user:
 else:
     roles = set(user["roles"])
 
-    dashboard     = st.Page("pages/1_Dashboard.py",            title="Dashboard")
-    attendance    = st.Page("pages/2_Attendance_Submission.py", title="Attendance")
-    cadets        = st.Page("pages/3_Cadets.py",               title="Cadets")
-    flight_mgmt   = st.Page("pages/4_Flight_Management.py",    title="Flight Management")
-    waivers       = st.Page("pages/5_Waivers.py",              title="Waivers")
-    waiver_review = st.Page("pages/6_Waiver_Review.py",        title="Waiver Review")
-    event_sched   = st.Page("pages/6_Event_Schedule_Config.py", title="Event Schedule")
+    dashboard = st.Page("pages/1_Dashboard.py", title="Dashboard")
+    attendance = st.Page("pages/2_Attendance_Submission.py", title="Attendance")
+    cadets = st.Page("pages/3_Cadets.py", title="Cadets")
+    flight_mgmt = st.Page("pages/4_Flight_Management.py", title="Flight Management")
+    waivers = st.Page("pages/5_Waivers.py", title="Waivers")
+    waiver_review = st.Page("pages/6_Waiver_Review.py", title="Waiver Review")
+    event_sched = st.Page("pages/6_Event_Schedule_Config.py", title="Event Schedule")
+    cadet_attendance = st.Page(
+        "pages/8_Cadet_Attendance.py", title="Cadet Attendance View"
+    )
 
     if roles & {"admin", "cadre"}:
         pages = [dashboard, attendance, cadets, flight_mgmt, waiver_review, event_sched]
     elif "flight_commander" in roles:
         pages = [dashboard, attendance, waiver_review]
     elif "cadet" in roles:
-        pages = [attendance, waivers]
+        pages = [attendance, waivers, cadet_attendance]
     else:
         pages = [login]
 
