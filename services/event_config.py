@@ -4,7 +4,7 @@ _DEFAULT_PT_DAYS = ["Monday", "Tuesday", "Thursday"]
 _DEFAULT_LLAB_DAYS = ["Friday"]
 
 
-def get_event_config() -> dict:
+def get_event_config() -> dict | None:
     """Return the event schedule config, creating a default one if it doesn't exist."""
     db = get_db()
     if db is None:
@@ -12,10 +12,12 @@ def get_event_config() -> dict:
 
     config = db.event_config.find_one({})
     if not config:
-        db.event_config.insert_one({
-            "pt_days": _DEFAULT_PT_DAYS,
-            "llab_days": _DEFAULT_LLAB_DAYS,
-        })
+        db.event_config.insert_one(
+            {
+                "pt_days": _DEFAULT_PT_DAYS,
+                "llab_days": _DEFAULT_LLAB_DAYS,
+            }
+        )
         config = db.event_config.find_one({})
 
     return config
