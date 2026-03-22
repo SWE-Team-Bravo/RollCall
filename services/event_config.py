@@ -20,7 +20,7 @@ def get_event_config() -> dict | None:
         )
         config = db.event_config.find_one({})
 
-    return config
+    return config or {"pt_days": _DEFAULT_PT_DAYS, "llab_days": _DEFAULT_LLAB_DAYS}
 
 
 def save_event_config(pt_days: list[str], llab_days: list[str]) -> bool:
