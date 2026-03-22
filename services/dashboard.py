@@ -40,13 +40,13 @@ def build_attendance_grid(
         where grid_rows[i][j] is the P/A/E status for event i and cadet j.
     """
     name_by_user_id = {
-        u["_id"]: f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or "Unknown"
+        u["_id"]: f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
+        or "Unknown"
         for u in user_docs
     }
 
     cadet_name_by_id = {
-        c["_id"]: name_by_user_id.get(c.get("user_id"), "Unknown")
-        for c in cadet_docs
+        c["_id"]: name_by_user_id.get(c.get("user_id"), "Unknown") for c in cadet_docs
     }
 
     cadet_pairs = sorted(cadet_name_by_id.items(), key=lambda x: x[1].lower())

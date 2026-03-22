@@ -3,14 +3,11 @@ import time
 import streamlit as st
 from utils.auth import require_role
 from utils.db_schema_crud import (
-    get_user_by_email,
-    create_cadet,
     update_cadet,
     delete_cadet,
 )
 
 from services.cadets import add_cadet_for_user, get_all_cadets, validate_cadet_input
-from utils.db_schema_crud import delete_cadet, update_cadet
 
 
 require_role("admin", "cadre")
@@ -45,7 +42,9 @@ def add_cadet():
         if submit_button:
             check, msg = validate_cadet_input(cadet_name, cadet_lastname, cadet_email)
             if check:
-                if add_cadet_for_user(cadet_email, cadet_rank, cadet_name, cadet_lastname):
+                if add_cadet_for_user(
+                    cadet_email, cadet_rank, cadet_name, cadet_lastname
+                ):
                     st.session_state.show_form = False
                     st.session_state.success_msg = "New cadet added successfully!"
                     st.session_state.success_time = time.time()
@@ -70,16 +69,30 @@ def edit_cadet(cadet):
     rank_index = RANK_OPTIONS.index(current_rank) if current_rank in RANK_OPTIONS else 0
     cadet_id = str(cadet["_id"])
 
-    new_first = st.text_input("First Name", cadet.get("first_name", ""), key=f"first_{cadet_id}")
-    new_last = st.text_input("Last Name", cadet.get("last_name", ""), key=f"last_{cadet_id}")
+    new_first = st.text_input(
+        "First Name", cadet.get("first_name", ""), key=f"first_{cadet_id}"
+    )
+    new_last = st.text_input(
+        "Last Name", cadet.get("last_name", ""), key=f"last_{cadet_id}"
+    )
     new_email = st.text_input("Email", cadet.get("email", ""), key=f"email_{cadet_id}")
-    new_rank = st.selectbox("Rank", RANK_OPTIONS, index=rank_index, key=f"rank_{cadet_id}")
+    new_rank = st.selectbox(
+        "Rank", RANK_OPTIONS, index=rank_index, key=f"rank_{cadet_id}"
+    )
 
     col1, col2, spacer = st.columns([2, 2, 10])
     if col1.button("Save", key=f"save_{cadet_id}"):
         check, msg = validate_cadet_input(new_first, new_last, new_email)
         if check:
-            update_cadet(cadet_id, {"first_name": new_first, "last_name": new_last, "email": new_email, "rank": new_rank})
+            update_cadet(
+                cadet_id,
+                {
+                    "first_name": new_first,
+                    "last_name": new_last,
+                    "email": new_email,
+                    "rank": new_rank,
+                },
+            )
             st.session_state.editing_id = None
             st.rerun()
         else:
@@ -92,7 +105,9 @@ def edit_cadet(cadet):
 
 def remove_cadet(cadet):
     cadet_id = str(cadet["_id"])
-    st.warning(f"Are you sure you want to delete {cadet.get('first_name', '')} {cadet.get('last_name', '')}?")
+    st.warning(
+        f"Are you sure you want to delete {cadet.get('first_name', '')} {cadet.get('last_name', '')}?"
+    )
     col1, col2, spacer = st.columns([2, 2, 10])
 
     if col1.button("Yes", key=f"confirm_{cadet_id}"):
