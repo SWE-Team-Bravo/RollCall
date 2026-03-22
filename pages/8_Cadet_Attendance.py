@@ -1,14 +1,12 @@
 import streamlit as st
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
-    get_attendance_by_cadet,
     get_cadet_by_user_id,
-    get_event_by_id,
-    get_flight_by_id,
     get_user_by_email,
-    get_waiver_by_attendance_record,
 )
 from services.cadet_attendance import (
+    load_attendance_db,
+    load_cadet_flights,
     cadet_attendance,
     count_absences,
     filter_rows,
@@ -33,30 +31,13 @@ WAIVER_BADGE = {
 }
 
 
-def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict]]:
-    records = get_attendance_by_cadet(cadet_id)
-
-    events = []
-    waivers = []
-    for record in records:
-        if record.get("event_id"):
-            event = get_event_by_id(record["event_id"])
-            if event:
-                events.append(event)
-        waiver = get_waiver_by_attendance_record(record["_id"])
-        if waiver:
-            waivers.append(waiver)
-
-    return records, events, waivers
-
-
 def show_risk_banner(pt_absences: int, llab_absences: int):
     if pt_absences >= PT_ABSENCE_THRESHOLD:
         st.error(
             f"**At Risk** — You have reached the absence threshold for "
             f"PT Absences ({pt_absences}/{PT_ABSENCE_THRESHOLD}). Contact your cadre immediately."
         )
-    elif llab_absences >= LLAB_ABSENCE_THRESHOLD:
+    if llab_absences >= LLAB_ABSENCE_THRESHOLD:
         st.error(
             f"**At Risk** — You have reached the absence threshold for: "
             f"LLAB Absences ({llab_absences}/{LLAB_ABSENCE_THRESHOLD}). Contact your cadre immediately."
@@ -156,11 +137,7 @@ def show_attendance_table(rows: list[dict]):
 
 
 def show_header(cadet: dict, current_user: dict):
-    flights = []
-    if cadet.get("flight_id"):
-        flight = get_flight_by_id(cadet["flight_id"])
-        if flight:
-            flights = [flight]
+    flights = load_cadet_flights(cadet)
     flight_label = get_cadet_flight_label(cadet, flights)
     full_name = f"{cadet.get('rank', '')} {current_user['first_name']} {current_user['last_name']}".strip()
     st.markdown(f"##### {full_name}  ·  Flight: {flight_label}")

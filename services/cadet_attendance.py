@@ -1,5 +1,36 @@
 from datetime import datetime, timezone
 
+from utils.db_schema_crud import (
+    get_attendance_by_cadet,
+    get_event_by_id,
+    get_waiver_by_attendance_record,
+    get_flight_by_id,
+)
+
+
+def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict]]:
+    records = get_attendance_by_cadet(cadet_id)
+    events = []
+    waivers = []
+    for record in records:
+        event_id = record.get("event_id")
+        if event_id:
+            event = get_event_by_id(event_id)
+            if event:
+                events.append(event)
+        waiver = get_waiver_by_attendance_record(record["_id"])
+        if waiver:
+            waivers.append(waiver)
+
+    return records, events, waivers
+
+
+def load_cadet_flights(cadet: dict) -> list[dict]:
+    if not cadet.get("flight_id"):
+        return []
+    flight = get_flight_by_id(cadet["flight_id"])
+    return [flight] if flight else []
+
 
 def count_absences(rows: list[dict], event_type: str) -> int:
     return sum(
