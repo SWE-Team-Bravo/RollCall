@@ -150,7 +150,7 @@ def waiver_form(user_id: str, cadet_id: str):
                     st.error("Failed to submit waiver. Please try again.")
 
     if cancel:
-        st.switch_page("pages/2_Attendance_Submission.py")
+        st.switch_page("pages/8_Cadet_Attendance.py")
 
 
 require_role("cadet")

@@ -8,6 +8,8 @@ require_role("admin", "cadre")
 st.title("Event Schedule Configuration")
 
 config = get_event_config()
+if config is None:
+    config = {}
 
 days_of_week = [
     "Monday",
