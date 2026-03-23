@@ -2,27 +2,36 @@ from datetime import datetime, timezone
 
 from utils.db_schema_crud import (
     get_attendance_by_cadet,
-    get_event_by_id,
-    get_waiver_by_attendance_record,
+    get_events_by_ids,
+    get_waivers_by_attendance_records,
     get_flight_by_id,
 )
 
 
 def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict]]:
     records = get_attendance_by_cadet(cadet_id)
-    events = []
-    waivers = []
-    for record in records:
-        event_id = record.get("event_id")
-        if event_id:
-            event = get_event_by_id(event_id)
-            if event:
-                events.append(event)
-        waiver = get_waiver_by_attendance_record(record["_id"])
-        if waiver:
-            waivers.append(waiver)
+    if not records:
+        return [], [], []
 
-    return records, events, waivers
+    event_ids = list({r["event_id"] for r in records})
+    record_ids = [r["_id"] for r in records]
+
+    events = get_events_by_ids(event_ids)
+    waivers = get_waivers_by_attendance_records(record_ids)
+
+    event_map = {event["_id"]: event for event in events}
+    waiver_map = {waiver["attendance_record_id"]: waiver for waiver in waivers}
+
+    res = []
+    for record in records:
+        res.append(
+            {
+                "attendance": record,
+                "event": event_map.get(record["event_id"]),
+                "waiver": waiver_map.get(record["_id"]),
+            }
+        )
+    return res, events, waivers
 
 
 def load_cadet_flights(cadet: dict) -> list[dict]:
@@ -45,15 +54,15 @@ def cadet_attendance(
     events: list[dict],
     waivers: list[dict],
 ) -> list[dict]:
-    event_by_id = {e["_id"]: e for e in events}
-    waiver_by_record_id = {w["attendance_record_id"]: w for w in waivers}
-
     rows = []
-    for record in records:
-        event = event_by_id.get(record.get("event_id"))
+    for r in records:
+        record = r["attendance"]
+        event = r["event"]
+        waiver = r["waiver"]
+
         if not event:
             continue
-        waiver = waiver_by_record_id.get(record["_id"])
+
         rows.append(
             {
                 "record_id": str(record["_id"]),
@@ -72,6 +81,7 @@ def cadet_attendance(
         key=lambda r: r["start_date"] or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
+    print(rows)
     return rows
 
 

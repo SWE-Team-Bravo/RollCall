@@ -32,25 +32,29 @@ WAIVER_BADGE = {
 
 
 def show_risk_banner(pt_absences: int, llab_absences: int):
+    at_risk = False
     if pt_absences >= PT_ABSENCE_THRESHOLD:
         st.error(
             f"**At Risk** — You have reached the absence threshold for "
-            f"PT Absences ({pt_absences}/{PT_ABSENCE_THRESHOLD}). Contact your cadre immediately."
+            f"PT. Absences ({pt_absences}/{PT_ABSENCE_THRESHOLD}). Contact your cadre immediately."
         )
+        at_risk = True
     if llab_absences >= LLAB_ABSENCE_THRESHOLD:
         st.error(
             f"**At Risk** — You have reached the absence threshold for: "
-            f"LLAB Absences ({llab_absences}/{LLAB_ABSENCE_THRESHOLD}). Contact your cadre immediately."
+            f"LLAB. Absences ({llab_absences}/{LLAB_ABSENCE_THRESHOLD}). Contact your cadre immediately."
         )
-    elif (
-        pt_absences == PT_ABSENCE_THRESHOLD - 1
-        or llab_absences == LLAB_ABSENCE_THRESHOLD - 1
-    ):
-        st.warning(
-            "**Caution** — You are one absence away from the limit for one or more event types."
-        )
-    else:
-        st.success("Attendance is within acceptable limits.")
+        at_risk = True
+    if not at_risk:
+        if (
+            pt_absences == PT_ABSENCE_THRESHOLD - 1
+            or llab_absences == LLAB_ABSENCE_THRESHOLD - 1
+        ):
+            st.warning(
+                "**Caution** — You are one absence away from the limit for one or more event types."
+            )
+        else:
+            st.success("Attendance is within acceptable limits.")
 
 
 def show_absence_summary(rows: list[dict]):
