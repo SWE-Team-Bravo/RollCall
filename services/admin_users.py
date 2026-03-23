@@ -149,12 +149,22 @@ def build_update_user_payload(
         errors["email"] = "A user with this email already exists."
 
     # Role: if new_role provided, validate; else keep existing primary role
-    existing_roles = existing_user.get("roles") or []
-    existing_primary_role = (
-        str(existing_roles[0])
-        if isinstance(existing_roles, (list, tuple)) and existing_roles
-        else ""
-    )
+    existing_roles_value = existing_user.get("roles") or []
+    if isinstance(existing_roles_value, (list, tuple)):
+        existing_roles_seq = list(existing_roles_value)
+    elif existing_roles_value:
+        existing_roles_seq = [existing_roles_value]
+    else:
+        existing_roles_seq = []
+
+    # Normalize existing roles to a list of unique, non-empty strings
+    normalized_roles: list[str] = []
+    for r in existing_roles_seq:
+        s = str(r).strip()
+        if s and s not in normalized_roles:
+            normalized_roles.append(s)
+
+    existing_primary_role = normalized_roles[0] if normalized_roles else ""
     raw_role = (new_role or existing_primary_role).strip()
     if not raw_role:
         errors["role"] = "Role is required."
@@ -164,11 +174,19 @@ def build_update_user_payload(
     if errors:
         return {}, errors
 
+    # Preserve secondary roles while updating primary role:
+    # - Move the chosen role to the front
+    # - Keep any other existing roles after it, without duplicates
+    if raw_role in normalized_roles:
+        updated_roles = [raw_role] + [r for r in normalized_roles if r != raw_role]
+    else:
+        updated_roles = [raw_role] + normalized_roles
+
     updates: Dict[str, Any] = {
         "first_name": first.strip(),
         "last_name": last.strip(),
         "email": raw_email,
-        "roles": [raw_role],
+        "roles": updated_roles,
     }
 
     return updates, {}

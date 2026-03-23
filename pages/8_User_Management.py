@@ -7,7 +7,7 @@ import streamlit as st
 from utils.auth import require_role
 from utils.db import get_collection
 from utils.db_schema_crud import create_user, update_user, delete_user
-from utils.admin_users import (
+from services.admin_users import (
     list_users_for_admin,
     validate_new_user_data,
     build_update_user_payload,
@@ -23,8 +23,9 @@ def _load_users() -> list[dict[str, Any]]:
     return list(col.find())
 
 
-def _get_existing_emails(exclude_user_id: Any | None = None) -> set[str]:
-    users = _load_users()
+def _get_existing_emails(
+    users: list[dict[str, Any]], exclude_user_id: Any | None = None
+) -> set[str]:
     emails: set[str] = set()
     for u in users:
         if exclude_user_id is not None and u.get("_id") == exclude_user_id:
@@ -52,7 +53,7 @@ def _render_display_row(summary: dict[str, str]) -> None:
         st.rerun()
 
 
-def _render_edit_row(summary: dict[str, str]) -> None:
+def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> None:
     cols = st.columns([3, 4, 2, 3])
 
     user_id = summary["id"]
@@ -84,17 +85,15 @@ def _render_edit_row(summary: dict[str, str]) -> None:
     save_btn, cancel_btn = cols[3].columns(2)
 
     if save_btn.button("Save", key=f"save_{user_id}"):
-        # Find the full existing user document by id
-        existing_user = next(
-            (u for u in _load_users() if str(u.get("_id")) == user_id), None
-        )
+        # Find the full existing user document by id from the provided list
+        existing_user = next((u for u in users if str(u.get("_id")) == user_id), None)
         if existing_user is None:
             st.error("User no longer exists.")
             st.session_state["admin_users_editing"] = None
             st.rerun()
             return
 
-        other_emails = _get_existing_emails(exclude_user_id=existing_user["_id"])
+        other_emails = _get_existing_emails(users, exclude_user_id=existing_user["_id"])
         updates, errors = build_update_user_payload(
             existing_user=existing_user,
             new_first_name=new_first,
@@ -121,7 +120,9 @@ def _render_edit_row(summary: dict[str, str]) -> None:
         st.rerun()
 
 
-def _render_delete_confirmation(summary: dict[str, str]) -> None:
+def _render_delete_confirmation(
+    summary: dict[str, str], users: list[dict[str, Any]]
+) -> None:
     st.warning(
         f"Type DELETE below to permanently delete user {summary['email']}.",
     )
@@ -136,9 +137,9 @@ def _render_delete_confirmation(summary: dict[str, str]) -> None:
             st.error("Confirmation text does not match 'DELETE'.")
             return
 
-        # Fetch the latest user doc and delete it
+        # Fetch the latest user doc and delete it from the provided list
         existing_user = next(
-            (u for u in _load_users() if str(u.get("_id")) == summary["id"]), None
+            (u for u in users if str(u.get("_id")) == summary["id"]), None
         )
         if existing_user is None:
             st.error("User no longer exists.")
@@ -180,7 +181,8 @@ with st.form("create_user_form", clear_on_submit=True):
     create_submitted = st.form_submit_button("Create User")
 
     if create_submitted:
-        existing_emails = _get_existing_emails()
+        # Load current users for email-uniqueness validation.
+        existing_emails = _get_existing_emails(_load_users())
         payload, errors = validate_new_user_data(
             first_name=first_name,
             last_name=last_name,
@@ -212,9 +214,10 @@ with st.form("create_user_form", clear_on_submit=True):
 # Existing Users
 # ----------------------------
 
-st.subheader("Existing Users")
+# Load users once per rerun to avoid repeated collection scans.
+raw_users: list[dict[str, Any]] = _load_users()
 
-raw_users = _load_users()
+st.subheader("Existing Users")
 if not raw_users:
     st.info("No users found in the system.")
 else:
@@ -239,11 +242,11 @@ else:
         is_confirming_delete = st.session_state["admin_users_confirm_delete"] == user_id
 
         if is_editing:
-            _render_edit_row(summary)
+            _render_edit_row(summary, raw_users)
         else:
             _render_display_row(summary)
 
         if is_confirming_delete:
-            _render_delete_confirmation(summary)
+            _render_delete_confirmation(summary, raw_users)
 
         st.divider()

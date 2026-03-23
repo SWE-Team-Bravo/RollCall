@@ -1,4 +1,4 @@
-from utils.admin_users import (
+from services.admin_users import (
     summarize_user,
     list_users_for_admin,
     validate_new_user_data,
@@ -140,8 +140,36 @@ def test_build_update_user_payload_updates_name_email_and_role():
         "first_name": "New",
         "last_name": "Admin",
         "email": "admin@example.com",
-        "roles": ["admin"],
+        # Primary role updated to admin; existing secondary role preserved.
+        "roles": ["admin", "cadet"],
     }
+
+
+def test_build_update_user_payload_preserves_additional_roles():
+    existing_user = {
+        "_id": "u2",
+        "first_name": "Multi",
+        "last_name": "Role",
+        "email": "multi@example.com",
+        "roles": ["admin", "cadre"],
+    }
+
+    # No other user has this email, so uniqueness is satisfied.
+    other_emails: set[str] = set()
+
+    # Changing the primary role to "cadre" should keep both roles,
+    # just reorder so "cadre" is primary.
+    updates, errors = build_update_user_payload(
+        existing_user=existing_user,
+        new_first_name="",
+        new_last_name="",
+        new_email="",
+        new_role="cadre",
+        other_emails=other_emails,
+    )
+
+    assert errors == {}
+    assert updates["roles"] == ["cadre", "admin"]
 
 
 def test_confirm_delete_user_requires_exact_keyword():
