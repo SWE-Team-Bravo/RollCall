@@ -17,6 +17,7 @@ from utils.db_schema_crud import (
     get_user_by_id,
     update_waiver,
 )
+from utils.waiver_email import send_waiver_decision_email
 
 STATUS_BADGE = {
     "pending": "🟡 Pending",
@@ -182,6 +183,15 @@ for waiver in waivers:
                         if appr is None:
                             st.error("Failed to create waiver approval record.")
                         else:
+                            if cadet_email:
+                                send_waiver_decision_email(
+                                    waiver_id=str(waiver_id),
+                                    to_email=cadet_email,
+                                    event_name=event_name or "Unknown event",
+                                    event_date=event_date,
+                                    status=new_status,
+                                    comments=comments.strip() or "Approved.",
+                                )
                             st.success("Saved.")
                             st.rerun()
 
