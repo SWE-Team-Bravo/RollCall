@@ -19,19 +19,7 @@ def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict
     events = get_events_by_ids(event_ids)
     waivers = get_waivers_by_attendance_records(record_ids)
 
-    event_map = {event["_id"]: event for event in events}
-    waiver_map = {waiver["attendance_record_id"]: waiver for waiver in waivers}
-
-    res = []
-    for record in records:
-        res.append(
-            {
-                "attendance": record,
-                "event": event_map.get(record["event_id"]),
-                "waiver": waiver_map.get(record["_id"]),
-            }
-        )
-    return res, events, waivers
+    return records, events, waivers
 
 
 def load_cadet_flights(cadet: dict) -> list[dict]:
@@ -54,18 +42,20 @@ def cadet_attendance(
     events: list[dict],
     waivers: list[dict],
 ) -> list[dict]:
+    event_map = {e["_id"]: e for e in events}
+    waiver_map = {w["attendance_record_id"]: w for w in waivers}
+
     rows = []
-    for r in records:
-        record = r["attendance"]
-        event = r["event"]
-        waiver = r["waiver"]
+    for record in records:
+        event = event_map.get(record.get("event_id"))
+        waiver = waiver_map.get(record.get("_id"))
 
         if not event:
             continue
 
         rows.append(
             {
-                "record_id": str(record["_id"]),
+                "record_id": str(record.get("_id", "")),
                 "event_name": event.get("event_name", "—"),
                 "event_type": (event.get("event_type") or "—").upper(),
                 "start_date": event.get("start_date"),
