@@ -4,7 +4,6 @@ from utils.db_schema_crud import (
     create_waiver_approval,
     update_waiver,
     validate_waiver,
-    delete_waiver,
 )
 
 
@@ -51,7 +50,7 @@ def get_absent_records_without_waiver(
         else:
             status = (existing.get("status") or "").lower()
             auto_denied = bool(existing.get("auto_denied"))
-            if status == "denied" and auto_denied:
+            if (status == "denied" and auto_denied) or status == "withdrawn":
                 eligible.append(record)
     return eligible
 
@@ -105,5 +104,5 @@ def resubmit_auto_denied_waiver(
 
 def withdraw_waiver(waiver_id: str) -> bool:
     """Delete pending waiver. Returns True on success"""
-    result = delete_waiver(waiver_id)
-    return bool(result and result.deleted_count > 0)
+    result = update_waiver(waiver_id, {"status": "withdrawn"})
+    return bool(result and result.modified_count > 0)

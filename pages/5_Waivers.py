@@ -26,6 +26,7 @@ STATUS_BADGE = {
     "pending": "🟡 Pending",
     "approved": "🟢 Approved",
     "denied": "🔴 Denied",
+    "withdrawn": "⚪ Withdrawn",
 }
 
 

@@ -214,6 +214,18 @@ def test_empty_absent_records():
     assert result == []
 
 
+def test_withdrawn_is_eligible():
+    records = [{"_id": "rec1", "status": "absent"}]
+    waivers_by_record_id = {
+        "rec1": {"_id": "w1", "status": "withdrawn", "auto_denied": False}
+    }
+
+    result = get_absent_records_without_waiver(records, waivers_by_record_id)
+
+    assert len(result) == 1
+    assert result[0]["_id"] == "rec1"
+
+
 # ------------ test resubmit_auto_denied_waiver ----------------
 def test_still_invalid():
     existing_waiver = {"_id": "w1"}
@@ -328,20 +340,20 @@ def test_creates_approval_as_pending():
 
 def test_returns_true_on_success():
     mock_result = MagicMock()
-    mock_result.deleted_count = 1
+    mock_result.modified_count = 1
 
-    with patch("services.waivers.delete_waiver", return_value=mock_result):
+    with patch("services.waivers.update_waiver", return_value=mock_result):
         assert withdraw_waiver("w1") is True
 
 
 def test_returns_false_when_not_found():
     mock_result = MagicMock()
-    mock_result.deleted_count = 0
+    mock_result.modified_count = 0
 
-    with patch("services.waivers.delete_waiver", return_value=mock_result):
+    with patch("services.waivers.update_waiver", return_value=mock_result):
         assert withdraw_waiver("w1") is False
 
 
-def test_returns_false_when_delete_is_none():
-    with patch("services.waivers.delete_waiver", return_value=None):
+def test_returns_false_when_update_is_none():
+    with patch("services.waivers.update_waiver", return_value=None):
         assert withdraw_waiver("w1") is False
