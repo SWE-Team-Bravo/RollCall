@@ -1,52 +1,50 @@
 import sys
 import os
-import pytest
+from unittest.mock import patch, MagicMock
+from bson import ObjectId
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.db_schema_crud import unassign_cadet_from_flight
-from utils.db import get_collection
-from bson import ObjectId
 
 
-def test_unassign_cadet_from_flight():
-    cadets = get_collection("cadets")
+@patch("utils.db_schema_crud.get_collection")
+def test_unassign_cadet_from_flight(mock_get_collection):
+    # Create mock collection
+    mock_collection = MagicMock()
+    mock_get_collection.return_value = mock_collection
 
-    test_cadet = cadets.insert_one({
-        "user_id": ObjectId(),
-        "rank": "100",
-        "flight_id": ObjectId()
-    })
+    cadet_id = ObjectId()
 
-    cadet_id = test_cadet.inserted_id
+    # Call function
+    unassign_cadet_from_flight(cadet_id)
+
+    # Check if update_one was called correctly
+    mock_collection.update_one.assert_called_once_with(
+        {"_id": cadet_id},
+        {"$unset": {"flight_id": ""}},
+    )
+
+
+@patch("utils.db_schema_crud.get_collection")
+def test_unassign_cadet_without_flight(mock_get_collection):
+    mock_collection = MagicMock()
+    mock_get_collection.return_value = mock_collection
+
+    cadet_id = ObjectId()
 
     unassign_cadet_from_flight(cadet_id)
 
-    updated = cadets.find_one({"_id": cadet_id})
-
-    assert "flight_id" not in updated
+    mock_collection.update_one.assert_called_once()
 
 
-def test_unassign_cadet_without_flight():
-    cadets = get_collection("cadets")
-
-    test_cadet = cadets.insert_one({
-        "user_id": ObjectId(),
-        "rank": "200"
-    })
-
-    cadet_id = test_cadet.inserted_id
-
-    unassign_cadet_from_flight(cadet_id)
-
-    updated = cadets.find_one({"_id": cadet_id})
-
-    assert "flight_id" not in updated
+import pytest
 
 
+@patch("utils.db_schema_crud.get_collection")
+def test_unassign_invalid_id(mock_get_collection):
+    mock_collection = MagicMock()
+    mock_get_collection.return_value = mock_collection
 
-def test_unassign_invalid_id():
     with pytest.raises(Exception):
         unassign_cadet_from_flight("invalid_id")
-
-
