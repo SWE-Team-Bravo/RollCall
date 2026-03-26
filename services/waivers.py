@@ -20,9 +20,7 @@ def get_all_waivers_for_cadet(
             continue
         waiver = dict(waiver)
         event = events_by_id.get(record.get("event_id"))
-        waiver["_event_name"] = (
-            event.get("event_name") if event else "Unknown event"
-        )
+        waiver["_event_name"] = event.get("event_name") if event else "Unknown event"
         start_date = event.get("start_date") if event else None
         waiver["_event_date"] = (
             start_date.strftime("%Y-%m-%d") if start_date else "Unknown date"

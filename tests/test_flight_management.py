@@ -2,6 +2,7 @@ import sys
 import os
 from unittest.mock import patch, MagicMock
 from bson import ObjectId
+import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -36,9 +37,6 @@ def test_unassign_cadet_without_flight(mock_get_collection):
     unassign_cadet_from_flight(cadet_id)
 
     mock_collection.update_one.assert_called_once()
-
-
-import pytest
 
 
 @patch("utils.db_schema_crud.get_collection")
