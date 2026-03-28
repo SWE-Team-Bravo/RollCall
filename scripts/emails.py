@@ -27,3 +27,15 @@ for x in mycol.find(myquery):
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login("charlesdgale@gmail.com", "") # Put your own code in the empty ""
         smtp.send_message(msg)
+
+# How to generate the code for sending emails
+# Step‑by‑step
+# 1. Go to your Google Account security page:
+#    https://myaccount.google.com/security
+# 2. Turn on 2‑Step Verification (required first)
+# 3. After enabling it, go to App passwords
+#    https://myaccount.google.com/apppasswords
+# 4. Select:
+#    App: Mail
+#    Device: Other → type Python (or anything)
+# 5. Click Generate
