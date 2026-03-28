@@ -45,9 +45,9 @@ weekDay = datetime.now().strftime("%A")
 # Default message for attendance status
 attendanceStatus = st.empty()
 if correctPassword:
-    attendanceStatus.markdown("Attendance Staus: Reported")
+    attendanceStatus.markdown("Attendance Status: Reported")
 else: 
-    attendanceStatus.markdown("Attendance Staus: Needs Reported")
+    attendanceStatus.markdown("Attendance Status: Needs Reported")
 
 # Passord submission and checking and displays attendance status
 answer = st.text_input("Password", type="password")
@@ -57,6 +57,6 @@ if(st.button("Report In") and not correctPassword):
         st.success("correct password")
         st.balloons()
         st.session_state.correctPassword = True
-        attendanceStatus.markdown("Attendance Staus: Reported")
+        attendanceStatus.markdown("Attendance Status: Reported")
     else:
         st.error("wrong password")
