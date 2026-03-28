@@ -7,8 +7,6 @@ from utils.db_schema_crud import update_waiver, get_waiver_by_id
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
 SENDER_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
-assert SENDER_EMAIL is not None
-assert SENDER_PASSWORD is not None
 
 
 def build_email(

@@ -2,7 +2,7 @@
 Populate the rollcall MongoDB database with demo data.
 
 Usage:
-    python scripts/populate_db.py
+    python scripts/seed_users.py
 
 All demo users have password: password
 """
@@ -79,6 +79,23 @@ EVENTS = [
     ("LLAB Week 1", "lab", 20, 2.0, "cadre1"),
     ("LLAB Week 2", "lab", 13, 2.0, "cadre1"),
     ("LLAB Week 3", "lab", 6, 2.0, "cadre2"),
+]
+
+# add 8 PT absences for cadet4
+# add 2 LLAB absences for cadet6
+# to test at-risk email reports
+AT_RISK_EVENTS = [
+    ("PT Session 5", "pt", 28, 1.5, "cadre1"),
+    ("PT Session 6", "pt", 35, 1.5, "cadre1"),
+    ("PT Session 7", "pt", 42, 1.5, "cadre1"),
+    ("PT Session 8", "pt", 49, 1.5, "cadre1"),
+    ("PT Session 9", "pt", 56, 1.5, "cadre1"),
+    ("PT Session 10", "pt", 63, 1.5, "cadre1"),
+    ("PT Session 11", "pt", 70, 1.5, "cadre1"),
+    ("PT Session 12", "pt", 77, 1.5, "cadre1"),
+    ("PT Session 13", "pt", 84, 1.5, "cadre1"),
+    ("LLAB Week 4", "lab", 27, 2.0, "cadre1"),
+    ("LLAB Week 5", "lab", 34, 2.0, "cadre1"),
 ]
 
 CADET_USERNAMES = [u[0] for u in USERS if u[4] == "cadet"] + ["fc1", "fc2"]
@@ -212,6 +229,45 @@ def populate():
             rec_count += 1
 
     print(f"Inserted {rec_count} attendance records.")
+
+    # At-risk test data
+    # cadet4 — 9 PT absences (at threshold)
+    # cadet6 — 2 LLAB absences (at threshold)
+
+    for event_name, event_type, days_ago, hours, creator in AT_RISK_EVENTS:
+        start = now - timedelta(days=days_ago)
+        end = start + timedelta(hours=hours)
+        result = db["events"].insert_one(
+            {
+                "event_name": event_name,
+                "event_type": event_type,
+                "start_date": start,
+                "end_date": end,
+                "created_by_user_id": user_id_by_username[creator],
+                "created_at": now,
+            }
+        )
+        event_id = result.inserted_id
+
+        for username in CADET_USERNAMES:
+            if event_type == "pt":
+                status = "absent" if username == "cadet4" else "present"
+            elif event_type == "lab":
+                status = "absent" if username == "cadet6" else "present"
+            else:
+                status = "present"
+
+            db["attendance_records"].insert_one(
+                {
+                    "event_id": event_id,
+                    "cadet_id": cadet_id_by_username[username],
+                    "status": status,
+                    "recorded_by_user_id": user_id_by_username["cadre1"],
+                    "created_at": now,
+                }
+            )
+
+    print("Inserted at-risk test data.")
 
     create_indexes()
     print("Recreated indexes.")
