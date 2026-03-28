@@ -1,8 +1,4 @@
-from __future__ import annotations
-
-from email.message import Message
 from unittest.mock import MagicMock, patch
-
 import utils.at_risk_email as m
 from utils.at_risk_email import (
     PT_ABSENCE_THRESHOLD,
@@ -17,14 +13,6 @@ from utils.at_risk_email import (
     send_to_flight_commander,
     send_at_risk_emails,
 )
-
-
-def _body_from_message(msg: Message) -> str:
-    part0 = msg.get_payload(0)
-    if isinstance(part0, Message):
-        payload = part0.get_payload()
-        return payload if isinstance(payload, str) else str(payload)
-    return str(part0)
 
 
 def create_cadet(first_name="Test", last_name="Cadet", flight_id="flight1"):
@@ -118,7 +106,7 @@ def test_return_only_at_risk_cadets():
 
 def test_no_cadet_below_thresholds():
     pt_id = "evt_pt"
-    records = [{"status": "absent", "event_id": pt_id}] * (PT_ABSENCE_THRESHOLD - 2)
+    records = [{"status": "absent", "event_id": pt_id}] * (PT_ABSENCE_THRESHOLD - 1)
 
     with (
         patch(
@@ -283,30 +271,21 @@ def test_build_email_recipient():
 def test_build_email_has_greeting():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()], "Charles")
-        part = msg.get_payload(0)
-        assert isinstance(part, Message)
-        body = part.get_payload()
-        assert isinstance(body, str)
+        body = msg.get_payload(0).get_payload()
         assert "Hi Charles," in body
 
 
 def test_build_email_no_greeting():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()])
-        part = msg.get_payload(0)
-        assert isinstance(part, Message)
-        body = part.get_payload()
-        assert isinstance(body, str)
+        body = msg.get_payload(0).get_payload()
         assert "Hi," in body
 
 
 def test_build_email_has_thresholds():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()])
-        part = msg.get_payload(0)
-        assert isinstance(part, Message)
-        body = part.get_payload()
-        assert isinstance(body, str)
+        body = msg.get_payload(0).get_payload()
         assert str(PT_ABSENCE_THRESHOLD) in body
         assert str(LLAB_ABSENCE_THRESHOLD) in body
 

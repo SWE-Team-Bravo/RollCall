@@ -11,6 +11,7 @@ from bson import ObjectId
 from services.events import closest_event_index
 from utils.auth import get_current_user, require_role
 from utils.db import get_collection, get_db
+from utils.at_risk_email import send_at_risk_emails
 
 _DEFAULT_DAYS = 30
 _MAX_ROWS = 2000
@@ -85,6 +86,7 @@ if any(
     st.error("Database unavailable.")
     st.stop()
 
+<<<<<<< HEAD
 assert users_col is not None
 assert cadets_col is not None
 assert events_col is not None
@@ -95,6 +97,18 @@ current_user = get_current_user()
 roles = set((current_user or {}).get("roles", []))
 is_flight_commander_only = "flight_commander" in roles and not (
     roles & {"admin", "cadre"}
+=======
+cadet_docs = list(cadets_col.find({}, {"_id": 1, "user_id": 1}))
+if not cadet_docs:
+    st.info("No cadets found yet.")
+    st.stop()
+
+user_ids = [c["user_id"] for c in cadet_docs if "user_id" in c]
+user_docs = list(
+    users_col.find(
+        {"_id": {"$in": user_ids}}, {"_id": 1, "first_name": 1, "last_name": 1}
+    )
+>>>>>>> f147754 (At-risk cadet email reports and tests)
 )
 
 flight_filter_id: ObjectId | None = None
@@ -119,12 +133,22 @@ st.subheader("Filters")
 today = datetime.now(timezone.utc).date()
 default_start = today.fromordinal(today.toordinal() - _DEFAULT_DAYS)
 
+<<<<<<< HEAD
 col1, col2, col3, col4 = st.columns(4)
+=======
+st.dataframe(df.style.applymap(_cell_style), width="stretch")
+
+st.divider()
+st.subheader("Legend")
+
+col1, col2, col3 = st.columns(3)
+>>>>>>> f147754 (At-risk cadet email reports and tests)
 with col1:
     start_date = st.date_input("Start date", value=default_start)
 with col2:
     end_date = st.date_input("End date", value=today)
 with col3:
+<<<<<<< HEAD
     event_type_choice = st.selectbox("Event type", ["All", "PT", "LLAB"], index=0)
 with col4:
     status_choice = st.selectbox(
@@ -364,3 +388,17 @@ else:
                     st.dataframe(styler, width="stretch", hide_index=True)
 
             st.divider()
+=======
+    st.warning("E = Excused / Waived")
+
+st.divider()
+st.subheader("At-Risk Report")
+if st.button("Send At-Risk Emails"):
+    sent, failed = send_at_risk_emails()
+    if sent == 0 and failed == 0:
+        st.info("At-risk cadets not found.")
+    elif failed == 0:
+        st.success(f"Emails sent to {sent} recipient(s).")
+    else:
+        st.warning(f"Sent: {sent}; Failed: {failed}.")
+>>>>>>> f147754 (At-risk cadet email reports and tests)

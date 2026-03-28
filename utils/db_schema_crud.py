@@ -52,6 +52,13 @@ def get_users_by_role(role: str) -> list[dict]:
     return list(col.find({"roles": role}))
 
 
+def get_users_by_role(role: str) -> list[dict]:
+    col = get_collection("users")
+    if col is None:
+        return []
+    return list(col.find({"roles": role}))
+
+
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("users")
     if col is None:
