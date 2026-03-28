@@ -313,8 +313,8 @@ def test_send_email_false_on_exception():
 def test_send_email_returns_true_on_success():
     mock_server = MagicMock()
     with patch("utils.at_risk_email.smtplib.SMTP_SSL", return_value=mock_server):
-        mock_server.__enter__ == MagicMock(return_value=mock_server)
-        mock_server.__exit__ == MagicMock(return_value=False)
+        mock_server.__enter__ = MagicMock(return_value=mock_server)
+        mock_server.__exit__ = MagicMock(return_value=False)
         result = send_email("test@rollcall.local", MagicMock())
         assert result is True
 
