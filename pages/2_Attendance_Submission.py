@@ -30,7 +30,7 @@ def getPassword():
 
 st.title("Attendance Submission Page")
 
-# Generate variables once per session
+# Generate password once per session
 if "password" not in st.session_state:
     st.session_state.correctPassword = False
 correctPassword = st.session_state.correctPassword
@@ -41,7 +41,9 @@ st.info("testing password: " + getPassword())
 # Current day of the week
 weekDay = datetime.now().strftime("%A")
 #st.info(weekDay)
+#st.info(weekDay)
 
+# Default message for attendance status
 # Default message for attendance status
 attendanceStatus = st.empty()
 if correctPassword:
@@ -49,7 +51,7 @@ if correctPassword:
 else: 
     attendanceStatus.markdown("Attendance Status: Needs Reported")
 
-# Passord submission and checking and displays attendance status
+# Password submission and checking
 answer = st.text_input("Password", type="password")
 
 if(st.button("Report In") and not correctPassword):
@@ -57,6 +59,7 @@ if(st.button("Report In") and not correctPassword):
         st.success("correct password")
         st.balloons()
         st.session_state.correctPassword = True
+        attendanceStatus.markdown("Attendance Status: Reported")
         attendanceStatus.markdown("Attendance Status: Reported")
     else:
         st.error("wrong password")

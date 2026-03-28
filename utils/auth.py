@@ -63,7 +63,8 @@ def get_current_user() -> dict | None:
 
 def require_auth():
     if not st.session_state.get("authentication_status"):
-        st.switch_page("pages/0_Login.py")
+        st.error("You must be logged in to view this page.")
+        st.stop()
 
 
 def require_role(*roles: str):
