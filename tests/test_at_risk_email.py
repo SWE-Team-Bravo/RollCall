@@ -311,11 +311,13 @@ def test_send_email_false_on_exception():
 
 
 def test_send_email_returns_true_on_success():
-    mock_server = MagicMock()
-    mock_server.__enter__ = MagicMock(return_value=mock_server)
-    mock_server.__exit__ = MagicMock(return_value=False)
-
-    with patch("utils.at_risk_email.smtplib.SMTP_SSL", return_value=mock_server):
+    with (
+        patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
+        patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
+        patch("utils.at_risk_email.smtplib.SMTP_SSL") as mock_smtp,
+    ):
+        mock_smtp.return_value.__enter__.return_value = MagicMock()
+        mock_smtp.return_value.__exit__.return_value = False
         result = send_email("test@rollcall.local", MagicMock())
         assert result is True
 
