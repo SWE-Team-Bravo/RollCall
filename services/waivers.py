@@ -2,50 +2,53 @@ from datetime import datetime, timezone
 
 from utils.db_schema_crud import (
     create_waiver_approval,
-    get_attendance_by_cadet,
-    get_event_by_id,
-    get_waiver_by_attendance_record,
     update_waiver,
     validate_waiver,
 )
 
 
-def get_all_waivers_for_cadet(cadet_id: str) -> list[dict]:
+def get_all_waivers_for_cadet(
+    records: list[dict],
+    waivers_by_record_id: dict,
+    events_by_id: dict,
+) -> list[dict]:
     """Return all waivers for a cadet, enriched with event name and date."""
-    records = get_attendance_by_cadet(cadet_id)
-    waivers = []
+    result = []
     for record in records:
-        waiver = get_waiver_by_attendance_record(record["_id"])
-        if waiver:
-            event_id = record.get("event_id")
-            event = get_event_by_id(event_id) if event_id else None
-            waiver["_event_name"] = event.get("event_name") if event else "Unknown event"
-            start_date = event.get("start_date") if event else None
-            waiver["_event_date"] = (
-                start_date.strftime("%Y-%m-%d") if start_date else "Unknown date"
-            )
-            waivers.append(waiver)
-    return waivers
+        waiver = waivers_by_record_id.get(record["_id"])
+        if not waiver:
+            continue
+        waiver = dict(waiver)
+        event = events_by_id.get(record.get("event_id"))
+        waiver["_event_name"] = event.get("event_name") if event else "Unknown event"
+        start_date = event.get("start_date") if event else None
+        waiver["_event_date"] = (
+            start_date.strftime("%Y-%m-%d") if start_date else "Unknown date"
+        )
+        result.append(waiver)
+
+    return result
 
 
-def get_absent_records_without_waiver(cadet_id: str) -> list[dict]:
+def get_absent_records_without_waiver(
+    records: list[dict],
+    waivers_by_record_id: dict,
+) -> list[dict]:
     """Return absent attendance records that are eligible for a new waiver submission.
 
     Includes records with no waiver, and records whose only waiver was auto-denied
     (allowing resubmission).
     """
-    records = get_attendance_by_cadet(cadet_id)
     absent = [r for r in records if r.get("status") == "absent"]
-
     eligible = []
     for record in absent:
-        existing = get_waiver_by_attendance_record(record["_id"])
+        existing = waivers_by_record_id.get(record["_id"])
         if not existing:
             eligible.append(record)
         else:
             status = (existing.get("status") or "").lower()
             auto_denied = bool(existing.get("auto_denied"))
-            if status == "denied" and auto_denied:
+            if (status == "denied" and auto_denied) or status == "withdrawn":
                 eligible.append(record)
     return eligible
 
@@ -95,3 +98,9 @@ def resubmit_auto_denied_waiver(
         comments="Resubmitted successfully.",
     )
     return True, ""
+
+
+def withdraw_waiver(waiver_id: str) -> bool:
+    """Delete pending waiver. Returns True on success"""
+    result = update_waiver(waiver_id, {"status": "withdrawn"})
+    return bool(result and result.modified_count > 0)

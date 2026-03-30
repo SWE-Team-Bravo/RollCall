@@ -8,10 +8,17 @@ require_role("admin", "cadre")
 st.title("Event Schedule Configuration")
 
 config = get_event_config()
+if config is None:
+    config = {}
 
 days_of_week = [
-    "Monday", "Tuesday", "Wednesday",
-    "Thursday", "Friday", "Saturday", "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
 ]
 
 pt_days = st.multiselect(

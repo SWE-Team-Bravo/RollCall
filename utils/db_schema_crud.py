@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
-from streamlit_authenticator import Hasher
 
 from utils.db import get_collection
+from utils.password import hash_password
 
 
 def create_user(
@@ -22,7 +22,7 @@ def create_user(
             "first_name": first_name,
             "last_name": last_name,
             "email": email,
-            "password_hash": Hasher.hash(password),
+            "password_hash": hash_password(password),
             "roles": roles,
             "created_at": datetime.now(timezone.utc),
         }
@@ -187,6 +187,15 @@ def get_events_by_creator(user_id: str | ObjectId) -> list[dict]:
     if col is None:
         return []
     return list(col.find({"created_by_user_id": ObjectId(user_id)}))
+
+
+def get_events_by_ids(event_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("events")
+    if col is None or not event_ids:
+        return []
+
+    object_ids = [ObjectId(e_id) for e_id in event_ids]
+    return list(col.find({"_id": {"$in": object_ids}}))
 
 
 def update_event(event_id: str | ObjectId, updates: dict) -> UpdateResult | None:
@@ -408,6 +417,15 @@ def get_waivers_by_status(status: str) -> list[dict]:
     return list(col.find({"status": status}))
 
 
+def get_waivers_by_attendance_records(record_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None or not record_ids:
+        return []
+
+    object_ids = [ObjectId(r_id) for r_id in record_ids]
+    return list(col.find({"attendance_record_id": {"$in": object_ids}}))
+
+
 def get_all_waivers() -> list[dict]:
     col = get_collection("waivers")
     if col is None:
@@ -534,6 +552,7 @@ def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
         {"_id": ObjectId(cadet_id)},
         {"$set": {"flight_id": ObjectId(flight_id)}},
     )
+
 
 def unassign_cadet_from_flight(cadet_id: str | ObjectId):
     col = get_collection("cadets")
