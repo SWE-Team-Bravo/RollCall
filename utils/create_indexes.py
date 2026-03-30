@@ -88,3 +88,41 @@ def create_indexes() -> None:
             IndexModel([("flight_id", ASCENDING)], name="flight_id"),
         ]
     )
+
+    db["audit_log"].create_indexes(
+        [
+            IndexModel(
+                [("cadet_id", ASCENDING), ("created_at", ASCENDING)],
+                name="cadet_created_at",
+            ),
+            IndexModel(
+                [("outcome", ASCENDING), ("created_at", ASCENDING)],
+                name="outcome_created_at",
+            ),
+            IndexModel(
+                [("source", ASCENDING), ("created_at", ASCENDING)],
+                name="source_created_at",
+            ),
+        ]
+    )
+
+    db["checkin_codes"].create_indexes(
+        [
+            IndexModel(
+                [("kind", ASCENDING), ("created_at", ASCENDING)], name="kind_created_at"
+            ),
+            IndexModel(
+                [
+                    ("kind", ASCENDING),
+                    ("code_sha256", ASCENDING),
+                    ("created_at", ASCENDING),
+                ],
+                name="kind_code_created_at",
+            ),
+            IndexModel(
+                [("expires_at", ASCENDING)],
+                name="expires_at_ttl",
+                expireAfterSeconds=0,
+            ),
+        ]
+    )
