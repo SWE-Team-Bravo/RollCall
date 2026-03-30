@@ -12,7 +12,7 @@ url = "http://localhost:8501"
 
 # No popups
 options = webdriver.ChromeOptions()
-# options.add_argument("--headless")
+options.add_argument("--headless")
 options.add_experimental_option("prefs", {"credentials_enable_service": False, "profile.password_manager_enabled": False})
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 options.add_experimental_option("useAutomationExtension", False)
@@ -23,7 +23,7 @@ options.add_argument("--window-size=1920,1080")
 
 # Waits until a connection has been made with the server before doing selenium stuff
 def connect_to_server():
-    timer = 15              # 15 second timer
+    timer = 15         # 15 second timer
     start = time()     # Finds current time
     
     # Continuously attempts to connect until timer runs out
@@ -285,20 +285,19 @@ sleep(3)
 
 # Run tests
 if (connect_to_server()):
-    for _ in range(10):
-        # Run tests
-        test_we_are_on_login_page()
-        check_for_username_and_box()
-        check_for_password_and_box()
-        check_for_login_button()
-        log_into_website()
-        move_to_attendance_submission_page()
-        check_for_attendance_password_and_box()
-        check_for_attendance_status()
-        check_for_report_in_button()
-        test_attendance_status_after_button_push_without_password()
-        test_password_works_and_changes_status()
+    # Run tests
+    test_we_are_on_login_page()
+    check_for_username_and_box()
+    check_for_password_and_box()
+    check_for_login_button()
+    log_into_website()
+    move_to_attendance_submission_page()
+    check_for_attendance_password_and_box()
+    check_for_attendance_status()
+    check_for_report_in_button()
+    test_attendance_status_after_button_push_without_password()
+    test_password_works_and_changes_status()
 
-        # End tests
-        process.terminate()
-        print("Done 🛑")
+    # End tests
+    process.terminate()
+    print("Done 🛑")
