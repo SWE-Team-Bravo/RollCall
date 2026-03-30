@@ -2,3 +2,4 @@ pymongo>=4.16.0
 streamlit==1.54.0
 streamlit-authenticator>=0.4.2
 python-dotenv==1.2.1
+selenium>=4.41.0
