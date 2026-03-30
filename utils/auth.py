@@ -21,11 +21,13 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
 
 
 def init_auth():
+    # Always load credentials from the DB so changes (like password updates)
+    # take effect immediately without requiring a server restart.
+    credentials, raw = _load_credentials()
+
+    assert AUTH_COOKIE_KEY is not None
+
     if "authenticator" not in st.session_state:
-        credentials, raw = _load_credentials()
-
-        assert AUTH_COOKIE_KEY is not None
-
         authenticator = stauth.Authenticate(
             credentials,
             cookie_name="rollcall_auth",
@@ -34,9 +36,15 @@ def init_auth():
             auto_hash=False,
         )
         st.session_state["authenticator"] = authenticator
-        st.session_state["_raw_users"] = raw
     else:
         authenticator = st.session_state["authenticator"]
+        # Keep the in-memory authenticator store consistent with the DB.
+        try:
+            authenticator.credentials = credentials
+        except Exception:
+            pass
+
+    st.session_state["_raw_users"] = raw
 
     authenticator.login(location="main")
     return authenticator
