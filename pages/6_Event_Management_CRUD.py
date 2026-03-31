@@ -19,9 +19,9 @@ def infer_event_type(selected_date: date, config: dict) -> str:
     """Return PT, LLAB, or empty string based on the saved schedule config."""
     day_name = selected_date.strftime("%A")
     if day_name in config.get("pt_days", []):
-        return "PT"
+        return "pt"
     if day_name in config.get("llab_days", []):
-        return "LLAB"
+        return "llab"
     return ""
 
 # ── load config once ─────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ with st.form("create_event_form"):
 
     # Auto-populate type from schedule config based on start date
     auto_type = infer_event_type(start_date, config)
-    type_options = ["PT", "LLAB"]
+    type_options = ["pt", "llab"]
     default_index = type_options.index(auto_type) if auto_type in type_options else 0
 
     event_type = st.selectbox(
@@ -116,8 +116,8 @@ else:
 
     df = pd.DataFrame([
         {
-            "Name": e.get("name", "—"),
-            "Type": e.get("event_type", "—"),
+            "Name": e.get("event_name", "—"),
+            "Type": e.get("event_type", "—").upper(),
             "Start Date": e.get("start_date", "—"),
             "End Date": e.get("end_date", "—"),
         }
@@ -129,7 +129,7 @@ else:
     # Delete section below the table
     st.markdown("**Delete an Event**")
     event_labels = [
-        f"{e.get('start_date', '—')} — {e.get('name', '—')}" for e in events
+         f"{e.get('start_date', '—')} — {e.get('event_name', '—')}" for e in events
     ]
     selected_label = st.selectbox("Select event to delete", event_labels)
     selected_event = events[event_labels.index(selected_label)]

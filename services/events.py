@@ -26,7 +26,7 @@ def create_event(
     if db is None:
         return False
     db.events.insert_one({
-        "name": name,
+        "event_name": name,
         "event_type": event_type,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
