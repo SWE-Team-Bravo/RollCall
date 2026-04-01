@@ -1,0 +1,27 @@
+name: Deploy to Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH and Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd rollcall
+
+            # Pull latest code
+            git pull
+
+            # Kill existing streamlit screen session if running
+            screen -S streamlit -X quit || true
+
+            # Start a new detached screen session running streamlit
+            screen -dmS streamlit bash -c "streamlit run Home.py"
