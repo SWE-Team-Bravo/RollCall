@@ -38,6 +38,11 @@ if any(x is None for x in (users_col, cadets_col, events_col, attendance_col)):
     st.error("Database unavailable.")
     st.stop()
 
+assert users_col is not None
+assert cadets_col is not None
+assert events_col is not None
+assert attendance_col is not None
+
 cadet_docs = list(cadets_col.find({}, {"_id": 1, "user_id": 1}))
 if not cadet_docs:
     st.info("No cadets found yet.")

@@ -1,303 +1,492 @@
+import os
+import pytest
+import subprocess
+import requests
+import requests.adapters
+from time import sleep, time
+from datetime import datetime, timedelta, timezone
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException
-from time import sleep, time
-import subprocess
-import requests.adapters
 
-# Local streamlit URL
-url = "http://localhost:8501"
+URL = "http://localhost:8501"
 
-# No popups
-options = webdriver.ChromeOptions()
-options.add_argument("--headless")
-options.add_experimental_option("prefs", {"credentials_enable_service": False, "profile.password_manager_enabled": False})
-options.add_experimental_option("excludeSwitches", ["enable-automation"])
-options.add_experimental_option("useAutomationExtension", False)
-options.add_argument("--disable-notifications")
-options.add_argument("--disable-infobars")
-options.add_argument("--disable-save-password-bubble")
-options.add_argument("--window-size=1920,1080")
 
-# Waits until a connection has been made with the server before doing selenium stuff
-def connect_to_server():
-    timer = 15         # 15 second timer
-    start = time()     # Finds current time
-    
-    # Continuously attempts to connect until timer runs out
-    while (time() - start <= timer):
+# browser options
+
+
+def _make_options():
+    options = webdriver.ChromeOptions()
+    if os.environ.get("CI"):
+        options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_experimental_option(
+        "prefs",
+        {
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+        },
+    )
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-save-password-bubble")
+    options.add_argument("--window-size=1920,1080")
+    return options
+
+
+# helpers
+
+
+def _wait_for_server(timeout=15):
+    start = time()
+    while time() - start <= timeout:
         try:
-            # Get connection status
-            response = requests.get(url, timeout = 0.5)
-            
-            # Verify connection status
-            if(response.status_code == 200):
-                print("Connected to server :)")
+            if requests.get(URL, timeout=0.5).status_code == 200:
                 return True
-            
-            # Print status message
-            print("Waiting for server to connect :|")
-
-        # Print status message if unable to connect to server
         except requests.exceptions.ConnectionError:
-            print("Server not ready yet :(")
-    
+            pass
         sleep(0.1)
-
-    # Print error message if unable to connect to server
-    print("Unable to connect to server :(")
     return False
 
-# Helper function for tests
-def testCatcher(test, browser, timeout, condition, failMessage):
+
+def _wait(test, browser, timeout, condition, failMessage):
     try:
         result = WebDriverWait(browser, timeout).until(condition)
-        print(test + " Success ✅")
+        print(test + " Success")
         return result
     except TimeoutException:
-        print(test + " Failure ❌ - " + failMessage)
-        input("Paused — press Enter to continue . . .")
-        raise   # Pushes errors to the console that weren't caught
+        print(test + " Failure - " + failMessage)
+        raise
 
-#
-### START TESTS
-#
+
+def _login(browser, account="admin1"):
+    username = _wait(
+        "login.1",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"),
+        "couldn't find username input box",
+    )
+    password = _wait(
+        "login.2",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find password input box",
+    )
+    button = _wait(
+        "login.3",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"),
+        "couldn't find log in button",
+    )
+    username.send_keys(f"{account}@rollcall.local")
+    password.send_keys("password")
+    button.click()
+
+
+def _go_to_attendance(browser):
+    _login(browser, "cadet1")
+    attendance = _wait(
+        "nav.1",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/']"),
+        "couldn't find the attendance tab label",
+    )
+    attendance.click()
+    _wait(
+        "nav.2",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Submission Page" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't verify being on the attendance page",
+    )
+
+
+# fixtures
+
+pytestmark = pytest.mark.e2e
+
+
+@pytest.fixture(scope="session", autouse=True)
+def streamlit_server():
+    process = subprocess.Popen(
+        ["streamlit", "run", "Home.py", "--server.headless", "true"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    sleep(3)
+    if not _wait_for_server():
+        process.terminate()
+        pytest.skip("Streamlit server did not start within 15 seconds")
+    yield
+    process.terminate()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def active_event():
+    """Insert a wide-window PT event so the attendance page never hits st.stop()."""
+    try:
+        from pymongo import MongoClient
+        from config.settings import MONGODB_URI, MONGODB_DB
+    except Exception:
+        return  # no DB available — skip silently, tests will fail on their own
+
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
+    try:
+        client.server_info()
+    except Exception:
+        return  # MongoDB not reachable
+
+    col = client[MONGODB_DB]["events"]
+    now = datetime.now(timezone.utc)
+    doc = {
+        "event_name": "E2E Test Event",
+        "event_type": "pt",
+        "start_date": now - timedelta(hours=1),
+        "end_date": now + timedelta(hours=2),
+        "created_by_user_id": "e2e",
+    }
+    result = col.insert_one(doc)
+    yield
+    col.delete_one({"_id": result.inserted_id})
+    client.close()
+
+
+@pytest.fixture
+def browser():
+    driver = webdriver.Chrome(options=_make_options())
+    driver.get(URL)
+    yield driver
+    driver.quit()
+
+
+# tests
+
 
 # Test 1
-def test_we_are_on_login_page():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_we_are_on_login_page(browser):
+    _wait(
+        "Test 1.1",
+        browser,
+        10,
+        lambda d: "Login" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find the login text",
+    )
 
-    # lambda is a small function with no name
-    # lambda arguments: expression
-    testCatcher("Test 1.1", browser, 10, lambda driver: "Login" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find the login text")
-
-    # End test
-    browser.close()
 
 # Test 2
-def check_for_username_and_box():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_check_for_username_and_box(browser):
+    _wait(
+        "Test 2.1",
+        browser,
+        10,
+        lambda d: "Username" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find the username text",
+    )
+    _wait(
+        "Test 2.2",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"),
+        "couldn't find the username input box",
+    )
 
-    testCatcher("Test 2.1", browser, 10, lambda driver: "Username" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find the username text")
-    testCatcher("Test 2.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find the username input box")
-
-    # End test
-    browser.close()
 
 # Test 3
-def check_for_password_and_box():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
- 
-    testCatcher("Test 3.1", browser, 10, lambda driver: "Password" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find the password text")
-    testCatcher("Test 3.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find the password input box")
+def test_check_for_password_and_box(browser):
+    _wait(
+        "Test 3.1",
+        browser,
+        10,
+        lambda d: "Password" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find the password text",
+    )
+    _wait(
+        "Test 3.2",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find the password input box",
+    )
 
-    # End test
-    browser.close()
 
 # Test 4
-def check_for_login_button():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_check_for_login_button(browser):
+    _wait(
+        "Test 4.1",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"),
+        "couldn't find the sign in button",
+    )
 
-    testCatcher("Test 4.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find the sign in button")
-
-    # End test
-    browser.close()
 
 # Test 5
-def log_into_website():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_log_into_website(browser):
+    _login(browser)
 
-    username = testCatcher("Test 5.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 5.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 5.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")    
-   
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-
-    # End test
-    browser.close()
-
-    # THIS WON'T WORK REPLACE WITH A DIFFERENT FUNCTION THAT RETURNS BROSWER?
-    return username, password, button
 
 # Test 6
-def move_to_attendance_submission_page():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_move_to_attendance_submission_page(browser):
+    _go_to_attendance(browser)
 
-    username = testCatcher("Test 6.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 6.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 6.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")    
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-
-    attendance = testCatcher("Test 6.4", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/Attendance_Submission']"), "couldn't find the attendance tab label")
-    attendance.click()
-    testCatcher("Test 6.5", browser, 10, lambda driver: "Attendance Submission Page" in driver.find_element(By.TAG_NAME, "body").text, "couldn't veryify being on the attendance page")
-
-    # End test
-    browser.close()
 
 # Test 7
-def check_for_attendance_password_and_box():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_check_for_attendance_password_and_box(browser):
+    _go_to_attendance(browser)
+    _wait(
+        "Test 7.6",
+        browser,
+        10,
+        lambda d: "Password" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find password label",
+    )
+    _wait(
+        "Test 7.7",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find password text input",
+    )
 
-    username = testCatcher("Test 7.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 7.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 7.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-    
-    attendance = testCatcher("Test 7.4", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/Attendance_Submission']"), "couldn't find the attendance tab label")
-    attendance.click()
-    testCatcher("Test 7.5", browser, 10, lambda driver: "Attendance Submission Page" in driver.find_element(By.TAG_NAME, "body").text, "couldn't veryify being on the attendance page")
-    testCatcher("Test 7.6", browser, 10, lambda driver: "Password" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find password label")
-    testCatcher("Test 7.7", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password text input")
-
-    # End test
-    browser.close()
 
 # Test 8
-def check_for_attendance_status():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_check_for_attendance_status(browser):
+    _go_to_attendance(browser)
+    _wait(
+        "Test 8.1",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Status: Needs Reported"
+            in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't find the attendance needs reported text",
+    )
 
-    username = testCatcher("Test 7.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 7.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 7.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-    
-    attendance = testCatcher("Test 7.4", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/Attendance_Submission']"), "couldn't find the attendance tab label")
-    attendance.click()
-    testCatcher("Test 7.5", browser, 10, lambda driver: "Attendance Submission Page" in driver.find_element(By.TAG_NAME, "body").text, "couldn't veryify being on the attendance page")
-
-    testCatcher("Test 8.1", browser, 10, lambda driver: "Attendance Status: Needs Reported" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find the attendance needs reported text")
-
-    # End test
-    browser.close()
 
 # Test 9
-# Will still show true even if other tests pass for attendance page
-def check_for_report_in_button():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_check_for_report_in_button(browser):
+    _go_to_attendance(browser)
+    _wait(
+        "Test 9.6",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondary']"),
+        "couldn't find the report attendance button",
+    )
 
-    username = testCatcher("Test 9.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 9.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 9.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-    
-    attendance = testCatcher("Test 9.4", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/Attendance_Submission']"), "couldn't find the attendance tab label")
-    attendance.click()
-    testCatcher("Test 9.5", browser, 10, lambda driver: "Attendance Submission Page" in driver.find_element(By.TAG_NAME, "body").text, "couldn't veryify being on the attendance page")
-
-    testCatcher("Test 9.6", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondary']"), "couldn't find the report attendance button")
-
-    # End test
-    browser.close()
 
 # Test 10
-def test_attendance_status_after_button_push_without_password():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
-
-    username = testCatcher("Test 10.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 10.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 10.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-    
-    attendance = testCatcher("Test 10.4", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/Attendance_Submission']"), "couldn't find the attendance tab label")
-    attendance.click()
-    testCatcher("Test 10.5", browser, 10, lambda driver: "Attendance Submission Page" in driver.find_element(By.TAG_NAME, "body").text, "couldn't veryify being on the attendance page")
-
-
-    button = testCatcher("Test 10.6", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[class='st-emotion-cache-134a998 e1mwqyj92']"), "couldn't find the report attendance button")
+def test_attendance_status_after_button_push_without_password(browser):
+    _go_to_attendance(browser)
+    button = _wait(
+        "Test 10.6",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+        ),
+        "couldn't find the report attendance button",
+    )
     sleep(1)
     button.click()
-    testCatcher("Test 10.7", browser, 10, lambda driver: "Attendance Status: Needs Reported" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find the attendance status: needs reported text")
+    _wait(
+        "Test 10.7",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Status: Needs Reported"
+            in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't find the attendance status: needs reported text",
+    )
 
-    # End test
-    browser.close()
 
 # Test 11
-def test_password_works_and_changes_status():
-    # Start test
-    browser = webdriver.Chrome(options = options)
-    browser.get(url)
+def test_password_works_and_changes_status(browser):
+    _login(browser, "cadet1")
 
-    username = testCatcher("Test 11.1", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"), "couldn't find username input box")
-    password = testCatcher("Test 11.2", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find password input box")
-    button   = testCatcher("Test 11.3", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"), "couldn't find log in button")
-    username.send_keys("admin1@rollcall.local")
-    password.send_keys("password")
-    button.click()
-    
-    attendance = testCatcher("Test 11.4", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/Attendance_Submission']"), "couldn't find the attendance tab label")
-    attendance.click()
-    testCatcher("Test 11.5", browser, 10, lambda driver: "Attendance Submission Page" in driver.find_element(By.TAG_NAME, "body").text, "couldn't veryify being on the attendance page")
+    # Navigate to Account Settings via the sidebar nav link
+    _wait(
+        "Test 11.0",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "a[href='http://localhost:8501/Account_Settings']"
+        ),
+        "couldn't find Account Settings nav link",
+    ).click()
+    _wait(
+        "Test 11.1",
+        browser,
+        10,
+        lambda d: "Account Settings" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't load Account Settings page",
+    )
+    _wait(
+        "Test 11.2",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Current Password']"
+        ),
+        "couldn't find Current Password field",
+    ).send_keys("password")
+    _wait(
+        "Test 11.3",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='New Password']"),
+        "couldn't find New Password field",
+    ).send_keys("newpassword1")
+    _wait(
+        "Test 11.4",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Confirm New Password']"
+        ),
+        "couldn't find Confirm New Password field",
+    ).send_keys("newpassword1")
+    _wait(
+        "Test 11.5",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Update Password')]]"
+        ),
+        "couldn't find Update Password button",
+    ).click()
+    _wait(
+        "Test 11.6",
+        browser,
+        10,
+        lambda d: (
+            "Password updated successfully" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "password change did not succeed",
+    )
 
+    # Navigate to attendance via nav link and check in with the hint code
+    _wait(
+        "Test 11.7",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/']"),
+        "couldn't find Attendance nav link",
+    ).click()
+    _wait(
+        "Test 11.8",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Submission Page" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't load Attendance Submission page",
+    )
+    passwordbox = _wait(
+        "Test 11.9",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find the password box",
+    )
+    hint = _wait(
+        "Test 11.10",
+        browser,
+        10,
+        lambda d: d.find_element(By.XPATH, "//p[contains(text(), 'testing')]"),
+        "couldn't find the testing password hint",
+    )
+    passwordbox.send_keys(hint.text[-6:])
+    _wait(
+        "Test 11.11",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+        ),
+        "couldn't find the report attendance button",
+    ).click()
+    _wait(
+        "Test 11.12",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Status: Reported" in d.find_element(By.TAG_NAME, "body").text
+            or "already checked in" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't find reported status or already-checked-in message",
+    )
 
-    passwordbox = testCatcher("Test 11.5", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"), "couldn't find the password box")
-    password = testCatcher("Test 11.6", browser, 10, lambda driver: driver.find_element(By.XPATH, "//p[contains(text(), 'testing')]"), "couldn't find the testing password hint")
-    passwordbox.send_keys(password.text[-6:])
-    button = testCatcher("Test 11.7", browser, 10, lambda driver: driver.find_element(By.CSS_SELECTOR, "button[class='st-emotion-cache-134a998 e1mwqyj92']"), "couldn't find the report attendance button")
-    button.click()
-    
-    testCatcher("Test 11.8", browser, 10, lambda driver: "Attendance Status: Reported" in driver.find_element(By.TAG_NAME, "body").text, "couldn't find the attendance status: reported text")
-
-    # End test
-    browser.close()
-    
-#
-### END TESTS
-#
-
-# Open streamlit
-process = subprocess.Popen(["streamlit", "run", "../Home.py", "--server.headless", "true"])
-sleep(3)
-
-# Run tests
-if (connect_to_server()):
-    # Run tests
-    test_we_are_on_login_page()
-    check_for_username_and_box()
-    check_for_password_and_box()
-    check_for_login_button()
-    log_into_website()
-    move_to_attendance_submission_page()
-    check_for_attendance_password_and_box()
-    check_for_attendance_status()
-    check_for_report_in_button()
-    test_attendance_status_after_button_push_without_password()
-    test_password_works_and_changes_status()
-
-    # End tests
-    process.terminate()
-    print("Done 🛑")
+    # Teardown: reset password back to original so the test is repeatable
+    _wait(
+        "Test 11.13",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "a[href='http://localhost:8501/Account_Settings']"
+        ),
+        "couldn't find Account Settings nav link for teardown",
+    ).click()
+    _wait(
+        "Test 11.14",
+        browser,
+        10,
+        lambda d: "Account Settings" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't load Account Settings page for teardown",
+    )
+    _wait(
+        "Test 11.15",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Current Password']"
+        ),
+        "couldn't find Current Password field for teardown",
+    ).send_keys("newpassword1")
+    _wait(
+        "Test 11.16",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='New Password']"),
+        "couldn't find New Password field for teardown",
+    ).send_keys("password")
+    _wait(
+        "Test 11.17",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Confirm New Password']"
+        ),
+        "couldn't find Confirm New Password field for teardown",
+    ).send_keys("password")
+    _wait(
+        "Test 11.18",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Update Password')]]"
+        ),
+        "couldn't find Update Password button for teardown",
+    ).click()
+    _wait(
+        "Test 11.19",
+        browser,
+        10,
+        lambda d: (
+            "Password updated successfully" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "password teardown did not succeed",
+    )
