@@ -21,7 +21,7 @@ def infer_event_type(selected_date: date, config: dict) -> str:
     if day_name in config.get("pt_days", []):
         return "pt"
     if day_name in config.get("llab_days", []):
-        return "llab"
+        return "lab"
     return ""
 
 # ── load config once ─────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ with st.form("create_event_form"):
 
     # Auto-populate type from schedule config based on start date
     auto_type = infer_event_type(start_date, config)
-    type_options = ["pt", "llab"]
+    type_options = ["pt", "lab"]
     default_index = type_options.index(auto_type) if auto_type in type_options else 0
 
     event_type = st.selectbox(
