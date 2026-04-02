@@ -6,6 +6,7 @@ import streamlit as st
 from services.dashboard import build_attendance_grid
 from utils.auth import require_role
 from utils.db import get_collection, get_db
+from utils.at_risk_email import send_at_risk_emails
 
 
 def _cell_style(val: str) -> str:
@@ -36,11 +37,6 @@ attendance_col = get_collection("attendance_records")
 if any(x is None for x in (users_col, cadets_col, events_col, attendance_col)):
     st.error("Database unavailable.")
     st.stop()
-
-assert users_col is not None
-assert cadets_col is not None
-assert events_col is not None
-assert attendance_col is not None
 
 cadet_docs = list(cadets_col.find({}, {"_id": 1, "user_id": 1}))
 if not cadet_docs:
@@ -77,7 +73,7 @@ df = pd.DataFrame(
     columns=pd.Index(cadet_names),
 )
 
-st.dataframe(df.style.applymap(_cell_style), use_container_width=True)
+st.dataframe(df.style.applymap(_cell_style), width="stretch")
 
 st.divider()
 st.subheader("Legend")
@@ -89,3 +85,14 @@ with col2:
     st.error("A = Absent")
 with col3:
     st.warning("E = Excused / Waived")
+
+st.divider()
+st.subheader("At-Risk Report")
+if st.button("Send At-Risk Emails"):
+    sent, failed = send_at_risk_emails()
+    if sent == 0 and failed == 0:
+        st.info("At-risk cadets not found.")
+    elif failed == 0:
+        st.success(f"Emails sent to {sent} recipient(s).")
+    else:
+        st.warning(f"Sent: {sent}; Failed: {failed}.")

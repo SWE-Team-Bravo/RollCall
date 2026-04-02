@@ -22,6 +22,10 @@ else:
     cadet_attendance = st.Page(
         "pages/8_Cadet_Attendance.py", title="Cadet Attendance View"
     )
+    account_settings = st.Page(
+        "pages/9_Account_Settings.py",
+        title="Account Settings",
+    )
 
     if roles & {"admin", "cadre"}:
         pages = [dashboard, attendance, cadets, flight_mgmt, waiver_review, event_sched]
@@ -30,6 +34,12 @@ else:
     elif "cadet" in roles:
         pages = [attendance, waivers, cadet_attendance]
     else:
+        pages = []
+
+    # Every authenticated user can manage their own account.
+    pages.append(account_settings)
+
+    if not pages:
         pages = [login]
 
     authenticator = st.session_state.get("authenticator")
