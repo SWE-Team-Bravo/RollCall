@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import streamlit as st
-<<<<<<< HEAD
 from bson import ObjectId
 
 from utils.auth import get_current_user, require_auth
@@ -11,36 +10,6 @@ from utils.db_schema_crud import get_cadet_by_user_id, get_user_by_email
 from utils.audit_log import log_checkin_attempt
 from utils.checkin_codes import issue_checkin_code, validate_checkin_code
 from services.attendance import generate_attendance_password
-=======
-import secrets
-from datetime import datetime, timedelta
-import pymongo
-from utils.db import get_collection  # <-- use shared db helper
-
-#=====Database stuff=====#
-def getPassword():
-    pswdData = get_collection("Password")  # uses MONGODB_URI + MONGODB_DB from config
-
-    # Checks that password collection has data
-    count = pswdData.count_documents({})
-    if (count > 0):
-        # Grabs the most recent password
-        mostrecent = pswdData.find_one(sort=[("$natural", -1)])
-        
-        # Check if xx time has passed
-        if(datetime.now() - mostrecent["timestamp"] >= timedelta(seconds=10)): # Use timedelta(minutes=30) for
-            # Creates and adds new password if set time has passed
-            pswd = {"password": f"{secrets.randbelow(1000000):06}", "timestamp": datetime.now()}
-            pswdData.insert_one(pswd)
-    else:
-        # Adds initial data to the database
-        pswd = {"password": 123456, "timestamp": datetime.now()}
-        pswdData.insert_one(pswd)
-
-    return str(pswdData.find_one(sort=[("$natural", -1)])["password"])
-
-#=====Streamlit stuff=====#
->>>>>>> 5bb2c2a (using database helper)
 
 require_auth()
 st.title("Attendance Submission Page")
