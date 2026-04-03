@@ -18,7 +18,7 @@ else:
     flight_mgmt = st.Page("pages/4_Flight_Management.py", title="Flight Management")
     waivers = st.Page("pages/5_Waivers.py", title="Waivers")
     waiver_review = st.Page("pages/6_Waiver_Review.py", title="Waiver Review")
-    event_sched = st.Page("pages/6_Event_Schedule_Config.py", title="Event Schedule")
+    event_sched = st.Page("pages/6_Event_Management_CRUD.py", title="Event Management")
     cadet_attendance = st.Page(
         "pages/8_Cadet_Attendance.py", title="Cadet Attendance View"
     )
