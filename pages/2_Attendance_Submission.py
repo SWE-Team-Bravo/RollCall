@@ -23,11 +23,13 @@ user = get_user_by_email(email)
 if not user:
     st.error("Could not find your account.")
     st.stop()
+assert user is not None
 
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
     st.error("No cadet profile found for your account.")
     st.stop()
+assert cadet is not None
 
 now = datetime.now(timezone.utc)
 events = get_events_by_type("pt") + get_events_by_type("lab")

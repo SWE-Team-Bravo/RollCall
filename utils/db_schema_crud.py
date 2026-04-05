@@ -366,7 +366,6 @@ def create_waiver(
 
 
 def validate_waiver(attendance_record_id: str | ObjectId) -> tuple[bool, str]:
-
     rec_col = get_collection("attendance_records")
     evt_col = get_collection("events")
 

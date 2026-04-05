@@ -25,13 +25,15 @@ def create_event(
     db = get_db()
     if db is None:
         return False
-    db.events.insert_one({
-        "event_name": name,
-        "event_type": event_type,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-        "created_by_user_id": created_by_user_id,
-    })
+    db.events.insert_one(
+        {
+            "event_name": name,
+            "event_type": event_type,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "created_by_user_id": created_by_user_id,
+        }
+    )
     return True
 
 
