@@ -1,5 +1,6 @@
 import re
-
+import pandas as pd
+from bson import ObjectId
 from utils.db import get_collection
 from utils.db_schema_crud import create_cadet, get_user_by_email, get_user_by_id
 
@@ -12,8 +13,6 @@ def get_all_cadets() -> list[dict]:
 
 
 def get_cadets_by_flight(flight_id) -> list[dict]:
-    from bson import ObjectId
-
     col = get_collection("cadets")
     if col is None:
         return []
@@ -62,3 +61,20 @@ def add_cadet_for_user(email: str, rank: str, first_name: str, last_name: str) -
         return False
     create_cadet(user["_id"], rank, first_name, last_name)
     return True
+
+
+def get_cadet_export_df() -> pd.DataFrame | str:
+    cadets = get_all_cadets()
+    if not cadets:
+        return "No cadets found."
+    return pd.DataFrame(
+        [
+            {
+                "First Name": c.get("first_name", ""),
+                "Last Name": c.get("last_name", ""),
+                "Email": c.get("email", ""),
+                "Rank": c.get("rank", ""),
+            }
+            for c in cadets
+        ]
+    )
