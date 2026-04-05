@@ -95,33 +95,34 @@ def test_validate_checkin_code_expired_for_current_expired(monkeypatch):
         == "expired_code"
     )
 
-    def test_validate_checkin_code_handles_naive_expires_at(monkeypatch):
-        now = datetime(2026, 3, 29, 12, 0, 0, tzinfo=timezone.utc)
-        code = "999999"
-        code_hash = checkin_codes._sha256_hex(code)
 
-        # Simulate PyMongo returning naive datetimes.
-        docs = [
-            {
-                "_id": "a",
-                "kind": "attendance_submission",
-                "created_at": (now - timedelta(minutes=30)).replace(tzinfo=None),
-                "expires_at": (now - timedelta(minutes=1)).replace(tzinfo=None),
-                "code_sha256": code_hash,
-            }
-        ]
+def test_validate_checkin_code_handles_naive_expires_at(monkeypatch):
+    now = datetime(2026, 3, 29, 12, 0, 0, tzinfo=timezone.utc)
+    code = "999999"
+    code_hash = checkin_codes._sha256_hex(code)
 
-        monkeypatch.setattr(
-            checkin_codes, "get_collection", lambda name: _FakeCollection(docs)
+    # Simulate PyMongo returning naive datetimes.
+    docs = [
+        {
+            "_id": "a",
+            "kind": "attendance_submission",
+            "created_at": (now - timedelta(minutes=30)).replace(tzinfo=None),
+            "expires_at": (now - timedelta(minutes=1)).replace(tzinfo=None),
+            "code_sha256": code_hash,
+        }
+    ]
+
+    monkeypatch.setattr(
+        checkin_codes, "get_collection", lambda name: _FakeCollection(docs)
+    )
+    assert (
+        checkin_codes.validate_checkin_code(
+            code=code,
+            kind="attendance_submission",
+            now=now,
         )
-        assert (
-            checkin_codes.validate_checkin_code(
-                code=code,
-                kind="attendance_submission",
-                now=now,
-            )
-            == "expired_code"
-        )
+        == "expired_code"
+    )
 
 
 def test_validate_checkin_code_expired_for_old_replaced_code(monkeypatch):

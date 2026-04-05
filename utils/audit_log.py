@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
 from pymongo.results import InsertOneResult
 
+from utils.checkin_codes import _sha256_hex, _utcnow
 from utils.db import get_collection
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _sha256_hex(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def log_checkin_attempt(
