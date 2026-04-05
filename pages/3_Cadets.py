@@ -7,7 +7,13 @@ from utils.db_schema_crud import (
     delete_cadet,
 )
 
-from services.cadets import add_cadet_for_user, get_all_cadets, validate_cadet_input
+from services.cadets import (
+    add_cadet_for_user,
+    get_all_cadets,
+    import_cadets_from_roster,
+    parse_roster_xlsx,
+    validate_cadet_input,
+)
 
 
 require_role("admin", "cadre")
@@ -198,9 +204,47 @@ if "success_time" not in st.session_state:
 if "success_msg" not in st.session_state:
     st.session_state.success_msg = None
 
-if st.button("Add Cadet"):
-    st.session_state.show_form = True
-if st.session_state.show_form or st.session_state.success_time:
-    add_cadet()
+tab_manage, tab_import = st.tabs(["Manage Cadets", "Import Roster"])
 
-show_cadets()
+with tab_manage:
+    if st.button("Add Cadet"):
+        st.session_state.show_form = True
+    if st.session_state.show_form or st.session_state.success_time:
+        add_cadet()
+    show_cadets()
+
+with tab_import:
+    st.subheader("Import Cadets from Roster")
+    uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"])
+    if uploaded:
+        cadets, parse_errors = parse_roster_xlsx(uploaded)
+        if parse_errors:
+            for err in parse_errors:
+                st.warning(err)
+        if not cadets:
+            st.error("No valid cadets found in the roster file.")
+        else:
+            st.info(f"Found {len(cadets)} cadet(s). Click Import to create accounts.")
+            if st.button("Import"):
+                with st.spinner("Importing cadets..."):
+                    result = import_cadets_from_roster(cadets)
+                if result["created"]:
+                    st.success(f"Created {len(result['created'])} account(s).")
+                    rows = [
+                        {
+                            "Name": c["name"],
+                            "Email": c["email"],
+                            "Rank": c["rank"],
+                            "Temp Password": c["temp_password"],
+                        }
+                        for c in result["created"]
+                    ]
+                    st.dataframe(rows, use_container_width=True)
+                if result["skipped"]:
+                    st.info(
+                        f"Skipped {len(result['skipped'])} already-existing account(s)."
+                    )
+                if result["errors"]:
+                    st.error(f"{len(result['errors'])} error(s):")
+                    for err in result["errors"]:
+                        st.write(f"- {err['name']} ({err['email']}): {err['reason']}")

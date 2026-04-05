@@ -11,8 +11,8 @@ def build_credentials_from_docs(
     credentials: dict = {"usernames": {}}
     for doc in docs:
         email = doc["email"]
-        raw["usernames"][email] = doc
-        credentials["usernames"][email] = {
+        raw["usernames"][email.lower()] = doc
+        credentials["usernames"][email.lower()] = {
             "email": email,
             "name": f"{doc['first_name']} {doc['last_name']}".strip(),
             "password": doc["password_hash"],
