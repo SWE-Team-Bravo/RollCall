@@ -88,3 +88,12 @@ def create_indexes() -> None:
             IndexModel([("flight_id", ASCENDING)], name="flight_id"),
         ]
     )
+
+    db["event_codes"].create_indexes(
+        [
+            IndexModel(
+                [("event_id", ASCENDING), ("active", ASCENDING)],
+                name="event_id_active",
+            ),
+        ]
+    )
