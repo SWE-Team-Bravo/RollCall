@@ -1,3 +1,4 @@
+from email.message import Message
 from unittest.mock import MagicMock, patch
 import utils.at_risk_email as m
 from utils.at_risk_email import (
@@ -271,21 +272,30 @@ def test_build_email_recipient():
 def test_build_email_has_greeting():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()], "Charles")
-        body = msg.get_payload(0).get_payload()
+        part = msg.get_payload(0)
+        assert isinstance(part, Message)
+        body = part.get_payload()
+        assert isinstance(body, str)
         assert "Hi Charles," in body
 
 
 def test_build_email_no_greeting():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()])
-        body = msg.get_payload(0).get_payload()
+        part = msg.get_payload(0)
+        assert isinstance(part, Message)
+        body = part.get_payload()
+        assert isinstance(body, str)
         assert "Hi," in body
 
 
 def test_build_email_has_thresholds():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()])
-        body = msg.get_payload(0).get_payload()
+        part = msg.get_payload(0)
+        assert isinstance(part, Message)
+        body = part.get_payload()
+        assert isinstance(body, str)
         assert str(PT_ABSENCE_THRESHOLD) in body
         assert str(LLAB_ABSENCE_THRESHOLD) in body
 

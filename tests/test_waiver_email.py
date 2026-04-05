@@ -1,3 +1,5 @@
+from email.message import Message
+
 from utils.waiver_email import build_email
 
 
@@ -38,7 +40,10 @@ def test_body_approved():
         event_date="2026-02-18",
         status="approved",
     )
-    body = msg.get_payload(0).get_payload()
+    part = msg.get_payload(0)
+    assert isinstance(part, Message)
+    body = part.get_payload()
+    assert isinstance(body, str)
     assert "LLAB on 2026-02-18" in body
     assert "approved" in body.lower()
 
@@ -50,7 +55,10 @@ def test_body_denied():
         event_date="2026-03-26",
         status="denied",
     )
-    body = msg.get_payload(0).get_payload()
+    part = msg.get_payload(0)
+    assert isinstance(part, Message)
+    body = part.get_payload()
+    assert isinstance(body, str)
     assert "PT on 2026-03-26" in body
     assert "denied" in body.lower()
 
@@ -63,7 +71,10 @@ def test_body_comments():
         status="denied",
         comments="Missing documentation.",
     )
-    body = msg.get_payload(0).get_payload()
+    part = msg.get_payload(0)
+    assert isinstance(part, Message)
+    body = part.get_payload()
+    assert isinstance(body, str)
     assert "Missing documentation." in body
 
 
@@ -74,7 +85,10 @@ def test_body_no_comments():
         event_date="2026-02-18",
         status="approved",
     )
-    body = msg.get_payload(0).get_payload()
+    part = msg.get_payload(0)
+    assert isinstance(part, Message)
+    body = part.get_payload()
+    assert isinstance(body, str)
     assert "Comments: " not in body
 
 
@@ -85,5 +99,8 @@ def test_body_signature():
         event_date="2026-02-18",
         status="denied",
     )
-    body = msg.get_payload(0).get_payload()
+    part = msg.get_payload(0)
+    assert isinstance(part, Message)
+    body = part.get_payload()
+    assert isinstance(body, str)
     assert "RollCall" in body
