@@ -13,20 +13,20 @@ def summarize_user(user: Dict[str, Any]) -> Dict[str, str]:
     # email
     email = str(user.get("email", "") or "").strip()
 
-    # name: explicit name, else first/last, else email local part, else fallback
+    # name: prefer first/last (so edits show immediately), fallback to explicit name
+    first = str(user.get("first_name", "") or "").strip()
+    last = str(user.get("last_name", "") or "").strip()
+    full = f"{first} {last}".strip()
     explicit_name = str(user.get("name", "") or "").strip()
-    if explicit_name:
+
+    if full:
+        name = full
+    elif explicit_name:
         name = explicit_name
+    elif email:
+        name = email.split("@", 1)[0]
     else:
-        first = str(user.get("first_name", "") or "").strip()
-        last = str(user.get("last_name", "") or "").strip()
-        full = f"{first} {last}".strip()
-        if full:
-            name = full
-        elif email:
-            name = email.split("@", 1)[0]
-        else:
-            name = "Unknown user"
+        name = "Unknown user"
 
     # role: prefer roles list, then single role field
     roles = user.get("roles") or []
@@ -185,6 +185,8 @@ def build_update_user_payload(
     updates: Dict[str, Any] = {
         "first_name": first.strip(),
         "last_name": last.strip(),
+        # Keep legacy/display name field in sync so admin listings update immediately.
+        "name": f"{first.strip()} {last.strip()}".strip(),
         "email": raw_email,
         "roles": updated_roles,
     }

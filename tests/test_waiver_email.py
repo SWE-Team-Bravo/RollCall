@@ -1,6 +1,16 @@
+from __future__ import annotations
+
 from email.message import Message
 
 from utils.waiver_email import build_email
+
+
+def _body_from_message(msg: Message) -> str:
+    part0 = msg.get_payload(0)
+    if isinstance(part0, Message):
+        payload = part0.get_payload()
+        return payload if isinstance(payload, str) else str(payload)
+    return str(part0)
 
 
 def test_subject_approved():
