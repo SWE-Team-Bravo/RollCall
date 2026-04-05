@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import streamlit as st
+import pandas as pd
 
 from utils.auth import require_role
 from utils.db import get_collection
@@ -34,23 +35,6 @@ def _get_existing_emails(
         if email:
             emails.add(email)
     return emails
-
-
-def _render_display_row(summary: dict[str, str]) -> None:
-    cols = st.columns([3, 4, 2, 3])
-    cols[0].write(summary["name"])
-    cols[1].write(summary["email"])
-    cols[2].write(summary["role"] or "-")
-
-    edit_btn, delete_btn = cols[3].columns(2)
-    if edit_btn.button("Edit", key=f"edit_{summary['id']}"):
-        st.session_state["admin_users_editing"] = summary["id"]
-        st.session_state["admin_users_confirm_delete"] = None
-        st.rerun()
-    if delete_btn.button("Delete", key=f"delete_{summary['id']}"):
-        st.session_state["admin_users_confirm_delete"] = summary["id"]
-        st.session_state["admin_users_editing"] = None
-        st.rerun()
 
 
 def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> None:
@@ -222,31 +206,92 @@ if not raw_users:
     st.info("No users found in the system.")
 else:
     summaries = list_users_for_admin(raw_users)
+    summary_by_id: dict[str, dict[str, str]] = {s["id"]: s for s in summaries}
 
     if "admin_users_editing" not in st.session_state:
         st.session_state["admin_users_editing"] = None
     if "admin_users_confirm_delete" not in st.session_state:
         st.session_state["admin_users_confirm_delete"] = None
+    if "admin_users_selected" not in st.session_state:
+        st.session_state["admin_users_selected"] = (
+            summaries[0]["id"] if summaries else None
+        )
 
-    # Simple table-style header
-    header_cols = st.columns([3, 4, 2, 3])
-    header_cols[0].markdown("**Name**")
-    header_cols[1].markdown("**Email**")
-    header_cols[2].markdown("**Role**")
-    header_cols[3].markdown("**Actions**")
-    st.divider()
+    st.subheader("Filters")
+    f1, f2 = st.columns([2, 4])
+    with f1:
+        role_filter = st.selectbox(
+            "Role",
+            options=["All"] + sorted(ALLOWED_ROLES),
+            index=0,
+        )
+    with f2:
+        search = st.text_input("Search (name or email)", value="")
 
-    for summary in summaries:
-        user_id = summary["id"]
-        is_editing = st.session_state["admin_users_editing"] == user_id
-        is_confirming_delete = st.session_state["admin_users_confirm_delete"] == user_id
+    search_norm = search.strip().lower()
+    filtered = []
+    for s in summaries:
+        role = str(s.get("role", "") or "")
+        if role_filter != "All" and role != role_filter:
+            continue
+        if search_norm:
+            hay = f"{s.get('name', '')} {s.get('email', '')}".lower()
+            if search_norm not in hay:
+                continue
+        filtered.append(s)
 
-        if is_editing:
-            _render_edit_row(summary, raw_users)
-        else:
-            _render_display_row(summary)
+    if not filtered:
+        st.info("No users match your filters.")
+    else:
+        df = pd.DataFrame(
+            [
+                {
+                    "Name": s.get("name", ""),
+                    "Email": s.get("email", ""),
+                    "Role": s.get("role", "") or "-",
+                }
+                for s in filtered
+            ],
+            columns=pd.Index(["Name", "Email", "Role"]),
+        )
+        st.dataframe(df, hide_index=True, use_container_width=True)
 
-        if is_confirming_delete:
-            _render_delete_confirmation(summary, raw_users)
+        filtered_ids = [s["id"] for s in filtered]
+        if st.session_state.admin_users_selected not in filtered_ids:
+            st.session_state.admin_users_selected = filtered_ids[0]
 
+        def _label(user_id: str) -> str:
+            s = summary_by_id.get(user_id, {})
+            name = str(s.get("name", "") or "").strip() or "User"
+            email = str(s.get("email", "") or "").strip()
+            return f"{name} ({email})".strip()
+
+        selected_id = st.selectbox(
+            "Select user",
+            options=filtered_ids,
+            format_func=_label,
+            key="admin_users_selected",
+        )
+
+        b1, b2, _ = st.columns([2, 2, 10])
+        with b1:
+            if st.button("Edit", key="admin_users_edit_selected"):
+                st.session_state["admin_users_editing"] = selected_id
+                st.session_state["admin_users_confirm_delete"] = None
+                st.rerun()
+        with b2:
+            if st.button("Delete", key="admin_users_delete_selected"):
+                st.session_state["admin_users_confirm_delete"] = selected_id
+                st.session_state["admin_users_editing"] = None
+                st.rerun()
+
+    editing_id = st.session_state.get("admin_users_editing")
+    confirm_id = st.session_state.get("admin_users_confirm_delete")
+
+    if editing_id and editing_id in summary_by_id:
         st.divider()
+        _render_edit_row(summary_by_id[editing_id], raw_users)
+
+    if confirm_id and confirm_id in summary_by_id:
+        st.divider()
+        _render_delete_confirmation(summary_by_id[confirm_id], raw_users)

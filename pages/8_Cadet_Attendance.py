@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
     get_cadet_by_user_id,
@@ -87,29 +88,6 @@ def show_absence_summary(rows: list[dict]):
     st.divider()
 
 
-def show_attendance_row(row: dict):
-    date = row["start_date"].strftime("%Y-%m-%d") if row["start_date"] else "—"
-
-    h1, h2, h3, h4, h5 = st.columns([3, 2, 1, 2, 2])
-    h1.write(row["event_name"])
-    h2.write(date)
-    h3.write(row["event_type"])
-    h4.write(STATUS_BADGE.get(row["status"], row["status"].capitalize()))
-
-    if row["waiver_status"]:
-        h5.write(
-            WAIVER_BADGE.get(row["waiver_status"], row["waiver_status"].capitalize())
-        )
-    elif row["status"] == "absent" and row["waiver_eligible"]:
-        if h5.button("Request Waiver", key=f"waiver_{row['record_id']}"):
-            st.session_state["waiver_record_id"] = row["record_id"]
-            st.switch_page("pages/5_Waivers.py")
-    else:
-        h5.write("—")
-
-    st.divider()
-
-
 def show_attendance_table(rows: list[dict]):
     col1, col2 = st.columns(2)
     with col1:
@@ -128,16 +106,73 @@ def show_attendance_table(rows: list[dict]):
         st.info("No records to match the current filter.")
         return
 
-    h1, h2, h3, h4, h5 = st.columns([3, 2, 1, 2, 2])
-    h1.markdown("**Event**")
-    h2.markdown("**Date**")
-    h3.markdown("**Type**")
-    h4.markdown("**Status**")
-    h5.markdown("**Waiver**")
-    st.divider()
+    table_rows: list[dict[str, str]] = []
+    eligible: list[dict] = []
 
     for row in filtered:
-        show_attendance_row(row)
+        date_str = row["start_date"].strftime("%Y-%m-%d") if row["start_date"] else "—"
+        status_label = STATUS_BADGE.get(row["status"], row["status"].capitalize())
+
+        waiver_label = "—"
+        if row.get("waiver_status"):
+            waiver_label = WAIVER_BADGE.get(
+                row["waiver_status"], row["waiver_status"].capitalize()
+            )
+        elif row.get("status") == "absent" and bool(row.get("waiver_eligible")):
+            waiver_label = "Eligible"
+            eligible.append(row)
+
+        table_rows.append(
+            {
+                "Event": str(row.get("event_name", "") or ""),
+                "Date": date_str,
+                "Type": str(row.get("event_type", "") or ""),
+                "Status": str(status_label),
+                "Waiver": str(waiver_label),
+            }
+        )
+
+    df = pd.DataFrame(
+        table_rows,
+        columns=pd.Index(["Event", "Date", "Type", "Status", "Waiver"]),
+    )
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    if eligible:
+        if "selected_waiver_record_id" not in st.session_state:
+            st.session_state.selected_waiver_record_id = str(
+                eligible[0].get("record_id")
+            )
+
+        eligible_by_id = {
+            str(r.get("record_id")): r for r in eligible if r.get("record_id")
+        }
+        options = list(eligible_by_id.keys())
+
+        if st.session_state.selected_waiver_record_id not in eligible_by_id:
+            st.session_state.selected_waiver_record_id = options[0]
+
+        def _label(record_id: str) -> str:
+            r = eligible_by_id.get(record_id, {})
+            d = r.get("start_date")
+            ds = d.strftime("%Y-%m-%d") if d else "—"
+            ev = str(r.get("event_name", "") or "").strip() or "Event"
+            return f"{ds} — {ev}".strip()
+
+        selected_record_id = st.selectbox(
+            "Select event to request waiver",
+            options=options,
+            format_func=_label,
+            key="selected_waiver_record_id",
+        )
+
+        if st.button("Request Waiver", key="request_waiver_selected"):
+            st.session_state["waiver_record_id"] = selected_record_id
+            st.switch_page("pages/5_Waivers.py")
+    else:
+        st.caption("No eligible absent records for waiver request in the current view.")
 
 
 def show_header(cadet: dict, current_user: dict):

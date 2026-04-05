@@ -139,6 +139,7 @@ def test_build_update_user_payload_updates_name_email_and_role():
     assert updates == {
         "first_name": "New",
         "last_name": "Admin",
+        "name": "New Admin",
         "email": "admin@example.com",
         # Primary role updated to admin; existing secondary role preserved.
         "roles": ["admin", "cadet"],
