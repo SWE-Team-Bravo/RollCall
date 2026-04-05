@@ -9,8 +9,11 @@ from utils.db_schema_crud import (
     get_events_by_type,
     get_user_by_email,
 )
-from utils.flight_commander_view import get_active_events
-from services.attendance import generate_attendance_password, is_already_checked_in
+from services.attendance import (
+    generate_attendance_password,
+    is_already_checked_in,
+    is_within_checkin_window,
+)
 
 require_auth()
 st.title("Attendance Submission Page")
@@ -33,7 +36,7 @@ assert cadet is not None
 
 now = datetime.now(timezone.utc)
 events = get_events_by_type("pt") + get_events_by_type("lab")
-active_events = get_active_events(events, now)
+active_events = [e for e in events if is_within_checkin_window(e, now)]
 
 if not active_events:
     st.info("No active event right now.")
