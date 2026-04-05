@@ -47,6 +47,8 @@ def init_auth():
     st.session_state["_raw_users"] = raw
 
     authenticator.login(location="main")
+    if st.session_state.get("authentication_status") is False:
+        st.error("Incorrect username or password.")
     return authenticator
 
 

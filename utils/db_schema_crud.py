@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -40,7 +41,7 @@ def get_user_by_email(email: str) -> dict | None:
     col = get_collection("users")
     if col is None:
         return None
-    return col.find_one({"email": email})
+    return col.find_one({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
 
 
 def get_users_by_role(role: str) -> list[dict]:
@@ -72,6 +73,7 @@ def create_cadet(
     rank: str,
     first_name: str,
     last_name: str,
+    email: str = "",
     flight_id: str | ObjectId | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("cadets")
@@ -83,6 +85,7 @@ def create_cadet(
         "rank": rank,
         "first_name": first_name,
         "last_name": last_name,
+        "email": email,
     }
 
     if flight_id:
