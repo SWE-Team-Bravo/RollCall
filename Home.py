@@ -26,9 +26,20 @@ else:
         "pages/9_Account_Settings.py",
         title="Account Settings",
     )
+    modify_attendance = st.Page(
+        "pages/10_Commander_Attendance.py", title="Modify Attendance"
+    )
 
     if roles & {"admin", "cadre"}:
-        pages = [dashboard, attendance, cadets, flight_mgmt, waiver_review, event_sched]
+        pages = [
+            dashboard,
+            attendance,
+            cadets,
+            flight_mgmt,
+            waiver_review,
+            event_sched,
+            modify_attendance,
+        ]
     elif "flight_commander" in roles:
         pages = [dashboard, attendance, waiver_review]
     elif "cadet" in roles:
