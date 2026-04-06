@@ -1,5 +1,6 @@
 import time
 
+import pandas as pd
 import streamlit as st
 from utils.auth import require_role
 from utils.db_schema_crud import (
@@ -7,7 +8,13 @@ from utils.db_schema_crud import (
     delete_cadet,
 )
 
-from services.cadets import add_cadet_for_user, get_all_cadets, validate_cadet_input
+from services.cadets import (
+    add_cadet_for_user,
+    get_all_cadets,
+    import_cadets_from_roster,
+    parse_roster_xlsx,
+    validate_cadet_input,
+)
 
 
 require_role("admin", "cadre")
@@ -26,7 +33,7 @@ def add_cadet():
         with st.form("add_cadet"):
             cadet_name = st.text_input("Name")
             cadet_lastname = st.text_input("Last Name")
-            cadet_email = st.text_input("Email")
+            cadet_email = st.text_input("Email (must match an existing user account)")
             cadet_rank = st.selectbox("Rank", RANK_OPTIONS)
 
             col1, col2, spacer = st.columns([2, 2, 10])
@@ -125,28 +132,13 @@ def remove_cadet(cadet):
         st.rerun()
 
 
-def show_row(i, cadet):
-    col = st.columns([1, 2, 2, 3, 3, 4])
-    col[0].write(i + 1)
-    col[1].write(cadet.get("first_name", ""))
-    col[2].write(cadet.get("last_name", ""))
-    col[3].write(cadet.get("email", ""))
-    col[4].write(cadet.get("rank", ""))
-
-    action_cols = col[5].columns(2)
-    if action_cols[0].button("Edit", key=f"edit_{cadet['_id']}"):
-        st.session_state.editing_id = str(cadet["_id"])
-        st.rerun()
-    if action_cols[1].button("Delete", key=f"delete_{cadet['_id']}"):
-        st.session_state.confirm_delete_id = str(cadet["_id"])
-        st.rerun()
-
-
 def show_cadets():
     if "editing_id" not in st.session_state:
         st.session_state.editing_id = None
     if "confirm_delete_id" not in st.session_state:
         st.session_state.confirm_delete_id = None
+    if "selected_cadet_id" not in st.session_state:
+        st.session_state.selected_cadet_id = None
 
     cadets = get_all_cadets()
     if not cadets:
@@ -163,23 +155,72 @@ def show_cadets():
             st.session_state.success_msg = None
 
     st.subheader(f"Total Number of Cadets: {len(cadets)}")
-    header = st.columns([1, 2, 2, 3, 3, 4])
-    header[0].markdown("**No.**")
-    header[1].markdown("**First Name**")
-    header[2].markdown("**Last Name**")
-    header[3].markdown("**Email**")
-    header[4].markdown("**Rank**")
-    header[5].markdown("**Actions**")
+
+    rows: list[dict[str, str | int]] = []
+    cadet_by_id: dict[str, dict] = {}
+    for i, cadet in enumerate(cadets):
+        cid = str(cadet.get("_id"))
+        cadet_by_id[cid] = cadet
+        rows.append(
+            {
+                "No.": i + 1,
+                "First Name": str(cadet.get("first_name", "") or ""),
+                "Last Name": str(cadet.get("last_name", "") or ""),
+                "Email": str(cadet.get("email", "") or ""),
+                "Rank": str(cadet.get("rank", "") or ""),
+            }
+        )
+
+    df = pd.DataFrame(
+        rows,
+        columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank"]),
+    )
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
     st.divider()
 
-    for i, cadet in enumerate(cadets):
-        if st.session_state.editing_id == str(cadet["_id"]):
-            edit_cadet(cadet)
-        else:
-            show_row(i, cadet)
-        if st.session_state.confirm_delete_id == str(cadet["_id"]):
-            remove_cadet(cadet)
+    def _cadet_label(cadet_id: str) -> str:
+        c = cadet_by_id.get(cadet_id, {})
+        first = str(c.get("first_name", "") or "").strip()
+        last = str(c.get("last_name", "") or "").strip()
+        email = str(c.get("email", "") or "").strip()
+        name = f"{first} {last}".strip() or "Unknown"
+        return f"{name} ({email})".strip()
+
+    cadet_ids = list(cadet_by_id.keys())
+    if not cadet_ids:
+        return
+
+    # Keep selection stable across reruns.
+    if st.session_state.selected_cadet_id not in cadet_by_id:
+        st.session_state.selected_cadet_id = cadet_ids[0]
+
+    selected_id = st.selectbox(
+        "Select cadet",
+        options=cadet_ids,
+        format_func=_cadet_label,
+        key="selected_cadet_id",
+    )
+
+    action_col1, action_col2, _ = st.columns([2, 2, 10])
+    with action_col1:
+        if st.button("Edit", key="edit_selected_cadet"):
+            st.session_state.editing_id = str(selected_id)
+            st.session_state.confirm_delete_id = None
+            st.rerun()
+    with action_col2:
+        if st.button("Delete", key="delete_selected_cadet"):
+            st.session_state.confirm_delete_id = str(selected_id)
+            st.session_state.editing_id = None
+            st.rerun()
+
+    if st.session_state.editing_id in cadet_by_id:
         st.divider()
+        edit_cadet(cadet_by_id[st.session_state.editing_id])
+
+    if st.session_state.confirm_delete_id in cadet_by_id:
+        st.divider()
+        remove_cadet(cadet_by_id[st.session_state.confirm_delete_id])
 
 
 st.title("Cadet Management")
@@ -198,9 +239,47 @@ if "success_time" not in st.session_state:
 if "success_msg" not in st.session_state:
     st.session_state.success_msg = None
 
-if st.button("Add Cadet"):
-    st.session_state.show_form = True
-if st.session_state.show_form or st.session_state.success_time:
-    add_cadet()
+tab_manage, tab_import = st.tabs(["Manage Cadets", "Import Roster"])
 
-show_cadets()
+with tab_manage:
+    if st.button("Add Cadet"):
+        st.session_state.show_form = True
+    if st.session_state.show_form or st.session_state.success_time:
+        add_cadet()
+    show_cadets()
+
+with tab_import:
+    st.subheader("Import Cadets from Roster")
+    uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"])
+    if uploaded:
+        cadets, parse_errors = parse_roster_xlsx(uploaded)
+        if parse_errors:
+            for err in parse_errors:
+                st.warning(err)
+        if not cadets:
+            st.error("No valid cadets found in the roster file.")
+        else:
+            st.info(f"Found {len(cadets)} cadet(s). Click Import to create accounts.")
+            if st.button("Import"):
+                with st.spinner("Importing cadets..."):
+                    result = import_cadets_from_roster(cadets)
+                if result["created"]:
+                    st.success(f"Created {len(result['created'])} account(s).")
+                    rows = [
+                        {
+                            "Name": c["name"],
+                            "Email": c["email"],
+                            "Rank": c["rank"],
+                            "Temp Password": c["temp_password"],
+                        }
+                        for c in result["created"]
+                    ]
+                    st.dataframe(rows, use_container_width=True)
+                if result["skipped"]:
+                    st.info(
+                        f"Skipped {len(result['skipped'])} already-existing account(s)."
+                    )
+                if result["errors"]:
+                    st.error(f"{len(result['errors'])} error(s):")
+                    for err in result["errors"]:
+                        st.write(f"- {err['name']} ({err['email']}): {err['reason']}")

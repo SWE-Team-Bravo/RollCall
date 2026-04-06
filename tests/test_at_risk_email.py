@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from email.message import Message
 from unittest.mock import MagicMock, patch
+
 import utils.at_risk_email as m
 from utils.at_risk_email import (
     PT_ABSENCE_THRESHOLD,
@@ -14,6 +17,14 @@ from utils.at_risk_email import (
     send_to_flight_commander,
     send_at_risk_emails,
 )
+
+
+def _body_from_message(msg: Message) -> str:
+    part0 = msg.get_payload(0)
+    if isinstance(part0, Message):
+        payload = part0.get_payload()
+        return payload if isinstance(payload, str) else str(payload)
+    return str(part0)
 
 
 def create_cadet(first_name="Test", last_name="Cadet", flight_id="flight1"):

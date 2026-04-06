@@ -19,8 +19,15 @@ else:
     waivers = st.Page("pages/5_Waivers.py", title="Waivers")
     waiver_review = st.Page("pages/6_Waiver_Review.py", title="Waiver Review")
     event_sched = st.Page("pages/6_Event_Management_CRUD.py", title="Event Management")
+    fc_live_view = st.Page(
+        "pages/7_Flight_Commander_Live_View.py", title="Flight Commander Live View"
+    )
     cadet_attendance = st.Page(
         "pages/8_Cadet_Attendance.py", title="Cadet Attendance View"
+    )
+    user_management = st.Page(
+        "pages/8_User_Management.py",
+        title="User Management",
     )
     account_settings = st.Page(
         "pages/9_Account_Settings.py",
@@ -40,8 +47,10 @@ else:
             event_sched,
             modify_attendance,
         ]
+        if "admin" in roles:
+            pages.append(user_management)
     elif "flight_commander" in roles:
-        pages = [dashboard, attendance, waiver_review]
+        pages = [dashboard, fc_live_view, attendance, waiver_review]
     elif "cadet" in roles:
         pages = [attendance, waivers, cadet_attendance]
     else:

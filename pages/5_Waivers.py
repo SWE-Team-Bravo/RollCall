@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 from services.waivers import (
     get_absent_records_without_waiver,
@@ -17,7 +18,7 @@ from utils.db_schema_crud import (
     get_waiver_by_id,
     get_attendance_by_cadet,
 )
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 
 STATUS_BADGE = {
@@ -57,56 +58,196 @@ def show_waivers(
         st.info("You don't have any waivers.")
         return
 
-    header = st.columns([3, 3, 2, 2])
-    header[0].markdown("**Event**")
-    header[1].markdown("**Date**")
-    header[2].markdown("**Status**")
-    header[3].markdown("**Action**")
+    st.subheader("Filters")
+    filter_col1, filter_col2, filter_col3 = st.columns([2, 3, 4])
+
+    status_options = [
+        ("All", None),
+        ("Pending", "pending"),
+        ("Approved", "approved"),
+        ("Denied", "denied"),
+        ("Withdrawn", "withdrawn"),
+    ]
+    status_labels = [x[0] for x in status_options]
+
+    with filter_col1:
+        selected_status_label = st.selectbox(
+            "Status",
+            options=status_labels,
+            index=status_labels.index("Pending"),
+        )
+    selected_status = dict(status_options).get(selected_status_label)
+
+    today = datetime.now().date()
+    default_start = today - timedelta(days=30)
+    with filter_col2:
+        date_value = st.date_input(
+            "Date range",
+            value=(default_start, today),
+        )
+
+    # Streamlit returns a single date while the user is mid-selecting a range.
+    start_date: date = default_start
+    end_date: date = today
+
+    if isinstance(date_value, date):
+        start_date = date_value
+        end_date = today
+        st.info("Select an end date to complete the range (using today for now).")
+    elif isinstance(date_value, tuple):
+        match date_value:
+            case (start, end):
+                start_date = start
+                end_date = end
+            case (start,):
+                start_date = start
+                end_date = today
+                st.info(
+                    "Select an end date to complete the range (using today for now)."
+                )
+            case _:
+                start_date = default_start
+                end_date = today
+                st.info(
+                    "Select an end date to complete the range (using today for now)."
+                )
+    elif isinstance(date_value, list):
+        match tuple(date_value):
+            case (start, end):
+                start_date = start
+                end_date = end
+            case (start,):
+                start_date = start
+                end_date = today
+                st.info(
+                    "Select an end date to complete the range (using today for now)."
+                )
+            case _:
+                start_date = default_start
+                end_date = today
+                st.info(
+                    "Select an end date to complete the range (using today for now)."
+                )
+    else:
+        start_date = default_start
+        end_date = today
+        st.info("Select an end date to complete the range (using today for now).")
+
+    if start_date > end_date:
+        # Be forgiving for mid-selection / accidental reversal.
+        start_date, end_date = end_date, start_date
+
+    with filter_col3:
+        search = st.text_input("Search (event)", value="")
+
+    # Apply filters
+    search_norm = search.strip().lower()
+
+    def _in_date_range(event_date_str: str) -> bool:
+        s = (event_date_str or "").strip()
+        try:
+            d = datetime.strptime(s, "%Y-%m-%d").date()
+        except Exception:
+            # Keep unknown/unparseable dates visible.
+            return True
+        return start_date <= d <= end_date
+
+    filtered_waivers: list[dict] = []
+    for w in waivers:
+        status_raw = str(w.get("status", "") or "").lower()
+        if selected_status is not None and status_raw != selected_status:
+            continue
+
+        if not _in_date_range(str(w.get("_event_date", "") or "")):
+            continue
+
+        if search_norm:
+            ev_name = str(w.get("_event_name", "") or "").lower()
+            if search_norm not in ev_name:
+                continue
+
+        filtered_waivers.append(w)
+
+    if not filtered_waivers:
+        st.info("No waivers match your filters.")
+        return
+
+    waiver_by_id: dict[str, dict] = {str(w["_id"]): w for w in filtered_waivers}
+
+    rows: list[dict[str, str]] = []
+    for waiver in filtered_waivers:
+        status_raw = (waiver.get("status") or "").lower()
+        rows.append(
+            {
+                "Event": str(waiver.get("_event_name", "") or ""),
+                "Date": str(waiver.get("_event_date", "") or ""),
+                "Status": str(STATUS_BADGE.get(status_raw, status_raw) or ""),
+            }
+        )
+
+    df = pd.DataFrame(rows, columns=pd.Index(["Event", "Date", "Status"]))
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
     st.divider()
 
-    for waiver in waivers:
-        waiver_id = str(waiver["_id"])
-        status = (waiver.get("status") or "").lower()
+    if "selected_waiver_id" not in st.session_state:
+        st.session_state.selected_waiver_id = next(iter(waiver_by_id.keys()), None)
+    elif st.session_state.selected_waiver_id not in waiver_by_id:
+        st.session_state.selected_waiver_id = next(iter(waiver_by_id.keys()), None)
 
-        col = st.columns([3, 3, 2, 2])
-        col[0].write(waiver.get("_event_name"))
-        col[1].write(waiver.get("_event_date"))
-        col[2].write(STATUS_BADGE.get(status.lower(), status))
+    def _waiver_label(waiver_id: str) -> str:
+        w = waiver_by_id.get(waiver_id, {})
+        ev = str(w.get("_event_name", "") or "").strip() or "Event"
+        dt = str(w.get("_event_date", "") or "").strip()
+        st_raw = str((w.get("status") or "")).lower()
+        badge = STATUS_BADGE.get(st_raw, st_raw)
+        left = f"{dt} — {ev}".strip(" —")
+        return f"{left} ({badge})".strip()
 
-        approvals = get_approvals_by_waiver(waiver["_id"])
-        if approvals:
-            approvals.sort(
-                key=lambda a: a.get("created_at") or datetime.min, reverse=True
-            )
-            latest = approvals[0]
-            comments = latest.get("comments")
-            if comments:
-                col[2].caption(comments)
+    selected_id = st.selectbox(
+        "Select waiver",
+        options=list(waiver_by_id.keys()),
+        format_func=_waiver_label,
+        key="selected_waiver_id",
+    )
 
-        if status == "pending":
-            if st.session_state.confirm_withdraw_id == waiver_id:
-                col[3].warning("Are you sure you want to withdraw your waiver?")
-                c1, c2 = col[3].columns(2)
-                if c1.button("Yes", key=f"yes_{waiver_id}"):
-                    success = withdraw_waiver(waiver["_id"])
-                    st.session_state.confirm_withdraw_id = None
-                    if success:
-                        st.session_state.show_success = "Waiver withdrawn."
-                    else:
-                        st.session_state.show_error = "Failed to withdraw waiver."
-                    st.rerun()
-                if c2.button("No", key=f"no_{waiver_id}"):
-                    st.session_state.confirm_withdraw_id = None
-                    st.rerun()
-            else:
-                if col[3].button("Withdraw", key=f"withdraw_{waiver_id}"):
-                    st.session_state.confirm_withdraw_id = waiver_id
-                    st.rerun()
+    selected = waiver_by_id.get(str(selected_id)) if selected_id else None
+    if not selected:
+        return
+
+    approvals = get_approvals_by_waiver(selected["_id"])
+    latest_comment = None
+    if approvals:
+        approvals.sort(key=lambda a: a.get("created_at") or datetime.min, reverse=True)
+        latest_comment = approvals[0].get("comments")
+
+    reason = str(selected.get("reason", "") or "").strip()
+    if reason:
+        st.markdown(f"**Reason:** {reason}")
+    if latest_comment:
+        st.caption(str(latest_comment))
+
+    status = str((selected.get("status") or "")).lower()
+    waiver_id = str(selected["_id"])
+    if status == "pending":
+        if st.session_state.confirm_withdraw_id == waiver_id:
+            st.warning("Are you sure you want to withdraw your waiver?")
+            c1, c2 = st.columns(2)
+            if c1.button("Yes", key=f"yes_{waiver_id}"):
+                success = withdraw_waiver(selected["_id"])
+                st.session_state.confirm_withdraw_id = None
+                if success:
+                    st.session_state.show_success = "Waiver withdrawn."
+                else:
+                    st.session_state.show_error = "Failed to withdraw waiver."
+                st.rerun()
+            if c2.button("No", key=f"no_{waiver_id}"):
+                st.session_state.confirm_withdraw_id = None
+                st.rerun()
         else:
-            col[3].write("—")
-
-        st.markdown(f"**Reason:** {waiver['reason']}")
-        st.divider()
+            if st.button("Withdraw", key=f"withdraw_{waiver_id}"):
+                st.session_state.confirm_withdraw_id = waiver_id
+                st.rerun()
 
 
 def dropdown_row(record: dict, events_by_id: dict) -> str:
