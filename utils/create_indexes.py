@@ -17,6 +17,7 @@ def create_indexes() -> None:
     db["cadets"].create_indexes(
         [
             IndexModel([("user_id", ASCENDING)], name="user_id_unique", unique=True),
+            IndexModel([("flight_id", ASCENDING)], name="flight_id"),
         ]
     )
 
@@ -82,10 +83,12 @@ def create_indexes() -> None:
         ]
     )
 
-    db["cadets"].create_indexes(
+    db["event_codes"].create_indexes(
         [
-            IndexModel([("user_id", ASCENDING)], name="user_id_unique", unique=True),
-            IndexModel([("flight_id", ASCENDING)], name="flight_id"),
+            IndexModel(
+                [("event_id", ASCENDING), ("active", ASCENDING)],
+                name="event_id_active",
+            ),
         ]
     )
 
@@ -109,7 +112,8 @@ def create_indexes() -> None:
     db["checkin_codes"].create_indexes(
         [
             IndexModel(
-                [("kind", ASCENDING), ("created_at", ASCENDING)], name="kind_created_at"
+                [("kind", ASCENDING), ("created_at", ASCENDING)],
+                name="kind_created_at",
             ),
             IndexModel(
                 [

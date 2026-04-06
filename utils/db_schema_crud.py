@@ -558,6 +558,69 @@ def delete_flight(flight_id: str | ObjectId):
     return col.delete_one({"_id": ObjectId(flight_id)})
 
 
+# -- Event Codes
+
+
+def create_event_code(
+    code: str,
+    event_id: str | ObjectId,
+    event_type: str,
+    event_date: str,
+    created_by_user_id: str | ObjectId,
+    expires_at: datetime,
+) -> InsertOneResult | None:
+    col = get_collection("event_codes")
+    if col is None:
+        return None
+    col.update_many(
+        {"event_id": ObjectId(event_id), "active": True},
+        {"$set": {"active": False}},
+    )
+    return col.insert_one(
+        {
+            "code": code,
+            "event_id": ObjectId(event_id),
+            "event_type": event_type,
+            "event_date": event_date,
+            "created_by_user_id": ObjectId(created_by_user_id),
+            "created_at": datetime.now(timezone.utc),
+            "expires_at": expires_at,
+            "active": True,
+        }
+    )
+
+
+def get_active_event_code(event_id: str | ObjectId) -> dict | None:
+    col = get_collection("event_codes")
+    if col is None:
+        return None
+    now = datetime.now(timezone.utc)
+    return col.find_one(
+        {
+            "event_id": ObjectId(event_id),
+            "active": True,
+            "expires_at": {"$gt": now},
+        }
+    )
+
+
+def deactivate_event_code(code_id: str | ObjectId) -> UpdateResult | None:
+    col = get_collection("event_codes")
+    if col is None:
+        return None
+    return col.update_one(
+        {"_id": ObjectId(code_id)},
+        {"$set": {"active": False}},
+    )
+
+
+def get_event_codes_by_event(event_id: str | ObjectId) -> list[dict]:
+    col = get_collection("event_codes")
+    if col is None:
+        return []
+    return list(col.find({"event_id": ObjectId(event_id)}).sort("created_at", -1))
+
+
 def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
     col = get_collection("cadets")
     if col is None:
