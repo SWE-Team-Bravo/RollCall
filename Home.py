@@ -18,18 +18,37 @@ else:
     flight_mgmt = st.Page("pages/4_Flight_Management.py", title="Flight Management")
     waivers = st.Page("pages/5_Waivers.py", title="Waivers")
     waiver_review = st.Page("pages/6_Waiver_Review.py", title="Waiver Review")
-    event_sched = st.Page("pages/6_Event_Schedule_Config.py", title="Event Schedule")
+    event_sched = st.Page("pages/6_Event_Management_CRUD.py", title="Event Management")
+    fc_live_view = st.Page(
+        "pages/7_Flight_Commander_Live_View.py", title="Flight Commander Live View"
+    )
     cadet_attendance = st.Page(
         "pages/8_Cadet_Attendance.py", title="Cadet Attendance View"
+    )
+    user_management = st.Page(
+        "pages/8_User_Management.py",
+        title="User Management",
+    )
+    account_settings = st.Page(
+        "pages/9_Account_Settings.py",
+        title="Account Settings",
     )
 
     if roles & {"admin", "cadre"}:
         pages = [dashboard, attendance, cadets, flight_mgmt, waiver_review, event_sched]
+        if "admin" in roles:
+            pages.append(user_management)
     elif "flight_commander" in roles:
-        pages = [dashboard, attendance, waiver_review]
+        pages = [dashboard, fc_live_view, attendance, waiver_review]
     elif "cadet" in roles:
         pages = [attendance, waivers, cadet_attendance]
     else:
+        pages = []
+
+    # Every authenticated user can manage their own account.
+    pages.append(account_settings)
+
+    if not pages:
         pages = [login]
 
     authenticator = st.session_state.get("authenticator")

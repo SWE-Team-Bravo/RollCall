@@ -21,6 +21,7 @@ def create_user(
         {
             "first_name": first_name,
             "last_name": last_name,
+            "name": f"{first_name} {last_name}".strip(),
             "email": email,
             "password_hash": hash_password(password),
             "roles": roles,
@@ -41,6 +42,13 @@ def get_user_by_email(email: str) -> dict | None:
     if col is None:
         return None
     return col.find_one({"email": email})
+
+
+def get_users_by_role(role: str) -> list[dict]:
+    col = get_collection("users")
+    if col is None:
+        return []
+    return list(col.find({"roles": role}))
 
 
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
@@ -193,7 +201,6 @@ def get_events_by_ids(event_ids: list[str | ObjectId]) -> list[dict]:
     col = get_collection("events")
     if col is None or not event_ids:
         return []
-
     object_ids = [ObjectId(e_id) for e_id in event_ids]
     return list(col.find({"_id": {"$in": object_ids}}))
 
@@ -360,7 +367,6 @@ def create_waiver(
 
 
 def validate_waiver(attendance_record_id: str | ObjectId) -> tuple[bool, str]:
-
     rec_col = get_collection("attendance_records")
     evt_col = get_collection("events")
 
@@ -421,7 +427,6 @@ def get_waivers_by_attendance_records(record_ids: list[str | ObjectId]) -> list[
     col = get_collection("waivers")
     if col is None or not record_ids:
         return []
-
     object_ids = [ObjectId(r_id) for r_id in record_ids]
     return list(col.find({"attendance_record_id": {"$in": object_ids}}))
 
@@ -527,6 +532,13 @@ def get_flight_by_id(flight_id: str | ObjectId) -> dict | None:
     if col is None:
         return None
     return col.find_one({"_id": ObjectId(flight_id)})
+
+
+def get_flight_by_commander(commander_cadet_id: str | ObjectId) -> dict | None:
+    col = get_collection("flights")
+    if col is None:
+        return None
+    return col.find_one({"commander_cadet_id": ObjectId(commander_cadet_id)})
 
 
 def update_flight(flight_id: str | ObjectId, updates: dict):

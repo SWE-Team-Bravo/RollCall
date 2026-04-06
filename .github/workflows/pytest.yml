@@ -38,3 +38,14 @@ jobs:
 
       - name: Run pytest
         run: pytest
+
+  all-tests-pass:
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: All matrix jobs passed
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            exit 1
+          fi
