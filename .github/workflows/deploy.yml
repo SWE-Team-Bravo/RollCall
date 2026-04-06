@@ -15,16 +15,4 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd rollcall
-
-            # Pull latest code
-            git pull
-
-            # update python dependencies
-            pip install -r requirements.txt
-
-            # Kill existing streamlit screen session if running
-            screen -S streamlit -X quit || true
-
-            # Start a new detached screen session running streamlit
-            screen -dmS streamlit bash -c "streamlit run Home.py"
+            ./run.sh
