@@ -71,22 +71,22 @@ if "password" not in st.session_state:
         now=st.session_state.password_created_at,
     )
     st.session_state.correctPassword = False
+password = st.session_state.password
 correctPassword = st.session_state.correctPassword
 expires_at = st.session_state.get("password_expires_at")
 
 # Writes the password for testing purposes
-st.info("testing password: " + getPassword())
+st.info("testing password: " + password)
 
 # Current day of the week
 weekDay = datetime.now().strftime("%A")
 # st.info(weekDay)
 
 # Default message for attendance status
-# Default message for attendance status
 attendanceStatus = st.empty()
 if correctPassword:
     attendanceStatus.markdown("Attendance Status: Reported")
-else: 
+else:
     attendanceStatus.markdown("Attendance Status: Needs Reported")
 
 # Password submission and checking

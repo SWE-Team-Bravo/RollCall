@@ -25,7 +25,7 @@ for x in mycol.find(myquery):
 
     # Send email
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login("charlesdgale@gmail.com", "") # Put your own code in the empty ""
+        smtp.login("charlesdgale@gmail.com", "")  # Put your own code in the empty ""
         smtp.send_message(msg)
 
 # How to generate the code for sending emails
