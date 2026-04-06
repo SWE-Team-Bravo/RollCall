@@ -1,0 +1,492 @@
+import os
+import pytest
+import subprocess
+import requests
+import requests.adapters
+from time import sleep, time
+from datetime import datetime, timedelta, timezone
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
+
+URL = "http://localhost:8501"
+
+
+# browser options
+
+
+def _make_options():
+    options = webdriver.ChromeOptions()
+    if os.environ.get("CI"):
+        options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_experimental_option(
+        "prefs",
+        {
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+        },
+    )
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-save-password-bubble")
+    options.add_argument("--window-size=1920,1080")
+    return options
+
+
+# helpers
+
+
+def _wait_for_server(timeout=15):
+    start = time()
+    while time() - start <= timeout:
+        try:
+            if requests.get(URL, timeout=0.5).status_code == 200:
+                return True
+        except requests.exceptions.ConnectionError:
+            pass
+        sleep(0.1)
+    return False
+
+
+def _wait(test, browser, timeout, condition, failMessage):
+    try:
+        result = WebDriverWait(browser, timeout).until(condition)
+        print(test + " Success")
+        return result
+    except TimeoutException:
+        print(test + " Failure - " + failMessage)
+        raise
+
+
+def _login(browser, account="admin1"):
+    username = _wait(
+        "login.1",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"),
+        "couldn't find username input box",
+    )
+    password = _wait(
+        "login.2",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find password input box",
+    )
+    button = _wait(
+        "login.3",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"),
+        "couldn't find log in button",
+    )
+    username.send_keys(f"{account}@rollcall.local")
+    password.send_keys("password")
+    button.click()
+
+
+def _go_to_attendance(browser):
+    _login(browser, "cadet1")
+    attendance = _wait(
+        "nav.1",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/']"),
+        "couldn't find the attendance tab label",
+    )
+    attendance.click()
+    _wait(
+        "nav.2",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Submission Page" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't verify being on the attendance page",
+    )
+
+
+# fixtures
+
+pytestmark = pytest.mark.e2e
+
+
+@pytest.fixture(scope="session", autouse=True)
+def streamlit_server():
+    process = subprocess.Popen(
+        ["streamlit", "run", "Home.py", "--server.headless", "true"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    sleep(3)
+    if not _wait_for_server():
+        process.terminate()
+        pytest.skip("Streamlit server did not start within 15 seconds")
+    yield
+    process.terminate()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def active_event():
+    """Insert a wide-window PT event so the attendance page never hits st.stop()."""
+    try:
+        from pymongo import MongoClient
+        from config.settings import MONGODB_URI, MONGODB_DB
+    except Exception:
+        return  # no DB available — skip silently, tests will fail on their own
+
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
+    try:
+        client.server_info()
+    except Exception:
+        return  # MongoDB not reachable
+
+    col = client[MONGODB_DB]["events"]
+    now = datetime.now(timezone.utc)
+    doc = {
+        "event_name": "E2E Test Event",
+        "event_type": "pt",
+        "start_date": now - timedelta(hours=1),
+        "end_date": now + timedelta(hours=2),
+        "created_by_user_id": "e2e",
+    }
+    result = col.insert_one(doc)
+    yield
+    col.delete_one({"_id": result.inserted_id})
+    client.close()
+
+
+@pytest.fixture
+def browser():
+    driver = webdriver.Chrome(options=_make_options())
+    driver.get(URL)
+    yield driver
+    driver.quit()
+
+
+# tests
+
+
+# Test 1
+def test_we_are_on_login_page(browser):
+    _wait(
+        "Test 1.1",
+        browser,
+        10,
+        lambda d: "Login" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find the login text",
+    )
+
+
+# Test 2
+def test_check_for_username_and_box(browser):
+    _wait(
+        "Test 2.1",
+        browser,
+        10,
+        lambda d: "Username" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find the username text",
+    )
+    _wait(
+        "Test 2.2",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Username']"),
+        "couldn't find the username input box",
+    )
+
+
+# Test 3
+def test_check_for_password_and_box(browser):
+    _wait(
+        "Test 3.1",
+        browser,
+        10,
+        lambda d: "Password" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find the password text",
+    )
+    _wait(
+        "Test 3.2",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find the password input box",
+    )
+
+
+# Test 4
+def test_check_for_login_button(browser):
+    _wait(
+        "Test 4.1",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondaryFormSubmit']"),
+        "couldn't find the sign in button",
+    )
+
+
+# Test 5
+def test_log_into_website(browser):
+    _login(browser)
+
+
+# Test 6
+def test_move_to_attendance_submission_page(browser):
+    _go_to_attendance(browser)
+
+
+# Test 7
+def test_check_for_attendance_password_and_box(browser):
+    _go_to_attendance(browser)
+    _wait(
+        "Test 7.6",
+        browser,
+        10,
+        lambda d: "Password" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find password label",
+    )
+    _wait(
+        "Test 7.7",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find password text input",
+    )
+
+
+# Test 8
+def test_check_for_attendance_status(browser):
+    _go_to_attendance(browser)
+    _wait(
+        "Test 8.1",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Status: Needs Reported"
+            in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't find the attendance needs reported text",
+    )
+
+
+# Test 9
+def test_check_for_report_in_button(browser):
+    _go_to_attendance(browser)
+    _wait(
+        "Test 9.6",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondary']"),
+        "couldn't find the report attendance button",
+    )
+
+
+# Test 10
+def test_attendance_status_after_button_push_without_password(browser):
+    _go_to_attendance(browser)
+    button = _wait(
+        "Test 10.6",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+        ),
+        "couldn't find the report attendance button",
+    )
+    sleep(1)
+    button.click()
+    _wait(
+        "Test 10.7",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Status: Needs Reported"
+            in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't find the attendance status: needs reported text",
+    )
+
+
+# Test 11
+def test_password_works_and_changes_status(browser):
+    _login(browser, "cadet1")
+
+    # Navigate to Account Settings via the sidebar nav link
+    _wait(
+        "Test 11.0",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "a[href='http://localhost:8501/Account_Settings']"
+        ),
+        "couldn't find Account Settings nav link",
+    ).click()
+    _wait(
+        "Test 11.1",
+        browser,
+        10,
+        lambda d: "Account Settings" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't load Account Settings page",
+    )
+    _wait(
+        "Test 11.2",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Current Password']"
+        ),
+        "couldn't find Current Password field",
+    ).send_keys("password")
+    _wait(
+        "Test 11.3",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='New Password']"),
+        "couldn't find New Password field",
+    ).send_keys("newpassword1")
+    _wait(
+        "Test 11.4",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Confirm New Password']"
+        ),
+        "couldn't find Confirm New Password field",
+    ).send_keys("newpassword1")
+    _wait(
+        "Test 11.5",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Update Password')]]"
+        ),
+        "couldn't find Update Password button",
+    ).click()
+    _wait(
+        "Test 11.6",
+        browser,
+        10,
+        lambda d: (
+            "Password updated successfully" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "password change did not succeed",
+    )
+
+    # Navigate to attendance via nav link and check in with the hint code
+    _wait(
+        "Test 11.7",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/']"),
+        "couldn't find Attendance nav link",
+    ).click()
+    _wait(
+        "Test 11.8",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Submission Page" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't load Attendance Submission page",
+    )
+    passwordbox = _wait(
+        "Test 11.9",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
+        "couldn't find the password box",
+    )
+    hint = _wait(
+        "Test 11.10",
+        browser,
+        10,
+        lambda d: d.find_element(By.XPATH, "//p[contains(text(), 'testing')]"),
+        "couldn't find the testing password hint",
+    )
+    passwordbox.send_keys(hint.text[-6:])
+    _wait(
+        "Test 11.11",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+        ),
+        "couldn't find the report attendance button",
+    ).click()
+    _wait(
+        "Test 11.12",
+        browser,
+        10,
+        lambda d: (
+            "Attendance Status: Reported" in d.find_element(By.TAG_NAME, "body").text
+            or "already checked in" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "couldn't find reported status or already-checked-in message",
+    )
+
+    # Teardown: reset password back to original so the test is repeatable
+    _wait(
+        "Test 11.13",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "a[href='http://localhost:8501/Account_Settings']"
+        ),
+        "couldn't find Account Settings nav link for teardown",
+    ).click()
+    _wait(
+        "Test 11.14",
+        browser,
+        10,
+        lambda d: "Account Settings" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't load Account Settings page for teardown",
+    )
+    _wait(
+        "Test 11.15",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Current Password']"
+        ),
+        "couldn't find Current Password field for teardown",
+    ).send_keys("newpassword1")
+    _wait(
+        "Test 11.16",
+        browser,
+        10,
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='New Password']"),
+        "couldn't find New Password field for teardown",
+    ).send_keys("password")
+    _wait(
+        "Test 11.17",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Confirm New Password']"
+        ),
+        "couldn't find Confirm New Password field for teardown",
+    ).send_keys("password")
+    _wait(
+        "Test 11.18",
+        browser,
+        10,
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Update Password')]]"
+        ),
+        "couldn't find Update Password button for teardown",
+    ).click()
+    _wait(
+        "Test 11.19",
+        browser,
+        10,
+        lambda d: (
+            "Password updated successfully" in d.find_element(By.TAG_NAME, "body").text
+        ),
+        "password teardown did not succeed",
+    )
