@@ -20,6 +20,9 @@ jobs:
             # Pull latest code
             git pull
 
+            # update python dependencies
+            pip install -r requirements.txt
+
             # Kill existing streamlit screen session if running
             screen -S streamlit -X quit || true
 
