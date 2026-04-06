@@ -2,3 +2,4 @@ pre-commit>=4.5.1
 pytest>=9.0.2
 ruff==0.15.0
 ty==0.0.15
+selenium==4.41.0

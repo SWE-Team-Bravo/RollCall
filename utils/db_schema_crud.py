@@ -21,6 +21,7 @@ def create_user(
         {
             "first_name": first_name,
             "last_name": last_name,
+            "name": f"{first_name} {last_name}".strip(),
             "email": email,
             "password_hash": hash_password(password),
             "roles": roles,
