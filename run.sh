@@ -1,7 +1,8 @@
 #!/bin/bash -l
 source ~/.bashrc
 
-pkill streamlit
+pkill streamlit || true
+pkill mongod || true
 cd ~/rollcall
 git pull
 pip install -r requirements.txt
