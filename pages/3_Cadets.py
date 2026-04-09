@@ -14,12 +14,11 @@ from services.cadets import (
     get_all_cadets,
     validate_cadet_input,
     get_cadet_export_df,
-)
-
-from utils.export import to_excel
     import_cadets_from_roster,
     parse_roster_xlsx,
 )
+
+from utils.export import to_excel
 
 
 require_role("admin", "cadre")
