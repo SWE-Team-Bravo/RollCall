@@ -1,7 +1,9 @@
 import streamlit as st
-from utils.auth import get_current_user
+from utils.auth import ensure_authenticator, get_current_user, restore_session
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
+
+restore_session()
 
 user = get_current_user()
 
@@ -62,11 +64,13 @@ else:
     if not pages:
         pages = [login]
 
+    pg = st.navigation(pages)
+
+    if "authenticator" not in st.session_state:
+        ensure_authenticator()
     authenticator = st.session_state.get("authenticator")
     if authenticator:
         with st.sidebar:
             authenticator.logout("Logout", location="sidebar")
-
-    pg = st.navigation(pages)
 
 pg.run()
