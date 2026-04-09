@@ -28,3 +28,7 @@ secondaryBackgroundColor = "#003380"
 textColor = "#F2F2F2"
 primaryColor = "#FFC72C"
 linkColor = "#FFC72C"
+
+[server]
+address="0.0.0.0"
+port=15084
