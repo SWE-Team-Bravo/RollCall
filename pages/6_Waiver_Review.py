@@ -1,35 +1,25 @@
 from __future__ import annotations
-
-from datetime import datetime
-
 import streamlit as st
+import pandas as pd
+
+from services.waiver_review import (
+    get_flight_options,
+    get_waiver_context,
+    get_waiver_export_df,
+    get_waivers,
+    submit_decision,
+)
 
 from utils.auth import get_current_user, require_role
-from utils.db_schema_crud import (
-    create_waiver_approval,
-    get_all_flights,
-    get_all_waivers,
-    get_attendance_record_by_id,
-    get_cadet_by_id,
-    get_event_by_id,
-    get_flight_by_id,
-    get_user_by_email,
-    get_user_by_id,
-    update_waiver,
-)
-from utils.waiver_email import send_waiver_decision_email
+from utils.db_schema_crud import get_user_by_email
+from utils.export import to_excel
+
 
 STATUS_BADGE = {
     "pending": "🟡 Pending",
     "approved": "🟢 Approved",
     "denied": "🔴 Denied",
 }
-
-
-def _fmt_date(dt: object) -> str:
-    if isinstance(dt, datetime):
-        return dt.strftime("%Y-%m-%d")
-    return "Unknown date"
 
 
 require_role("admin", "cadre", "flight_commander")
@@ -51,116 +41,107 @@ if approver_user is None:
 assert approver_user is not None
 approver_id = approver_user["_id"]
 
-# --- Filters UI
 status_filter = st.selectbox(
     "Status", ["pending", "approved", "denied", "all"], index=0
 )
-
-flights = get_all_flights()
-flight_names = ["All flights"] + [f.get("name", "Unnamed flight") for f in flights]
-flight_filter = st.selectbox("Flight", flight_names, index=0)
-
+flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
-waivers = get_all_waivers()
-if status_filter != "all":
-    waivers = [w for w in waivers if (w.get("status") or "").lower() == status_filter]
-
-waivers.sort(key=lambda w: w.get("created_at") or datetime.min, reverse=True)
+waivers = get_waivers(status_filter)
 
 if not waivers:
     st.info("No waivers found for the selected filters.")
     st.stop()
 
-shown_any = False
-
+rows = []
 for waiver in waivers:
     waiver_id = waiver.get("_id")
     if waiver_id is None:
         continue
 
+    ctx = get_waiver_context(waiver)
+    if ctx is None:
+        continue
+
+    cadet_name = ctx["cadet_name"]
+    cadet_email = ctx["cadet_email"]
+    flight_name = ctx["flight_name"]
+    event_name = ctx["event_name"]
+    event_date = ctx["event_date"]
+    event_type = ctx["event_type"]
     waiver_status = (waiver.get("status") or "pending").lower()
 
-    attendance_record_id = waiver.get("attendance_record_id")
-    if attendance_record_id is None:
-        continue
-
-    record = get_attendance_record_by_id(attendance_record_id)
-    if record is None:
-        continue
-
-    # Event
-    event = None
-    event_id = record.get("event_id")
-    if event_id is not None:
-        event = get_event_by_id(event_id)
-
-    # Cadet
-    cadet = None
-    cadet_id = record.get("cadet_id")
-    if cadet_id is not None:
-        cadet = get_cadet_by_id(cadet_id)
-
-    # User
-    user = None
-    if cadet is not None:
-        user_id = cadet.get("user_id")
-        if user_id is not None:
-            user = get_user_by_id(user_id)
-
-    if user:
-        first = user.get("first_name", "")
-        last = user.get("last_name", "")
-        cadet_name = f"{first} {last}".strip() or "Unknown cadet"
-    else:
-        cadet_name = "Unknown cadet"
-    cadet_email = user.get("email") if user else ""
-
-    # Flight
-    flight_name = "Unassigned"
-    if cadet is not None:
-        cadet_flight_id = cadet.get("flight_id")
-        if cadet_flight_id is not None:
-            flight = get_flight_by_id(cadet_flight_id)
-            if flight:
-                flight_name = flight.get("name", "Unassigned")
-
-    # apply flight filter
     if flight_filter != "All flights" and flight_name != flight_filter:
         continue
 
-    # apply cadet search filter
     if cadet_search:
         hay = f"{cadet_name} {cadet_email}".lower()
         if cadet_search not in hay:
             continue
 
-    shown_any = True
+    rows.append(
+        {
+            "waiver_id": waiver_id,
+            "waiver_status": waiver_status,
+            "reason": waiver.get("reason", ""),
+            "cadet_name": cadet_name,
+            "cadet_email": cadet_email,
+            "flight_name": flight_name,
+            "event_name": event_name,
+            "event_date": event_date,
+            "event_type": event_type,
+        }
+    )
 
-    event_name = event.get("event_name") if event else "Unknown event"
-    event_date = _fmt_date(event.get("start_date") if event else None)
-    event_type = (event.get("event_type") if event else "") or "unknown"
+export_df = get_waiver_export_df(rows)
+if isinstance(export_df, str):
+    st.info(export_df)
+    st.stop()
 
+st.divider()
+col1, col2, spacer = st.columns([2, 2, 10])
+if isinstance(export_df, pd.DataFrame):
+    col1.download_button(
+        "Export CSV",
+        export_df.to_csv(index=False).encode("utf-8"),
+        "waivers.csv",
+        "text/csv",
+    )
+    col2.download_button(
+        "Export Excel",
+        to_excel(export_df),
+        "waivers.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+if not rows:
+    st.info("No waivers matched the selected filters.")
+    st.stop()
+
+for w in rows:
     with st.container(border=True):
         top = st.columns([4, 2, 2])
-        top[0].markdown(f"**{cadet_name}**  \n{cadet_email}")
-        top[1].markdown(f"**Flight:** {flight_name}")
-        top[2].markdown(f"**Status:** {STATUS_BADGE.get(waiver_status, waiver_status)}")
+        top[0].markdown(f"**{w['cadet_name']}**  \n{w['cadet_email']}")
+        top[1].markdown(f"**Flight:** {w['flight_name']}")
+        top[2].markdown(
+            f"**Status:** {STATUS_BADGE.get(w['waiver_status'], w['waiver_status'])}"
+        )
 
-        st.write(f"**Event:** {event_date} — {event_name} ({event_type})")
-        st.write(f"**Cadet reason:** {waiver.get('reason', '')}")
+        st.write(
+            f"**Event:** {w['event_date']} — {w['event_name']} ({w['event_type']})"
+        )
+        st.write(f"**Cadet reason:** {w['reason']}")
 
-        if waiver_status == "pending":
-            with st.form(f"waiver_decision_{waiver_id}"):
+        if w["waiver_status"] == "pending":
+            with st.form(f"waiver_decision_{w['waiver_id']}"):
                 decision = st.radio(
                     "Decision",
                     ["Approve", "Deny"],
                     horizontal=True,
-                    key=f"dec_{waiver_id}",
+                    key=f"dec_{w['waiver_id']}",
                 )
                 comments = st.text_area(
-                    "Comments (required for Deny)",
-                    key=f"com_{waiver_id}",
+                    "Comments (required for Deny)", key=f"com_{w['waiver_id']}"
                 )
                 submitted = st.form_submit_button("Submit decision")
 
@@ -168,32 +149,17 @@ for waiver in waivers:
                 if decision == "Deny" and not comments.strip():
                     st.error("Please provide comments when denying a waiver.")
                 else:
-                    new_status = "approved" if decision == "Approve" else "denied"
-                    upd = update_waiver(waiver_id, {"status": new_status})
-
-                    if upd is None:
-                        st.error("Failed to update waiver status.")
+                    success, err = submit_decision(
+                        waiver_id=w["waiver_id"],
+                        approver_id=approver_id,
+                        decision=decision,
+                        comments=comments.strip(),
+                        cadet_email=w["cadet_email"],
+                        event_name=w["event_name"],
+                        event_date=w["event_date"],
+                    )
+                    if success:
+                        st.success("Saved.")
+                        st.rerun()
                     else:
-                        appr = create_waiver_approval(
-                            waiver_id=waiver_id,
-                            approver_id=approver_id,
-                            decision=new_status,
-                            comments=comments.strip() or "Approved.",
-                        )
-                        if appr is None:
-                            st.error("Failed to create waiver approval record.")
-                        else:
-                            if cadet_email:
-                                send_waiver_decision_email(
-                                    waiver_id=str(waiver_id),
-                                    to_email=cadet_email,
-                                    event_name=event_name or "Unknown event",
-                                    event_date=event_date,
-                                    status=new_status,
-                                    comments=comments.strip() or "Approved.",
-                                )
-                            st.success("Saved.")
-                            st.rerun()
-
-if not shown_any:
-    st.info("No waivers matched the selected filters.")
+                        st.error(err)

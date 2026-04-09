@@ -1,4 +1,5 @@
 import re
+from bson import ObjectId
 import secrets
 
 import pandas as pd
@@ -28,8 +29,6 @@ def get_all_cadets() -> list[dict]:
 
 
 def get_cadets_by_flight(flight_id) -> list[dict]:
-    from bson import ObjectId
-
     col = get_collection("cadets")
     if col is None:
         return []
@@ -79,6 +78,22 @@ def add_cadet_for_user(email: str, rank: str, first_name: str, last_name: str) -
     return True
 
 
+def get_cadet_export_df() -> pd.DataFrame | str:
+    cadets = get_all_cadets()
+    if not cadets:
+        return "No cadets found."
+    return pd.DataFrame(
+        [
+            {
+                "First Name": c.get("first_name", ""),
+                "Last Name": c.get("last_name", ""),
+                "Email": c.get("email", ""),
+                "Rank": c.get("rank", ""),
+            }
+            for c in cadets
+        ]
+    )
+  
 def parse_roster_xlsx(file) -> tuple[list[dict], list[str]]:
     try:
         df = pd.read_excel(file, sheet_name="Roster", header=2)
