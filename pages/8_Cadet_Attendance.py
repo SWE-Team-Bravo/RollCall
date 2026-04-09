@@ -136,7 +136,7 @@ def show_attendance_table(rows: list[dict]):
         table_rows,
         columns=pd.Index(["Event", "Date", "Type", "Status", "Waiver"]),
     )
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width='stretch')
 
     st.divider()
 

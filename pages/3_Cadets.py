@@ -179,7 +179,7 @@ def show_cadets():
         rows,
         columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank"]),
     )
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width='stretch')
 
     st.divider()
 
@@ -268,6 +268,30 @@ with tab_manage:
 
 with tab_import:
     st.subheader("Import Cadets from Roster")
+
+    if "import_result" in st.session_state:
+        result = st.session_state.pop("import_result")
+        if result["created"]:
+            st.success(f"Created {len(result['created'])} account(s).")
+            rows = [
+                {
+                    "Name": c["name"],
+                    "Email": c["email"],
+                    "Rank": c["rank"],
+                    "Temp Password": c["temp_password"],
+                }
+                for c in result["created"]
+            ]
+            st.dataframe(rows, width='stretch')
+        if result["skipped"]:
+            st.info(
+                f"Skipped {len(result['skipped'])} already-existing account(s)."
+            )
+        if result["errors"]:
+            st.error(f"{len(result['errors'])} error(s):")
+            for err in result["errors"]:
+                st.write(f"- {err['name']} ({err['email']}): {err['reason']}")
+
     uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"])
     if uploaded:
         cadets, parse_errors = parse_roster_xlsx(uploaded)
@@ -281,23 +305,5 @@ with tab_import:
             if st.button("Import"):
                 with st.spinner("Importing cadets..."):
                     result = import_cadets_from_roster(cadets)
-                if result["created"]:
-                    st.success(f"Created {len(result['created'])} account(s).")
-                    rows = [
-                        {
-                            "Name": c["name"],
-                            "Email": c["email"],
-                            "Rank": c["rank"],
-                            "Temp Password": c["temp_password"],
-                        }
-                        for c in result["created"]
-                    ]
-                    st.dataframe(rows, use_container_width=True)
-                if result["skipped"]:
-                    st.info(
-                        f"Skipped {len(result['skipped'])} already-existing account(s)."
-                    )
-                if result["errors"]:
-                    st.error(f"{len(result['errors'])} error(s):")
-                    for err in result["errors"]:
-                        st.write(f"- {err['name']} ({err['email']}): {err['reason']}")
+                st.session_state.import_result = result
+                st.rerun()
