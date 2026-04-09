@@ -303,7 +303,7 @@ else:
             # Keep the event_id hidden but available for selection.
             st.dataframe(
                 summary_df.drop(columns=["_event_id"]),
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
 
@@ -353,7 +353,7 @@ else:
                     else:
                         styler = styler.applymap(_status_cell_style, subset=["Status"])
 
-                    st.dataframe(styler, use_container_width=True, hide_index=True)
+                    st.dataframe(styler, width='stretch', hide_index=True)
 
                 st.subheader("Legend")
                 c1, c2, c3 = st.columns(3)
