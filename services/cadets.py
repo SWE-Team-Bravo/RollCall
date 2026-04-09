@@ -93,7 +93,8 @@ def get_cadet_export_df() -> pd.DataFrame | str:
             for c in cadets
         ]
     )
-  
+
+
 def parse_roster_xlsx(file) -> tuple[list[dict], list[str]]:
     try:
         df = pd.read_excel(file, sheet_name="Roster", header=2)

@@ -31,7 +31,6 @@ def infer_event_type(selected_date: date, config: dict) -> str:
     return ""
 
 
-
 # ── load config once ─────────────────────────────────────────────────────────
 
 config = get_event_config() or {}

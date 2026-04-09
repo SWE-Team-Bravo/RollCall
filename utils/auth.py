@@ -1,5 +1,10 @@
+from datetime import datetime
+
+import jwt
 import streamlit as st
 import streamlit_authenticator as stauth
+from jwt import DecodeError, InvalidSignatureError
+
 from config.settings import AUTH_COOKIE_KEY
 from utils.auth_logic import (
     build_credentials_from_docs,
@@ -7,6 +12,8 @@ from utils.auth_logic import (
     user_has_any_role,
 )
 from utils.db import get_collection
+
+_COOKIE_NAME = "rollcall_auth"
 
 
 def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
@@ -20,10 +27,9 @@ def _load_credentials() -> tuple[dict[str, dict[str, str]], dict]:
     return build_credentials_from_docs(list(collection.find({}, {"_id": 0})))
 
 
-def init_auth():
-    # Always load credentials from the DB so changes (like password updates)
-    # take effect immediately without requiring a server restart.
+def _get_or_create_authenticator() -> stauth.Authenticate:
     credentials, raw = _load_credentials()
+    st.session_state["_raw_users"] = raw
 
     assert AUTH_COOKIE_KEY is not None
 
@@ -38,13 +44,59 @@ def init_auth():
         st.session_state["authenticator"] = authenticator
     else:
         authenticator = st.session_state["authenticator"]
-        # Keep the in-memory authenticator store consistent with the DB.
         try:
             authenticator.credentials = credentials
         except Exception:
             pass
 
+    return authenticator
+
+
+def restore_session() -> None:
+    if st.session_state.get("authentication_status"):
+        return
+
+    raw_token = st.context.cookies.get(_COOKIE_NAME)
+    if not raw_token:
+        return
+
+    assert AUTH_COOKIE_KEY is not None
+    try:
+        token = jwt.decode(raw_token, AUTH_COOKIE_KEY, algorithms=["HS256"])
+    except (DecodeError, InvalidSignatureError):
+        return
+
+    username = token.get("username")
+    exp_date = token.get("exp_date", 0)
+    if not username or exp_date <= datetime.now().timestamp():
+        return
+
+    credentials, raw = _load_credentials()
+    if username not in credentials.get("usernames", {}):
+        return
+
+    raw_user = raw.get("usernames", {}).get(username)
+    if not raw_user:
+        return
+
     st.session_state["_raw_users"] = raw
+    st.session_state["name"] = (
+        f"{raw_user.get('first_name', '')} {raw_user.get('last_name', '')}".strip()
+    )
+    st.session_state["username"] = username
+    st.session_state["authentication_status"] = True
+    st.session_state["email"] = raw_user.get("email")
+    st.session_state["roles"] = raw_user.get("roles")
+    st.session_state.setdefault("logout", None)
+
+
+def ensure_authenticator() -> stauth.Authenticate:
+    """Ensure the authenticator exists in session state and return it."""
+    return _get_or_create_authenticator()
+
+
+def init_auth():
+    authenticator = _get_or_create_authenticator()
 
     authenticator.login(location="main")
     if st.session_state.get("authentication_status") is False:
