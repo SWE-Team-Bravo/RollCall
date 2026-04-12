@@ -186,7 +186,7 @@ def show_waivers(
         )
 
     df = pd.DataFrame(rows, columns=pd.Index(["Event", "Date", "Status"]))
-    st.dataframe(df, hide_index=True, width='stretch')
+    st.dataframe(df, hide_index=True, width="stretch")
 
     st.divider()
 
@@ -262,7 +262,6 @@ def dropdown_row(record: dict, events_by_id: dict) -> str:
 
 def waiver_form(
     user_id: str,
-    cadet_id: str,
     records: list[dict],
     waivers_by_record_id: dict,
     events_by_id: dict,
@@ -348,8 +347,6 @@ def waiver_form(
                     st.rerun()
 
     if cancel:
-        # should be
-        # st.switch_page("pages/8_Cadet_Attendance.py")
         st.switch_page("pages/8_Cadet_Attendance.py")
 
 
@@ -396,7 +393,5 @@ assert cadet is not None
 
 records, waivers_by_record_id, events_by_id = load_waiver_data(cadet["_id"])
 
-waiver_form(
-    str(user["_id"]), str(cadet["_id"]), records, waivers_by_record_id, events_by_id
-)
+waiver_form(str(user["_id"]), records, waivers_by_record_id, events_by_id)
 show_waivers(records, waivers_by_record_id, events_by_id)

@@ -5,15 +5,11 @@ from typing import Any
 
 import pandas as pd
 import streamlit as st
-import pandas as pd
 
-from services.dashboard import get_df
 from bson import ObjectId
 
 from utils.auth import get_current_user, require_role
 from utils.db import get_collection, get_db
-from utils.at_risk_email import send_at_risk_emails
-from utils.export import to_excel
 
 _DEFAULT_DAYS = 30
 _MAX_ROWS = 2000
@@ -303,7 +299,7 @@ else:
             # Keep the event_id hidden but available for selection.
             st.dataframe(
                 summary_df.drop(columns=["_event_id"]),
-                width='stretch',
+                width="stretch",
                 hide_index=True,
             )
 
@@ -353,7 +349,7 @@ else:
                     else:
                         styler = styler.applymap(_status_cell_style, subset=["Status"])
 
-                    st.dataframe(styler, width='stretch', hide_index=True)
+                    st.dataframe(styler, width="stretch", hide_index=True)
 
                 st.subheader("Legend")
                 c1, c2, c3 = st.columns(3)
@@ -365,12 +361,3 @@ else:
                     st.warning("Excused")
 
             st.divider()
-st.subheader("At-Risk Report")
-if st.button("Send At-Risk Emails"):
-    sent, failed = send_at_risk_emails()
-    if sent == 0 and failed == 0:
-        st.info("At-risk cadets not found.")
-    elif failed == 0:
-        st.success(f"Emails sent to {sent} recipient(s).")
-    else:
-        st.warning(f"Sent: {sent}; Failed: {failed}.")

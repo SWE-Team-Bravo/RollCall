@@ -38,6 +38,7 @@ else:
     modify_attendance = st.Page(
         "pages/10_Commander_Attendance.py", title="Modify Attendance"
     )
+    at_risk_report = st.Page("pages/11_At_Risk_Cadets.py", title="At-Risk Cadet Report")
 
     if roles & {"admin", "cadre"}:
         pages = [
@@ -48,11 +49,12 @@ else:
             waiver_review,
             event_sched,
             modify_attendance,
+            at_risk_report,
         ]
         if "admin" in roles:
             pages.append(user_management)
     elif "flight_commander" in roles:
-        pages = [dashboard, fc_live_view, attendance, waiver_review]
+        pages = [dashboard, fc_live_view, attendance, waiver_review, at_risk_report]
     elif "cadet" in roles:
         pages = [attendance, waivers, cadet_attendance]
     else:
