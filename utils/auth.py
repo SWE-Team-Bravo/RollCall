@@ -121,6 +121,8 @@ def require_auth():
 def require_role(*roles: str):
     require_auth()
     user = get_current_user()
+    if user_has_any_role(user, ["admin"]):
+        return
     if not user_has_any_role(user, roles):
         st.error("You do not have permission to view this page.")
         st.stop()

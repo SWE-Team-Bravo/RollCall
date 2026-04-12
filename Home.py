@@ -39,7 +39,26 @@ else:
         "pages/10_Commander_Attendance.py", title="Modify Attendance"
     )
 
-    if roles & {"admin", "cadre"}:
+    # Use session state to save the current role then use the dropdown 
+    # separatly to change the shown role
+
+    # Allows viewing of all roles in the admin page
+    if "view_role" not in st.session_state:
+        st.session_state.view_role = roles
+
+    # Dropdown for admin page that toggles role views
+    if "admin" in roles:
+        choice = st.sidebar.selectbox("Select Role", ["admin", "cadre", "flight commander", "cadet"])
+        if choice == "admin":
+            st.session_state.view_role = {"admin"}
+        elif choice == "cadre":
+            st.session_state.view_role = {"cadre"}
+        elif choice == "flight commander":
+            st.session_state.view_role = {"flight commander"}
+        elif choice == "cadet":
+            st.session_state.view_role = {"cadet"}
+
+    if st.session_state.view_role & {"admin", "cadre"}:
         pages = [
             dashboard,
             attendance,
@@ -49,11 +68,11 @@ else:
             event_sched,
             modify_attendance,
         ]
-        if "admin" in roles:
+        if "admin" in st.session_state.view_role:
             pages.append(user_management)
-    elif "flight_commander" in roles:
+    elif "flight_commander" in st.session_state.view_role:
         pages = [dashboard, fc_live_view, attendance, waiver_review]
-    elif "cadet" in roles:
+    elif "cadet" in st.session_state.view_role:
         pages = [attendance, waivers, cadet_attendance]
     else:
         pages = []
