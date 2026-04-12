@@ -100,7 +100,7 @@ edited = st.data_editor(
         ),
     },
     hide_index=True,
-    width='stretch',
+    width="stretch",
 )
 
 st.divider()
