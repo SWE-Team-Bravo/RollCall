@@ -1,4 +1,13 @@
-from services.attendance import is_already_checked_in
+from services.attendance import is_already_checked_in, is_within_checkin_window
+from datetime import datetime, timedelta, timezone
+
+
+def create_event(start_offset_minutes: int) -> dict:
+    now = datetime.now(timezone.utc)
+    return {"start_date": now + timedelta(minutes=start_offset_minutes)}
+
+
+# ------------------ test is_already_checked_in -------------------------
 
 
 def test_returns_true_when_cadet_has_record_for_event():
@@ -41,3 +50,46 @@ def test_returns_false_when_same_cadet_checked_into_different_event_only():
         {"event_id": "event3", "cadet_id": "cadet1", "status": "present"},
     ]
     assert is_already_checked_in("event1", "cadet1", records) is False
+
+
+# ------------------ test is_within_checkin_window -------------------------
+
+
+def test_returns_true_within_window():
+    event = create_event(5)
+    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
+
+
+def test_returns_true_at_window_open():
+    event = create_event(10)
+    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
+
+
+def test_returns_true_at_event_start():
+    now = datetime.now(timezone.utc)
+    event = create_event(0)
+    assert is_within_checkin_window(event, now) is True
+
+
+def test_returns_false_before_window():
+    event = create_event(20)
+    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is False
+
+
+def test_returns_false_after_event_starts():
+    event = create_event(-5)
+    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is False
+
+
+def test_returns_false_missing_start_date():
+    assert is_within_checkin_window({}, datetime.now(timezone.utc)) is False
+
+
+def test_returns_false_if_start_date_is_not_datetime():
+    event = {"start_date": "2026-01-01"}
+    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is False
+
+
+def test_no_timezone_info():
+    event = {"start_date": datetime.now(timezone.utc) + timedelta(minutes=5)}
+    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True

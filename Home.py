@@ -1,7 +1,9 @@
 import streamlit as st
-from utils.auth import get_current_user
+from utils.auth import ensure_authenticator, get_current_user, restore_session
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
+
+restore_session()
 
 user = get_current_user()
 
@@ -33,9 +35,20 @@ else:
         "pages/9_Account_Settings.py",
         title="Account Settings",
     )
+    modify_attendance = st.Page(
+        "pages/10_Commander_Attendance.py", title="Modify Attendance"
+    )
 
     if roles & {"admin", "cadre"}:
-        pages = [dashboard, attendance, cadets, flight_mgmt, waiver_review, event_sched]
+        pages = [
+            dashboard,
+            attendance,
+            cadets,
+            flight_mgmt,
+            waiver_review,
+            event_sched,
+            modify_attendance,
+        ]
         if "admin" in roles:
             pages.append(user_management)
     elif "flight_commander" in roles:
@@ -51,11 +64,13 @@ else:
     if not pages:
         pages = [login]
 
+    pg = st.navigation(pages)
+
+    if "authenticator" not in st.session_state:
+        ensure_authenticator()
     authenticator = st.session_state.get("authenticator")
     if authenticator:
         with st.sidebar:
             authenticator.logout("Logout", location="sidebar")
-
-    pg = st.navigation(pages)
 
 pg.run()

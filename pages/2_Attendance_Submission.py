@@ -6,6 +6,18 @@ import streamlit as st
 from bson import ObjectId
 
 from utils.auth import get_current_user, require_auth
+from utils.db_schema_crud import (
+    create_attendance_record,
+    get_attendance_by_event,
+    get_cadet_by_user_id,
+    get_events_by_type,
+    get_user_by_email,
+)
+from services.attendance import (
+    generate_attendance_password,
+    is_already_checked_in,
+    is_within_checkin_window,
+)
 from utils.db_schema_crud import get_cadet_by_user_id, get_user_by_email
 from utils.audit_log import log_checkin_attempt
 from utils.checkin_codes import issue_checkin_code, validate_checkin_code
@@ -31,6 +43,8 @@ if not cadet:
 assert cadet is not None
 
 now = datetime.now(timezone.utc)
+events = get_events_by_type("pt") + get_events_by_type("lab")
+active_events = [e for e in events if is_within_checkin_window(e, now)]
 
 CODE_TTL_MINUTES = 15
 

@@ -254,7 +254,7 @@ else:
             ],
             columns=pd.Index(["Name", "Email", "Role"]),
         )
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width='stretch')
 
         filtered_ids = [s["id"] for s in filtered]
         if st.session_state.admin_users_selected not in filtered_ids:
