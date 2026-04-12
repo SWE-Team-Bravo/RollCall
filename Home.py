@@ -38,27 +38,29 @@ else:
     modify_attendance = st.Page(
         "pages/10_Commander_Attendance.py", title="Modify Attendance"
     )
+    event_code_admin = st.Page(
+        "pages/11_Event_Code_Admin.py", title="Event Code Generator"
+    )
 
     if roles & {"admin", "cadre"}:
         pages = [
             dashboard,
-            attendance,
             cadets,
             flight_mgmt,
             waiver_review,
             event_sched,
             modify_attendance,
+            event_code_admin,
         ]
         if "admin" in roles:
             pages.append(user_management)
     elif "flight_commander" in roles:
-        pages = [dashboard, fc_live_view, attendance, waiver_review]
+        pages = [dashboard, fc_live_view, waiver_review, event_code_admin]
     elif "cadet" in roles:
         pages = [attendance, waivers, cadet_attendance]
     else:
         pages = []
 
-    # Every authenticated user can manage their own account.
     pages.append(account_settings)
 
     if not pages:
