@@ -39,7 +39,7 @@ config = get_event_config() or {}
 # SECTION 1 — Schedule Configuration (merged from #33)
 # =============================================================================
 
-with st.expander("⚙️ Event Schedule Configuration", expanded=False):
+with st.expander("Event Schedule Configuration", expanded=False):
     st.markdown("Configure which days of the week map to PT vs LLAB.")
 
     pt_days = st.multiselect(
@@ -69,7 +69,7 @@ st.divider()
 # SECTION 2 — Create New Event
 # =============================================================================
 
-st.subheader("➕ Create New Event")
+st.subheader("Create New Event")
 
 with st.form("create_event_form"):
     event_name = st.text_input("Event Name", placeholder="e.g. Week 3 PT")
@@ -111,7 +111,7 @@ st.divider()
 # SECTION 3 — Existing Events (table view + delete)
 # =============================================================================
 
-st.subheader("📋 Existing Events")
+st.subheader("Existing Events")
 
 events = get_all_events()
 
@@ -143,7 +143,7 @@ else:
     selected_label = st.selectbox("Select event to delete", event_labels)
     selected_event = events[event_labels.index(selected_label)]
 
-    if st.button("🗑️ Delete Selected Event", type="primary"):
+    if st.button("Delete Selected Event", type="primary"):
         if delete_event(selected_event["_id"]):
             st.success("Event deleted.")
             st.rerun()
