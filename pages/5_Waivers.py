@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 
+from bson import ObjectId
+
 from services.waivers import (
     get_absent_records_without_waiver,
     get_all_waivers_for_cadet,
@@ -19,7 +21,8 @@ from utils.db_schema_crud import (
     get_attendance_by_cadet,
 )
 from datetime import date, datetime, timedelta
-
+from utils.auth_logic import user_has_any_role
+from scripts.demo_admin import get_temp_cadet
 
 STATUS_BADGE = {
     "pending": "🟡 Pending",
@@ -385,11 +388,22 @@ if not user:
     st.stop()
 assert user is not None
 
+# cadet = get_cadet_by_user_id(user["_id"])
+# if not cadet:
+#     st.error("You must be a cadet to submit a waiver request.")
+#     st.stop()
+# assert cadet is not None
+
+role = get_current_user()
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
-    st.error("You must be a cadet to submit a waiver request.")
-    st.stop()
-assert cadet is not None
+    if not user_has_any_role(role, ["admin"]):
+        st.error("No cadet profile found for your account.")
+        st.stop()
+    else:
+        cadet = get_temp_cadet()
+else: 
+    assert cadet is not None
 
 records, waivers_by_record_id, events_by_id = load_waiver_data(cadet["_id"])
 
