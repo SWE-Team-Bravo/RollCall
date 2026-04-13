@@ -362,12 +362,3 @@ else:
                     st.warning("Excused")
 
             st.divider()
-st.subheader("At-Risk Report")
-if st.button("Send At-Risk Emails"):
-    sent, failed = send_at_risk_emails()
-    if sent == 0 and failed == 0:
-        st.info("At-risk cadets not found.")
-    elif failed == 0:
-        st.success(f"Emails sent to {sent} recipient(s).")
-    else:
-        st.warning(f"Sent: {sent}; Failed: {failed}.")

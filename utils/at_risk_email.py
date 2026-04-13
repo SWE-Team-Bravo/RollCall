@@ -41,8 +41,8 @@ def get_at_risk_cadets() -> list[dict]:
         )
 
         if (
-            pt_absences >= PT_ABSENCE_THRESHOLD
-            or llab_absences >= LLAB_ABSENCE_THRESHOLD
+            pt_absences >= PT_ABSENCE_THRESHOLD - 1
+            or llab_absences >= LLAB_ABSENCE_THRESHOLD - 1
         ):
             at_risk.append(
                 {
@@ -126,7 +126,7 @@ def build_email(
     body = f"""
     <html><body>
         <p>{greeting}</p>
-        <p>The following cadets have reached or exceeded the absence thresholds
+        <p>The following cadets are one absence away from or have reached the absence thresholds
         (PT: {PT_ABSENCE_THRESHOLD}, LLAB: {LLAB_ABSENCE_THRESHOLD}):</p>
         {table}
         <br>
