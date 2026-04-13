@@ -2,6 +2,9 @@ import streamlit as st
 from utils.auth import ensure_authenticator, get_current_user, restore_session
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
+st.logo("static/logo.svg", size="large")
+st.image("static/logo.svg", width=300)
+
 
 restore_session()
 
