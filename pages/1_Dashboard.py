@@ -10,6 +10,7 @@ from bson import ObjectId
 
 from utils.auth import get_current_user, require_role
 from utils.db import get_collection, get_db
+from utils.at_risk_email import send_at_risk_emails
 
 _DEFAULT_DAYS = 30
 _MAX_ROWS = 2000

@@ -2,6 +2,9 @@ import streamlit as st
 from utils.auth import ensure_authenticator, get_current_user, restore_session
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
+st.logo("static/logo.svg", size="large")
+st.image("static/logo.svg", width=300)
+
 
 restore_session()
 
@@ -39,28 +42,30 @@ else:
         "pages/10_Commander_Attendance.py", title="Modify Attendance"
     )
     at_risk_report = st.Page("pages/11_At_Risk_Cadets.py", title="At-Risk Cadet Report")
+    event_code_admin = st.Page(
+        "pages/11_Event_Code_Admin.py", title="Event Code Generator"
+    )
 
     if roles & {"admin", "cadre"}:
         pages = [
             dashboard,
-            attendance,
             cadets,
             flight_mgmt,
             waiver_review,
             event_sched,
             modify_attendance,
             at_risk_report,
+            event_code_admin,
         ]
         if "admin" in roles:
             pages.append(user_management)
     elif "flight_commander" in roles:
-        pages = [dashboard, fc_live_view, attendance, waiver_review, at_risk_report]
+        pages = [dashboard, fc_live_view, attendance, waiver_review, at_risk_report, event_code_admin]
     elif "cadet" in roles:
         pages = [attendance, waivers, cadet_attendance]
     else:
         pages = []
 
-    # Every authenticated user can manage their own account.
     pages.append(account_settings)
 
     if not pages:
