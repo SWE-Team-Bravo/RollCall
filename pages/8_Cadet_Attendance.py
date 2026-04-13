@@ -35,20 +35,36 @@ WAIVER_BADGE = {
 
 def show_risk_banner(pt_absences: int, llab_absences: int):
     at_risk = False
-    if pt_absences >= PT_ABSENCE_THRESHOLD - 1:
+    if pt_absences == PT_ABSENCE_THRESHOLD - 1:
         st.error(
             f"**At Risk** — You're one absence away from reaching the absence threshold for "
             f"PT. Absences: {pt_absences}/{PT_ABSENCE_THRESHOLD}. Contact your cadre immediately."
         )
         at_risk = True
-    if llab_absences >= LLAB_ABSENCE_THRESHOLD - 1:
+    elif pt_absences > PT_ABSENCE_THRESHOLD - 1:
+        st.error(
+            f"**At Risk** — You have reached the absence threshold for "
+            f"PT. Absences: {pt_absences}/{PT_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+        )
+        at_risk = True
+    if llab_absences == LLAB_ABSENCE_THRESHOLD - 1:
         st.error(
             f"**At Risk** — You're one absence away from reaching the absence threshold for "
             f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
         )
         at_risk = True
+    elif llab_absences > LLAB_ABSENCE_THRESHOLD - 1:
+        st.error(
+            f"**At Risk** — You have reached the absence threshold for "
+            f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+        )
+        at_risk = True
     if not at_risk:
-        if pt_absences == PT_ABSENCE_THRESHOLD - 2:
+        pt_caution = PT_ABSENCE_THRESHOLD - 2
+        llab_caution = LLAB_ABSENCE_THRESHOLD - 2
+        if (pt_caution > 0 and pt_absences == pt_caution) or (
+            llab_caution > 0 and llab_absences == llab_caution
+        ):
             st.warning(
                 "**Caution** — You are one absence away from the limit for one or more event types."
             )
@@ -118,10 +134,6 @@ def show_attendance_table(rows: list[dict]):
             )
             if row["waiver_status"] == "withdrawn":
                 eligible.append(row)
-        if row.get("waiver_status"):
-            waiver_label = WAIVER_BADGE.get(
-                row["waiver_status"], row["waiver_status"].capitalize()
-            )
         elif row.get("status") == "absent" and bool(row.get("waiver_eligible")):
             waiver_label = "Eligible"
             eligible.append(row)
