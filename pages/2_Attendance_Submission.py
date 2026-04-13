@@ -22,6 +22,8 @@ from utils.db_schema_crud import get_cadet_by_user_id, get_user_by_email
 from utils.audit_log import log_checkin_attempt
 from utils.checkin_codes import issue_checkin_code, validate_checkin_code
 from services.attendance import generate_attendance_password
+from utils.auth_logic import user_has_any_role
+
 
 require_auth()
 st.title("Attendance Submission Page")
@@ -36,11 +38,14 @@ if not user:
     st.stop()
 assert user is not None
 
+role = get_current_user()
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
-    st.error("No cadet profile found for your account.")
-    st.stop()
-assert cadet is not None
+    if not user_has_any_role(role, ["admin"]):
+        st.error("No cadet profile found for your account.")
+        st.stop()
+else: 
+    assert cadet is not None
 
 now = datetime.now(timezone.utc)
 events = get_events_by_type("pt") + get_events_by_type("lab")

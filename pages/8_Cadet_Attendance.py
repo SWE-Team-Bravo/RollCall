@@ -13,7 +13,8 @@ from services.cadet_attendance import (
     filter_rows,
     get_cadet_flight_label,
 )
-
+from utils.auth_logic import user_has_any_role
+from scripts.demo_admin import get_temp_cadet
 
 PT_ABSENCE_THRESHOLD = 9
 LLAB_ABSENCE_THRESHOLD = 2
@@ -200,11 +201,16 @@ if not user:
     st.stop()
 assert user is not None
 
+role = get_current_user()
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
-    st.error("You must be a cadet to view attendance.")
-    st.stop()
-assert cadet is not None
+    if not user_has_any_role(role, ["admin"]):
+        st.error("No cadet profile found for your account.")
+        st.stop()
+    else:
+        cadet = get_temp_cadet()
+else: 
+    assert cadet is not None
 
 records, events, waivers = load_attendance_db(cadet["_id"])
 rows = cadet_attendance(records, events, waivers)
