@@ -75,7 +75,7 @@ with col_time:
 
 expires_at = build_expires_at(exp_date, exp_time, tz_name)
 
-if st.button("Generate New Code", type="primary", use_container_width=True):
+if st.button("Generate New Code", type="primary", width="stretch"):
     if not is_expiry_valid(expires_at):
         st.error("Expiration must be in the future.")
     else:

@@ -175,7 +175,7 @@ def show_cadets():
         rows,
         columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank"]),
     )
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
     st.divider()
 
@@ -278,7 +278,7 @@ with tab_import:
                 }
                 for c in result["created"]
             ]
-            st.dataframe(rows, hide_index=True, use_container_width=True)
+            st.dataframe(rows, hide_index=True, width="stretch")
         if result["skipped"]:
             st.info(f"Skipped {len(result['skipped'])} already-existing account(s).")
         if result["errors"]:

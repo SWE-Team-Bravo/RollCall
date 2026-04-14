@@ -184,7 +184,7 @@ def show_waivers(
         )
 
     df = pd.DataFrame(rows, columns=pd.Index(["Event", "Date", "Status"]))
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
     st.divider()
 

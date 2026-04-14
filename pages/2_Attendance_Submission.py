@@ -17,7 +17,7 @@ from utils.db_schema_crud import (
 
 
 require_auth()
-st.title("Attendance")
+st.title("Attendance Submission")
 
 current_user = get_current_user()
 assert current_user is not None

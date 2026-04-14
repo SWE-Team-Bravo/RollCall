@@ -17,8 +17,10 @@ else:
     roles = set(user["roles"])
 
     dashboard = st.Page("pages/1_Dashboard.py", title="Dashboard")
-    attendance = st.Page("pages/2_Attendance_Submission.py", title="Attendance")
-    cadets = st.Page("pages/3_Cadets.py", title="Cadets")
+    attendance = st.Page(
+        "pages/2_Attendance_Submission.py", title="Attendance Submission"
+    )
+    cadets = st.Page("pages/3_Cadets.py", title="Cadet Management")
     flight_mgmt = st.Page("pages/4_Flight_Management.py", title="Flight Management")
     waivers = st.Page("pages/5_Waivers.py", title="My Waivers")
     waiver_review = st.Page("pages/6_Waiver_Review.py", title="Waiver Review")
