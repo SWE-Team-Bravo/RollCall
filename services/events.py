@@ -1,6 +1,23 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from bson import ObjectId
 from utils.db import get_db
+
+
+def closest_event_index(events: list[dict]) -> int:
+    if not events:
+        return 0
+    today = date.today()
+
+    def _distance(event: dict) -> int:
+        start = event.get("start_date")
+        try:
+            if isinstance(start, datetime):
+                return abs((start.date() - today).days)
+            return abs((date.fromisoformat(str(start)[:10]) - today).days)
+        except (ValueError, TypeError):
+            return 999_999
+
+    return min(range(len(events)), key=lambda i: _distance(events[i]))
 
 
 def get_all_events() -> list[dict]:
@@ -25,12 +42,18 @@ def create_event(
     db = get_db()
     if db is None:
         return False
+    start_dt = datetime(
+        start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc
+    )
+    end_dt = datetime(
+        end_date.year, end_date.month, end_date.day, 23, 59, 59, tzinfo=timezone.utc
+    )
     db.events.insert_one(
         {
             "event_name": name,
             "event_type": event_type,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
+            "start_date": start_dt,
+            "end_date": end_dt,
             "created_by_user_id": created_by_user_id,
         }
     )

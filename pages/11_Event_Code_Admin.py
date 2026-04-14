@@ -12,7 +12,7 @@ from services.event_codes import (
     get_active_code,
     is_expiry_valid,
 )
-from services.events import get_all_events
+from services.events import closest_event_index, get_all_events
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 
@@ -57,20 +57,9 @@ with col_event:
         f"{e.get('event_type', '').upper()} | {e.get('start_date', '')} | {e.get('event_name', '')}"
         for e in all_events
     ]
-    today = date.today()
-
-    def _date_distance(event: dict) -> int:
-        try:
-            return abs(
-                (date.fromisoformat(str(event.get("start_date", ""))) - today).days
-            )
-        except (ValueError, TypeError):
-            return 999999
-
-    default_index = min(
-        range(len(all_events)), key=lambda i: _date_distance(all_events[i])
+    selected_label = st.selectbox(
+        "Event", event_labels, index=closest_event_index(all_events)
     )
-    selected_label = st.selectbox("Event", event_labels, index=default_index)
     selected_event = all_events[event_labels.index(selected_label)]
 
 with col_tz:
@@ -105,9 +94,19 @@ if st.button("Generate New Code", type="primary", use_container_width=True):
 
 st.divider()
 
-active_code = get_active_code(selected_event["_id"])
+_selected_event_id = selected_event["_id"]
 
-if active_code:
+
+@st.fragment(run_every=30)
+def _active_code_panel(event_id: str, tz: str) -> None:
+    active_code = get_active_code(event_id)
+
+    if not active_code:
+        st.info(
+            "No active code for the selected event. Use **Generate New Code** above."
+        )
+        return
+
     code_str = str(active_code.get("code", ""))
     code_expires_at = active_code.get("expires_at")
 
@@ -147,13 +146,13 @@ if active_code:
             code_expires_at = code_expires_at.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         remaining_secs = (code_expires_at - now).total_seconds()
-        local_expires = code_expires_at.astimezone(ZoneInfo(tz_name))
+        local_expires = code_expires_at.astimezone(ZoneInfo(tz))
         if remaining_secs > 0:
             mins = int(remaining_secs // 60)
             secs = int(remaining_secs % 60)
             st.caption(
                 f"Expires {local_expires.strftime('%Y-%m-%d %I:%M %p %Z')}"
-                f" ({mins}m {secs}s remaining)"
+                f" — {mins}m {secs}s remaining"
             )
         else:
             st.warning("This code has expired. Generate a new one above.")
@@ -165,5 +164,5 @@ if active_code:
         else:
             st.error("Could not expire code.")
 
-else:
-    st.info("No active code for the selected event. Use **Generate New Code** above.")
+
+_active_code_panel(_selected_event_id, tz_name)

@@ -13,11 +13,10 @@ from services.cadet_attendance import (
     filter_rows,
     get_cadet_flight_label,
 )
+from services.waivers import WAIVER_STATUS_BADGE
+from utils.at_risk_email import PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD
 from utils.auth_logic import user_has_any_role
 from scripts.demo_admin import get_temp_cadet
-
-PT_ABSENCE_THRESHOLD = 9
-LLAB_ABSENCE_THRESHOLD = 2
 
 STATUS_BADGE = {
     "present": "🟢 Present",
@@ -26,12 +25,7 @@ STATUS_BADGE = {
     "waived": "🟡 Excused",
 }
 
-WAIVER_BADGE = {
-    "pending": "🟡 Pending",
-    "approved": "🟢 Approved",
-    "denied": "🔴 Denied",
-    "withdrawn": "⚪ Withdrawn",
-}
+WAIVER_BADGE = WAIVER_STATUS_BADGE
 
 
 def show_risk_banner(pt_absences: int, llab_absences: int):
@@ -153,7 +147,7 @@ def show_attendance_table(rows: list[dict]):
         table_rows,
         columns=pd.Index(["Event", "Date", "Type", "Status", "Waiver"]),
     )
-    st.dataframe(df, hide_index=True, width="stretch")
+    st.dataframe(df, hide_index=True, use_container_width=True)
 
     st.divider()
 
@@ -217,16 +211,12 @@ if not user:
     st.stop()
 assert user is not None
 
-role = get_current_user()
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
-    if not user_has_any_role(role, ["admin"]):
+    if not user_has_any_role(current_user, ["admin"]):
         st.error("No cadet profile found for your account.")
         st.stop()
-    else:
-        cadet = get_temp_cadet()
-else: 
-    assert cadet is not None
+    cadet = get_temp_cadet()
 
 records, events, waivers = load_attendance_db(cadet["_id"])
 rows = cadet_attendance(records, events, waivers)

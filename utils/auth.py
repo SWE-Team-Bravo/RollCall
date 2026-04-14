@@ -53,6 +53,8 @@ def _get_or_create_authenticator() -> stauth.Authenticate:
 
 
 def restore_session() -> None:
+    if st.session_state.get("_logged_out"):
+        return
     if st.session_state.get("authentication_status"):
         return
 
@@ -88,6 +90,7 @@ def restore_session() -> None:
     st.session_state["email"] = raw_user.get("email")
     st.session_state["roles"] = raw_user.get("roles")
     st.session_state.setdefault("logout", None)
+    st.session_state.pop("_logged_out", None)
 
 
 def ensure_authenticator() -> stauth.Authenticate:
@@ -101,6 +104,8 @@ def init_auth():
     authenticator.login(location="main")
     if st.session_state.get("authentication_status") is False:
         st.error("Incorrect username or password.")
+    elif st.session_state.get("authentication_status"):
+        st.session_state.pop("_logged_out", None)
     return authenticator
 
 

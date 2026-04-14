@@ -15,6 +15,9 @@ df = get_df()
 if isinstance(df, str):
     st.warning("No cadets found.")
 elif isinstance(df, pd.DataFrame):
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
+    st.divider()
     col1, col2, col3, spacer = st.columns([2, 2, 4, 8])
     col1.download_button(
         "Export CSV",
@@ -36,5 +39,3 @@ elif isinstance(df, pd.DataFrame):
             st.success(f"Emails sent to {sent} recipient(s).")
         else:
             st.warning(f"Sent: {sent}; Failed: {failed}.")
-
-    st.dataframe(df, hide_index=True, width="stretch")

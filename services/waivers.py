@@ -6,6 +6,13 @@ from utils.db_schema_crud import (
     validate_waiver,
 )
 
+WAIVER_STATUS_BADGE: dict[str, str] = {
+    "pending": "🟡 Pending",
+    "approved": "🟢 Approved",
+    "denied": "🔴 Denied",
+    "withdrawn": "⚪ Withdrawn",
+}
+
 
 def get_all_waivers_for_cadet(
     records: list[dict],

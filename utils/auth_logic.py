@@ -38,7 +38,7 @@ def extract_user_from_raw(email: str | None, raw: dict) -> dict | None:
     }
 
 
-def user_has_any_role(user: dict | None, roles: tuple[str, ...]) -> bool:
+def user_has_any_role(user: dict | None, roles: list[str] | tuple[str, ...]) -> bool:
     """Return True if user holds at least one of the required roles."""
     if user is None:
         return False
