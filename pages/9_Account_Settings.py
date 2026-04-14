@@ -6,8 +6,6 @@ from utils.auth import require_auth, get_current_user
 from utils.db_schema_crud import get_user_by_email, update_user
 from utils.password import verify_password
 
-st.set_page_config(page_title="Account Settings: RollCall", page_icon="🪖")
-
 require_auth()
 
 st.title("Account Settings")
