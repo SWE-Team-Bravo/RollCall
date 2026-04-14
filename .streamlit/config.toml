@@ -21,6 +21,7 @@ secondaryBackgroundColor = "#001F4D"
 textColor = "#F2F2F2"
 primaryColor = "#FFC72C"
 linkColor = "#FFC72C"
+blueTextColor = "99CFFF"
 
 [theme.dark.sidebar]
 backgroundColor = "#001F4D"
