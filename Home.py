@@ -98,6 +98,12 @@ else:
 
     with st.sidebar:
         if st.button("Logout", key="logout_btn"):
+            auth = st.session_state.get("authenticator")
+            if auth is not None:
+                try:
+                    auth.cookie_controller.delete_cookie()
+                except Exception:
+                    pass
             for key in [
                 "authentication_status",
                 "username",
@@ -111,6 +117,7 @@ else:
             ]:
                 st.session_state.pop(key, None)
             st.session_state["_logged_out"] = True
-            st.rerun()
+            st.session_state["logout"] = True
+            st.switch_page(login)
 
 pg.run()
