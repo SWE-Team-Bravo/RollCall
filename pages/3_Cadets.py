@@ -68,8 +68,6 @@ def add_cadet():
         if st.session_state.success_time:
             if time.time() - st.session_state.success_time < 3:
                 st.success(st.session_state.success_msg)
-                time.sleep(1)
-                st.rerun()
             else:
                 st.session_state.success_time = None
                 st.session_state.success_msg = None
@@ -152,8 +150,6 @@ def show_cadets():
     if st.session_state.success_time:
         if time.time() - st.session_state.success_time < 3:
             st.success(st.session_state.success_msg)
-            time.sleep(1)
-            st.rerun()
         else:
             st.session_state.success_time = None
             st.session_state.success_msg = None
@@ -282,7 +278,7 @@ with tab_import:
                 }
                 for c in result["created"]
             ]
-            st.dataframe(rows, width="stretch")
+            st.dataframe(rows, hide_index=True, width="stretch")
         if result["skipped"]:
             st.info(f"Skipped {len(result['skipped'])} already-existing account(s).")
         if result["errors"]:

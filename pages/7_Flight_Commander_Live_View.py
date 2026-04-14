@@ -14,6 +14,7 @@ from utils.db_schema_crud import (
     get_user_by_email,
     get_user_by_id,
 )
+from services.events import closest_event_index
 from utils.flight_commander_view import (
     _ensure_utc,
     build_checkin_view,
@@ -114,7 +115,7 @@ def live_checkin_fragment() -> None:
             )
         return name
 
-    default_index = 0
+    default_index = closest_event_index(active_events)
     if previous_event_id is not None:
         for idx, ev in enumerate(active_events):
             if ev.get("_id") == previous_event_id:
@@ -185,7 +186,6 @@ def live_checkin_fragment() -> None:
             st.write("Everyone is checked in.")
 
     st.divider()
-    st.caption("Missing cadets are highlighted in red.")
 
 
 live_checkin_fragment()

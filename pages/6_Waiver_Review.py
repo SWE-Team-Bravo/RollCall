@@ -9,17 +9,14 @@ from services.waiver_review import (
     get_waivers,
     submit_decision,
 )
+from services.waivers import WAIVER_STATUS_BADGE
 
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 from utils.export import to_excel
 
 
-STATUS_BADGE = {
-    "pending": "🟡 Pending",
-    "approved": "🟢 Approved",
-    "denied": "🔴 Denied",
-}
+STATUS_BADGE = WAIVER_STATUS_BADGE
 
 
 require_role("admin", "cadre", "flight_commander")
@@ -42,7 +39,7 @@ assert approver_user is not None
 approver_id = approver_user["_id"]
 
 status_filter = st.selectbox(
-    "Status", ["pending", "approved", "denied", "all"], index=0
+    "Status", ["all", "pending", "approved", "denied"], index=0
 )
 flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
@@ -98,22 +95,6 @@ if isinstance(export_df, str):
     st.info(export_df)
     st.stop()
 
-st.divider()
-col1, col2, spacer = st.columns([2, 2, 10])
-if isinstance(export_df, pd.DataFrame):
-    col1.download_button(
-        "Export CSV",
-        export_df.to_csv(index=False).encode("utf-8"),
-        "waivers.csv",
-        "text/csv",
-    )
-    col2.download_button(
-        "Export Excel",
-        to_excel(export_df),
-        "waivers.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
 if not rows:
     st.info("No waivers matched the selected filters.")
     st.stop()
@@ -163,3 +144,19 @@ for w in rows:
                         st.rerun()
                     else:
                         st.error(err)
+
+st.divider()
+col1, col2, spacer = st.columns([2, 2, 10])
+if isinstance(export_df, pd.DataFrame):
+    col1.download_button(
+        "Export CSV",
+        export_df.to_csv(index=False).encode("utf-8"),
+        "waivers.csv",
+        "text/csv",
+    )
+    col2.download_button(
+        "Export Excel",
+        to_excel(export_df),
+        "waivers.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

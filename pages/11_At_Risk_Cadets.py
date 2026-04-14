@@ -37,4 +37,5 @@ elif isinstance(df, pd.DataFrame):
         else:
             st.warning(f"Sent: {sent}; Failed: {failed}.")
 
+    st.divider()
     st.dataframe(df, hide_index=True, width="stretch")

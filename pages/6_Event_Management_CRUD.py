@@ -6,6 +6,9 @@ from utils.auth import require_role, get_current_user
 
 require_role("admin", "cadre")
 
+if "confirm_delete_event_id" not in st.session_state:
+    st.session_state.confirm_delete_event_id = None
+
 st.title("Event Management")
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -143,9 +146,22 @@ else:
     selected_label = st.selectbox("Select event to delete", event_labels)
     selected_event = events[event_labels.index(selected_label)]
 
-    if st.button("Delete Selected Event", type="primary"):
-        if delete_event(selected_event["_id"]):
-            st.success("Event deleted.")
+    if st.session_state.confirm_delete_event_id == selected_event["_id"]:
+        st.warning(
+            f"Delete **{selected_event.get('event_name', 'this event')}**? This cannot be undone."
+        )
+        c1, c2 = st.columns(2)
+        if c1.button("Yes, delete", type="primary"):
+            if delete_event(selected_event["_id"]):
+                st.session_state.confirm_delete_event_id = None
+                st.success("Event deleted.")
+                st.rerun()
+            else:
+                st.error("Could not delete event.")
+        if c2.button("Cancel"):
+            st.session_state.confirm_delete_event_id = None
             st.rerun()
-        else:
-            st.error("Could not delete event.")
+    else:
+        if st.button("Delete Selected Event"):
+            st.session_state.confirm_delete_event_id = selected_event["_id"]
+            st.rerun()
