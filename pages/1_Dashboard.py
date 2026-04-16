@@ -8,9 +8,9 @@ import streamlit as st
 
 from bson import ObjectId
 
+from services.events import closest_event_index
 from utils.auth import get_current_user, require_role
 from utils.db import get_collection, get_db
-from utils.at_risk_email import send_at_risk_emails
 
 _DEFAULT_DAYS = 30
 _MAX_ROWS = 2000
@@ -304,10 +304,13 @@ else:
                 hide_index=True,
             )
 
+            _summary_events = [
+                event_by_id.get(eid, {}) for eid in summary_df["_event_id"]
+            ]
             selected_label = st.selectbox(
                 "Select an event to view cadets",
                 options=list(summary_df["Event"]),
-                index=0,
+                index=closest_event_index(_summary_events),
             )
 
             selected_row = summary_df.loc[summary_df["Event"] == selected_label].iloc[0]
@@ -350,15 +353,14 @@ else:
                     else:
                         styler = styler.applymap(_status_cell_style, subset=["Status"])
 
-                    st.dataframe(styler, width="stretch", hide_index=True)
+                    leg1, leg2, leg3 = st.columns(3)
+                    with leg1:
+                        st.success("Present")
+                    with leg2:
+                        st.error("Absent")
+                    with leg3:
+                        st.warning("Excused")
 
-                st.subheader("Legend")
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.success("Present")
-                with c2:
-                    st.error("Absent")
-                with c3:
-                    st.warning("Excused")
+                    st.dataframe(styler, width="stretch", hide_index=True)
 
             st.divider()

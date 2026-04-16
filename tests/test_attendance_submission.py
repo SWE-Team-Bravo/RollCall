@@ -3,14 +3,22 @@ import pytest
 import subprocess
 import requests
 import requests.adapters
+from pathlib import Path
 from time import sleep, time
 from datetime import datetime, timedelta, timezone
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException
 
-URL = "http://localhost:8501"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_VENV = _REPO_ROOT / ".venv"
+_STREAMLIT = str(
+    _VENV / ("Scripts/streamlit.exe" if os.name == "nt" else "bin/streamlit")
+)
+
+URL = "http://localhost:15084"
 
 
 # browser options
@@ -97,7 +105,7 @@ def _go_to_attendance(browser):
         "nav.1",
         browser,
         10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/']"),
+        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:15084/']"),
         "couldn't find the attendance tab label",
     )
     attendance.click()
@@ -105,7 +113,7 @@ def _go_to_attendance(browser):
         "nav.2",
         browser,
         10,
-        lambda d: "Attendance Submission" in d.find_element(By.TAG_NAME, "body").text,
+        lambda d: "6-digit event code" in d.find_element(By.TAG_NAME, "body").text,
         "couldn't verify being on the attendance page",
     )
 
@@ -118,11 +126,12 @@ pytestmark = pytest.mark.e2e
 @pytest.fixture(scope="session", autouse=True)
 def streamlit_server():
     process = subprocess.Popen(
-        ["streamlit", "run", "Home.py", "--server.headless", "true"],
+        [_STREAMLIT, "run", "Home.py", "--server.headless", "true"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        cwd=str(_REPO_ROOT),
     )
-    sleep(3)
+    sleep(5)
     if not _wait_for_server():
         process.terminate()
         pytest.skip("Streamlit server did not start within 15 seconds")
@@ -187,7 +196,7 @@ def test_check_for_username_and_box(browser):
     _wait(
         "Test 2.1",
         browser,
-        10,
+        15,
         lambda d: "Username" in d.find_element(By.TAG_NAME, "body").text,
         "couldn't find the username text",
     )
@@ -246,16 +255,14 @@ def test_check_for_event_code_input(browser):
         "Test 7.1",
         browser,
         10,
-        lambda d: "Enter event code" in d.find_element(By.TAG_NAME, "body").text,
+        lambda d: "6-digit event code" in d.find_element(By.TAG_NAME, "body").text,
         "couldn't find event code label",
     )
     _wait(
         "Test 7.2",
         browser,
         10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "input[aria-label='Enter event code']"
-        ),
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Event code']"),
         "couldn't find event code text input",
     )
 
@@ -275,9 +282,9 @@ def test_check_for_report_in_button(browser):
 
 
 # Test 9
-def test_empty_code_shows_error(browser):
+def test_empty_code_disables_button(browser):
     _go_to_attendance(browser)
-    button = _wait(
+    _wait(
         "Test 9.1",
         browser,
         10,
@@ -286,14 +293,17 @@ def test_empty_code_shows_error(browser):
         ),
         "couldn't find the Report In button",
     )
-    sleep(1)
-    button.click()
     _wait(
         "Test 9.2",
         browser,
         10,
-        lambda d: "Please enter a code" in d.find_element(By.TAG_NAME, "body").text,
-        "couldn't find empty-code error message",
+        lambda d: (
+            d.find_element(
+                By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+            ).get_attribute("disabled")
+            is not None
+        ),
+        "Report In button should be disabled when no code is entered",
     )
 
 
@@ -304,23 +314,13 @@ def test_invalid_code_shows_error(browser):
         "Test 10.1",
         browser,
         10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "input[aria-label='Enter event code']"
-        ),
+        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Event code']"),
         "couldn't find event code input",
     )
     code_input.send_keys("000000")
+    code_input.send_keys(Keys.TAB)
     _wait(
         "Test 10.2",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
-        ),
-        "couldn't find the Report In button",
-    ).click()
-    _wait(
-        "Test 10.3",
         browser,
         10,
         lambda d: "Invalid or expired code" in d.find_element(By.TAG_NAME, "body").text,
@@ -362,7 +362,7 @@ def test_checked_in_success_with_valid_code(browser):
             browser,
             10,
             lambda d: d.find_element(
-                By.CSS_SELECTOR, "a[href='http://localhost:8501/']"
+                By.CSS_SELECTOR, "a[href='http://localhost:15084/']"
             ),
             "couldn't find Attendance nav link",
         ).click()
@@ -370,29 +370,33 @@ def test_checked_in_success_with_valid_code(browser):
             "Test 11.2",
             browser,
             10,
-            lambda d: (
-                "Attendance Submission" in d.find_element(By.TAG_NAME, "body").text
-            ),
-            "couldn't load Attendance Submission page",
+            lambda d: "6-digit event code" in d.find_element(By.TAG_NAME, "body").text,
+            "couldn't load Attendance page",
         )
         code_input = _wait(
             "Test 11.3",
             browser,
             10,
-            lambda d: d.find_element(
-                By.CSS_SELECTOR, "input[aria-label='Enter event code']"
-            ),
+            lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Event code']"),
             "couldn't find event code input",
         )
         code_input.send_keys("999888")
+        code_input.send_keys(Keys.TAB)
         _wait(
             "Test 11.4",
             browser,
             10,
-            lambda d: d.find_element(
-                By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+            lambda d: (
+                d.find_element(
+                    By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+                ).get_attribute("disabled")
+                is None
             ),
-            "couldn't find Report In button",
+            "Report In button never became enabled after entering valid code",
+        )
+        d = browser
+        d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
         ).click()
         _wait(
             "Test 11.5",

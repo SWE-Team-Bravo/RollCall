@@ -15,10 +15,7 @@ def get_df() -> pd.DataFrame | str:
         return "No cadets found."
 
     rows: list[dict[str, str | int]] = []
-    cadet_by_id: dict[str, dict] = {}
     for i, cadet in enumerate(cadets):
-        cid = str(cadet.get("_id"))
-        cadet_by_id[cid] = cadet
         rows.append(
             {
                 "No.": i + 1,

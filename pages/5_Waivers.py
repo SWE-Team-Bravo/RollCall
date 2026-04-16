@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 
-from bson import ObjectId
 
 from services.waivers import (
     get_absent_records_without_waiver,
     get_all_waivers_for_cadet,
     resubmit_auto_denied_waiver,
     withdraw_waiver,
+    WAIVER_STATUS_BADGE,
 )
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
@@ -24,12 +24,7 @@ from datetime import date, datetime, timedelta
 from utils.auth_logic import user_has_any_role
 from scripts.demo_admin import get_temp_cadet
 
-STATUS_BADGE = {
-    "pending": "🟡 Pending",
-    "approved": "🟢 Approved",
-    "denied": "🔴 Denied",
-    "withdrawn": "⚪ Withdrawn",
-}
+STATUS_BADGE = WAIVER_STATUS_BADGE
 
 
 def load_waiver_data(cadet_id) -> tuple[list[dict], dict, dict]:
@@ -355,7 +350,7 @@ def waiver_form(
 
 
 require_role("cadet")
-st.title("Submit Waiver Request")
+st.title("My Waivers")
 
 if "waiver_record_id" not in st.session_state:
     st.session_state.waiver_record_id = None
@@ -398,15 +393,17 @@ assert user is not None
 role = get_current_user()
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
-    if not user_has_any_role(role, ["admin"]):
+    if not user_has_any_role(current_user, ["admin"]):
         st.error("No cadet profile found for your account.")
         st.stop()
-    else:
-        cadet = get_temp_cadet()
-else: 
-    assert cadet is not None
+    cadet = get_temp_cadet()
 
 records, waivers_by_record_id, events_by_id = load_waiver_data(cadet["_id"])
 
-waiver_form(str(user["_id"]), records, waivers_by_record_id, events_by_id)
 show_waivers(records, waivers_by_record_id, events_by_id)
+
+st.divider()
+with st.expander(
+    "Submit New Waiver Request", expanded=st.session_state.waiver_record_id is not None
+):
+    waiver_form(str(user["_id"]), records, waivers_by_record_id, events_by_id)

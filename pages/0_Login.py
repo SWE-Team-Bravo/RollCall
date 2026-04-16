@@ -1,8 +1,6 @@
 import streamlit as st
 from utils.auth import init_auth, get_current_user
 
-st.set_page_config(page_title="Login: RollCall", page_icon="🪖")
-
 authenticator = init_auth()
 
 if st.session_state.get("authentication_status") is False:

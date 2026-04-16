@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
 from services.commander_attendance import build_commander_roster, compute_upserts
-from services.events import get_all_events
+from services.events import closest_event_index, get_all_events
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
     create_attendance_record,
@@ -44,12 +45,20 @@ if not all_events:
 def _event_label(event: dict[str, Any]) -> str:
     name = str(event.get("event_name", "Event")).strip() or "Event"
     start = event.get("start_date")
-    date_str = start[:10] if isinstance(start, str) else ""
+    if isinstance(start, datetime):
+        date_str = start.date().isoformat()
+    elif isinstance(start, str):
+        date_str = start[:10]
+    else:
+        date_str = ""
     return f"{name} ({date_str})" if date_str else name
 
 
 selected_event = st.selectbox(
-    "Select event", options=all_events, format_func=_event_label
+    "Select event",
+    options=all_events,
+    format_func=_event_label,
+    index=closest_event_index(all_events),
 )
 if selected_event is None:
     st.stop()

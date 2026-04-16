@@ -151,18 +151,18 @@ st.caption("Create, edit, and delete user accounts and roles.")
 # Create New User
 # ----------------------------
 
-st.subheader("Create New User")
-with st.form("create_user_form", clear_on_submit=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        first_name = st.text_input("First Name")
-        email = st.text_input("Email")
-    with col2:
-        last_name = st.text_input("Last Name")
-        role = st.selectbox("Role", sorted(ALLOWED_ROLES))
+with st.expander("Create New User", expanded=False):
+    with st.form("create_user_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            first_name = st.text_input("First Name")
+            email = st.text_input("Email")
+        with col2:
+            last_name = st.text_input("Last Name")
+            role = st.selectbox("Role", sorted(ALLOWED_ROLES))
 
-    password = st.text_input("Temporary Password", type="password")
-    create_submitted = st.form_submit_button("Create User")
+        password = st.text_input("Temporary Password", type="password")
+        create_submitted = st.form_submit_button("Create User", type="primary")
 
     if create_submitted:
         # Load current users for email-uniqueness validation.
@@ -180,7 +180,6 @@ with st.form("create_user_form", clear_on_submit=True):
             for field, msg in errors.items():
                 st.error(f"{field.capitalize()}: {msg}")
         else:
-            # create_user expects first_name, last_name, email, password, roles
             result = create_user(
                 first_name=payload["first_name"],
                 last_name=payload["last_name"],
