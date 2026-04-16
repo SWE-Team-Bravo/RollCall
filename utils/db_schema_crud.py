@@ -123,6 +123,23 @@ def get_cadet_by_user_id(user_id: str | ObjectId) -> dict | None:
     return col.find_one({"user_id": ObjectId(user_id)})
 
 
+def set_at_risk_email_sent(
+    cadet_id: str | ObjectId, pt_absences: int, llab_absences: int
+) -> UpdateResult | None:
+    col = get_collection("cadets")
+    if col is None:
+        return None
+    return col.update_one(
+        {"_id": ObjectId(cadet_id)},
+        {
+            "$set": {
+                "at_risk_email_last_pt": pt_absences,
+                "at_risk_email_last_llab": llab_absences,
+            }
+        },
+    )
+
+
 def update_cadet(cadet_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("cadets")
     if col is None:
