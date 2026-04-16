@@ -10,12 +10,11 @@ from services.commander_attendance import build_commander_roster, compute_upsert
 from services.events import closest_event_index, get_all_events
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
-    create_attendance_record,
     get_all_cadets,
     get_attendance_by_event,
     get_user_by_email,
     get_user_by_id,
-    update_attendance_record,
+    upsert_attendance_record,
 )
 
 STATUS_OPTIONS = ["Present", "Absent", "Excused"]
@@ -25,6 +24,12 @@ DB_TO_STATUS = {"present": "Present", "absent": "Absent", "excused": "Excused"}
 require_role("admin", "cadre")
 st.title("Modify Attendance")
 st.caption("Manually set attendance for cadets. These entries override self-check-ins.")
+
+if "_success_msg" not in st.session_state:
+    st.session_state["_success_msg"] = None
+if st.session_state["_success_msg"]:
+    st.success(st.session_state["_success_msg"])
+    st.session_state["_success_msg"] = None
 
 current_user = get_current_user()
 assert current_user is not None
@@ -120,14 +125,11 @@ if st.button("Save All", type="primary"):
     }
     upserts = compute_upserts(roster, new_statuses)
     for op in upserts:
-        if op["action"] == "update":
-            update_attendance_record(op["record_id"], {"status": op["status"]})
-        else:
-            create_attendance_record(
-                event_id=event_id,
-                cadet_id=op["cadet_id"],
-                status=op["status"],
-                recorded_by_user_id=user["_id"],
-            )
-    st.success(f"Saved attendance for {len(upserts)} cadet(s).")
+        upsert_attendance_record(
+            event_id=event_id,
+            cadet_id=op["cadet_id"],
+            status=op["status"],
+            recorded_by_user_id=user["_id"],
+        )
+    st.session_state["_success_msg"] = f"Saved attendance for {len(upserts)} cadet(s)."
     st.rerun()

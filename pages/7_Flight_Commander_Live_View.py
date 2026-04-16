@@ -175,7 +175,7 @@ def live_checkin_fragment() -> None:
             for cadet_doc in checked_in:
                 st.write(f"✅ {_cadet_display_name(cadet_doc)}")
         else:
-            st.write("No one has checked in yet.")
+            st.info("No one has checked in yet.")
 
     with right:
         st.error(f"Still Missing ({len(missing)})")
@@ -183,7 +183,7 @@ def live_checkin_fragment() -> None:
             for cadet_doc in missing:
                 st.write(f"⚠️ {_cadet_display_name(cadet_doc)}")
         else:
-            st.write("Everyone is checked in.")
+            st.info("Everyone is checked in.")
 
     st.divider()
 

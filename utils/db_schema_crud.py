@@ -315,6 +315,38 @@ def get_attendance_by_cadet(cadet_id: str | ObjectId) -> list[dict]:
     return list(col.find({"cadet_id": ObjectId(cadet_id)}))
 
 
+def upsert_attendance_record(
+    event_id: str | ObjectId,
+    cadet_id: str | ObjectId,
+    status: str,
+    recorded_by_user_id: str | ObjectId,
+) -> UpdateResult | None:
+    """Insert or update a single attendance record atomically.
+
+    Safe to call concurrently — uses MongoDB upsert so the last writer wins
+    on status without ever creating duplicate (event_id, cadet_id) pairs.
+    """
+    col = get_collection("attendance_records")
+    if col is None:
+        return None
+    return col.update_one(
+        {
+            "event_id": ObjectId(event_id),
+            "cadet_id": ObjectId(cadet_id),
+        },
+        {
+            "$set": {
+                "status": status,
+                "recorded_by_user_id": ObjectId(recorded_by_user_id),
+            },
+            "$setOnInsert": {
+                "created_at": datetime.now(timezone.utc),
+            },
+        },
+        upsert=True,
+    )
+
+
 def update_attendance_record(
     record_id: str | ObjectId, updates: dict
 ) -> UpdateResult | None:

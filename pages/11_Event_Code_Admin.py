@@ -34,7 +34,7 @@ assert user is not None
 all_events = get_all_events()
 
 if not all_events:
-    st.warning("No events found. Create events in Event Management first.")
+    st.info("No events found. Create events in Event Management first.")
     st.stop()
 
 _PREFERRED = [
