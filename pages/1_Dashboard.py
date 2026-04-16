@@ -11,6 +11,7 @@ from bson import ObjectId
 from services.events import closest_event_index
 from utils.auth import get_current_user, require_role
 from utils.db import get_collection, get_db
+from utils.export import to_excel
 
 _DEFAULT_DAYS = 30
 _MAX_ROWS = 2000
@@ -352,6 +353,21 @@ else:
                         styler = styler.map(_status_cell_style, subset=["Status"])
                     else:
                         styler = styler.applymap(_status_cell_style, subset=["Status"])
+
+                    col1, col2, spacer = st.columns([1.5, 2, 10])
+                    if isinstance(cadet_df, pd.DataFrame):
+                        col1.download_button(
+                            "Export CSV",
+                            cadet_df.to_csv().encode("utf-8"),
+                            "attendance.csv",
+                            "text/csv",
+                        )
+                        col2.download_button(
+                            "Export Excel",
+                            to_excel(cadet_df),
+                            "attendance.xlsx",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
 
                     leg1, leg2, leg3 = st.columns(3)
                     with leg1:
