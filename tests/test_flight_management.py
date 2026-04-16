@@ -1,10 +1,6 @@
-import sys
-import os
 from unittest.mock import patch, MagicMock
 from bson import ObjectId
 import pytest
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.db_schema_crud import unassign_cadet_from_flight
 
