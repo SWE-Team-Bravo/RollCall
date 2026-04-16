@@ -274,6 +274,7 @@ def waiver_form(
     st.session_state.waiver_record_id = None
 
     absent_records = get_absent_records_without_waiver(records, waivers_by_record_id)
+    # absent_records = get_temp_cadet()
     if not absent_records:
         st.info("You don't have any absent records to submit a waiver for.")
         return
