@@ -13,7 +13,7 @@ st.title("At-Risk Cadets Report")
 
 df = get_df()
 if isinstance(df, str):
-    st.warning("No cadets found.")
+    st.info("No cadets found.")
 elif isinstance(df, pd.DataFrame):
     col1, col2, col3, spacer = st.columns([2, 2, 4, 8])
     col1.download_button(

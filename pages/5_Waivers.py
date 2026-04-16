@@ -229,17 +229,23 @@ def show_waivers(
     waiver_id = str(selected["_id"])
     if status == "pending":
         if st.session_state.confirm_withdraw_id == waiver_id:
-            st.warning("Are you sure you want to withdraw your waiver?")
+            st.warning("Type DELETE below to permanently withdraw this waiver.")
+            confirmation = st.text_input(
+                "Confirm withdrawal", key=f"confirm_input_{waiver_id}"
+            )
             c1, c2 = st.columns(2)
-            if c1.button("Yes", key=f"yes_{waiver_id}"):
-                success = withdraw_waiver(selected["_id"])
-                st.session_state.confirm_withdraw_id = None
-                if success:
-                    st.session_state.show_success = "Waiver withdrawn."
+            if c1.button("Confirm Withdraw", key=f"yes_{waiver_id}", type="primary"):
+                if confirmation.strip() != "DELETE":
+                    st.error("Confirmation text does not match 'DELETE'.")
                 else:
-                    st.session_state.show_error = "Failed to withdraw waiver."
-                st.rerun()
-            if c2.button("No", key=f"no_{waiver_id}"):
+                    success = withdraw_waiver(selected["_id"])
+                    st.session_state.confirm_withdraw_id = None
+                    if success:
+                        st.session_state.show_success = "Waiver withdrawn."
+                    else:
+                        st.session_state.show_error = "Failed to withdraw waiver."
+                    st.rerun()
+            if c2.button("Cancel", key=f"no_{waiver_id}", type="secondary"):
                 st.session_state.confirm_withdraw_id = None
                 st.rerun()
         else:
