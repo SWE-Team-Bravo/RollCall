@@ -25,21 +25,19 @@ button[kind*="primary"]:disabled * {
 }
 
 [data-testid="stExpander"] {
-    border-color: rgba(242, 242, 242, 0.18) !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
 }
 
 [data-testid="stExpander"] details {
-    background-color: #001F4D !important;
+    background-color: transparent !important;
 }
 
-.stSelectbox [data-baseweb="select"] > div,
-.stMultiSelect [data-baseweb="select"] > div {
-    background-color: #001F4D !important;
+[data-testid="stExpander"] details > summary {
+    background-color: rgba(0, 0, 0, 0.08) !important;
 }
 
-.stSelectbox [data-baseweb="select"]:hover > div,
-.stMultiSelect [data-baseweb="select"]:hover > div {
-    background-color: #00173A !important;
+[data-testid="stExpander"] details > summary:hover {
+    background-color: rgba(0, 0, 0, 0.12) !important;
 }
 </style>
 """
