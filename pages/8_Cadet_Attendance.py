@@ -4,6 +4,7 @@ from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
     get_cadet_by_user_id,
     get_user_by_email,
+    set_at_risk_email_sent,
 )
 from services.cadet_attendance import (
     load_attendance_db,
@@ -16,6 +17,7 @@ from services.cadet_attendance import (
 from services.waivers import WAIVER_STATUS_BADGE
 from utils.at_risk_email import PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD
 from utils.auth_logic import user_has_any_role
+from utils.at_risk_email import send_to_student
 from scripts.demo_admin import get_temp_cadet
 
 STATUS_BADGE = {
@@ -28,7 +30,10 @@ STATUS_BADGE = {
 WAIVER_BADGE = WAIVER_STATUS_BADGE
 
 
-def show_risk_banner(pt_absences: int, llab_absences: int):
+require_role("cadet")
+
+
+def show_risk_banner(cadet_id: str, email: str, pt_absences: int, llab_absences: int):
     at_risk = False
     if pt_absences == PT_ABSENCE_THRESHOLD - 1:
         st.error(
@@ -54,7 +59,10 @@ def show_risk_banner(pt_absences: int, llab_absences: int):
             f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
         )
         at_risk = True
-    if not at_risk:
+    if at_risk:
+        send_to_student(str(cadet_id), email, pt_absences, llab_absences)
+    else:
+        set_at_risk_email_sent(cadet_id, -1, -1)
         pt_caution = PT_ABSENCE_THRESHOLD - 2
         llab_caution = LLAB_ABSENCE_THRESHOLD - 2
         if (pt_caution > 0 and pt_absences == pt_caution) or (
@@ -93,7 +101,8 @@ def show_absence_summary(rows: list[dict]):
         delta=f"{llab_remaining} remaining" if llab_remaining > 0 else "At limit",
         delta_color="normal" if llab_remaining > 0 else "inverse",
     )
-    show_risk_banner(pt_absences, llab_absences)
+    assert cadet is not None
+    show_risk_banner(str(cadet["_id"]), email, pt_absences, llab_absences)
     st.divider()
 
 
@@ -193,8 +202,6 @@ def show_header(cadet: dict, current_user: dict):
     st.markdown(f"##### {full_name}  ·  Flight: {flight_label}")
     st.divider()
 
-
-require_role("cadet")
 
 st.title("My Attendance")
 current_user = get_current_user()

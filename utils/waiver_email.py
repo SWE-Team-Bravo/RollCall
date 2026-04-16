@@ -23,11 +23,9 @@ def build_email(
     msg["Subject"] = f"Waiver Request {status.capitalize()} — {event_name}"
 
     if status == "approved":
-        body = (
-            f"Your waiver request for {event_name} on {event_date} has been approved."
-        )
+        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been approved."
     elif status == "denied":
-        body = f"Your waiver request for {event_name} on {event_date} has been denied."
+        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been denied."
 
     if comments:
         body += f"\n\nComments: {comments}"

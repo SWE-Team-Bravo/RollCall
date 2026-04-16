@@ -4,6 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from utils.db_schema_crud import (
+    get_cadet_by_id,
     get_events_by_type,
     get_all_cadets,
     get_attendance_by_cadet,
@@ -11,6 +12,7 @@ from utils.db_schema_crud import (
     get_users_by_role,
     get_cadet_by_user_id,
     get_flight_by_commander,
+    set_at_risk_email_sent,
 )
 
 
@@ -136,6 +138,44 @@ def build_email(
     return msg
 
 
+def build_email_for_student(
+    to_email: str,
+    pt_absences: int,
+    llab_absences: int,
+) -> MIMEMultipart:
+    msg = MIMEMultipart("alternative")
+    msg["From"] = SENDER_EMAIL or ""
+    msg["To"] = to_email
+    msg["Subject"] = "At-Risk Alert"
+
+    body = "Hi,\n\n"
+
+    if pt_absences == PT_ABSENCE_THRESHOLD - 1:
+        body += (
+            f"You're one absence away from reaching the absence threshold for "
+            f"PT. Absences: {pt_absences}/{PT_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+        )
+    elif pt_absences > PT_ABSENCE_THRESHOLD - 1:
+        body += (
+            f"You have reached the absence threshold for "
+            f"PT. Absences: {pt_absences}/{PT_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+        )
+    if llab_absences == LLAB_ABSENCE_THRESHOLD - 1:
+        body += (
+            f"You're one absence away from reaching the absence threshold for "
+            f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+        )
+    elif llab_absences > LLAB_ABSENCE_THRESHOLD - 1:
+        body += (
+            f"You have reached the absence threshold for "
+            f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+        )
+
+    body += "\n\nRollCall"
+    msg.attach(MIMEText(body, "plain"))
+    return msg
+
+
 def send_email(to_email: str, msg: MIMEMultipart) -> bool:
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
@@ -144,6 +184,39 @@ def send_email(to_email: str, msg: MIMEMultipart) -> bool:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+def send_to_student(
+    cadet_id: str,
+    to_email: str,
+    pt_absences: int,
+    llab_absences: int,
+) -> bool:
+    if not SENDER_EMAIL or not SENDER_PASSWORD:
+        return False
+
+    if (
+        pt_absences < PT_ABSENCE_THRESHOLD - 1
+        and llab_absences < LLAB_ABSENCE_THRESHOLD - 1
+    ):
+        return False
+
+    cadet = get_cadet_by_id(cadet_id)
+    if cadet:
+        last_pt = cadet.get("at_risk_email_last_pt", -1)
+        last_llab = cadet.get("at_risk_email_last_llab", -1)
+        if last_pt == pt_absences and last_llab == llab_absences:
+            return False
+
+    try:
+        msg = build_email_for_student(to_email, pt_absences, llab_absences)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+        set_at_risk_email_sent(cadet_id, pt_absences, llab_absences)
         return True
     except Exception:
         return False

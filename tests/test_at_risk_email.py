@@ -1,7 +1,5 @@
-from __future__ import annotations
-
-from email.message import Message
 from unittest.mock import MagicMock, patch
+from email.mime.text import MIMEText
 
 import utils.at_risk_email as m
 from utils.at_risk_email import (
@@ -16,15 +14,9 @@ from utils.at_risk_email import (
     send_to_cadre,
     send_to_flight_commander,
     send_at_risk_emails,
+    build_email_for_student,
+    send_to_student,
 )
-
-
-def _body_from_message(msg: Message) -> str:
-    part0 = msg.get_payload(0)
-    if isinstance(part0, Message):
-        payload = part0.get_payload()
-        return payload if isinstance(payload, str) else str(payload)
-    return str(part0)
 
 
 def create_cadet(first_name="Test", last_name="Cadet", flight_id="flight1"):
@@ -283,30 +275,21 @@ def test_build_email_recipient():
 def test_build_email_has_greeting():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()], "Charles")
-        part = msg.get_payload(0)
-        assert isinstance(part, Message)
-        body = part.get_payload()
-        assert isinstance(body, str)
+        body = msg.get_payload(0).get_payload()
         assert "Hi Charles," in body
 
 
 def test_build_email_no_greeting():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()])
-        part = msg.get_payload(0)
-        assert isinstance(part, Message)
-        body = part.get_payload()
-        assert isinstance(body, str)
+        body = msg.get_payload(0).get_payload()
         assert "Hi," in body
 
 
 def test_build_email_has_thresholds():
     with patch("utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha"}):
         msg = build_email("test@rollcall.local", [make_at_risk()])
-        part = msg.get_payload(0)
-        assert isinstance(part, Message)
-        body = part.get_payload()
-        assert isinstance(body, str)
+        body = msg.get_payload(0).get_payload()
         assert str(PT_ABSENCE_THRESHOLD) in body
         assert str(LLAB_ABSENCE_THRESHOLD) in body
 
@@ -476,3 +459,130 @@ def test_send_at_risk_emails_call_both_functions():
         assert failed == 0
         mock_cadre.assert_called_once()
         mock_fc.assert_called_once()
+
+
+# ----------------- test build_email_for_student -------------------
+
+
+def test_build_email_for_student_subject():
+    msg = build_email_for_student("cadet@rollcall.local", 8, 0)
+    assert msg["Subject"] == "At-Risk Alert"
+
+
+def test_build_email_for_students_recipient():
+    msg = build_email_for_student("cadet@rollcall.local", 8, 0)
+    assert msg["To"] == "cadet@rollcall.local"
+
+
+def test_build_email_for_student_pt_warning():
+    msg = build_email_for_student("cadet@rollcall.local", PT_ABSENCE_THRESHOLD - 1, 0)
+    part = msg.get_payload(0)
+    assert isinstance(part, MIMEText)
+    body = part.get_payload()
+    assert "one absence away" in body
+    assert "PT" in body
+
+
+def test_build_email_for_student_pt_exceeded():
+    msg = build_email_for_student("cadet@rollcall.local", PT_ABSENCE_THRESHOLD, 0)
+    part = msg.get_payload(0)
+    assert isinstance(part, MIMEText)
+    body = part.get_payload()
+    assert "reached" in body
+    assert "PT" in body
+
+
+def test_build_email_for_student_llab_warning():
+    msg = build_email_for_student("cadet@rollcall.local", 0, LLAB_ABSENCE_THRESHOLD - 1)
+    part = msg.get_payload(0)
+    assert isinstance(part, MIMEText)
+    body = part.get_payload()
+    assert "one absence away" in body
+    assert "LLAB" in body
+
+
+def test_build_email_for_student_llab_exceeded():
+    msg = build_email_for_student("cadet@rollcall.local", 0, LLAB_ABSENCE_THRESHOLD)
+    part = msg.get_payload(0)
+    assert isinstance(part, MIMEText)
+    body = part.get_payload()
+    assert "reached" in body
+    assert "LLAB" in body
+
+
+def test_build_email_for_student_signature():
+    msg = build_email_for_student("cadet@rollcall.local", 8, 0)
+    part = msg.get_payload(0)
+    assert isinstance(part, MIMEText)
+    body = part.get_payload()
+    assert "RollCall" in body
+
+
+# ----------------- test send_to_student -------------------
+
+
+def test_send_to_student_returns_false_no_credentials():
+    with (
+        patch("utils.at_risk_email.SENDER_EMAIL", None),
+        patch("utils.at_risk_email.get_cadet_by_id", return_value={}),
+    ):
+        result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
+        assert result is False
+
+
+def test_send_to_student_returns_false_below_threshhold():
+    result = send_to_student("c1", "cadet@rollcall.local", 0, 0)
+    assert result is False
+
+
+def test_send_to_student_no_resend_counts_unchanged():
+    cadet = {"_id": "c1", "at_risk_email_last_pt": 8, "at_risk_email_last_llab": 0}
+    with (
+        patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
+        patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
+        patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
+    ):
+        result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
+        assert result is False
+
+
+def test_send_to_student_sends_if_counts_increased():
+    cadet = {"_id": "c1", "at_risk_email_last_pt": 8, "at_risk_email_last_llab": 0}
+    with (
+        patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
+        patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
+        patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
+        patch("utils.at_risk_email.set_at_risk_email_sent"),
+        patch("utils.at_risk_email.smtplib.SMTP_SSL") as mock_smtp,
+    ):
+        mock_smtp.return_value.__enter__.return_value = MagicMock()
+        mock_smtp.return_value.__exit__.return_value = False
+        result = send_to_student("c1", "cadet@rollcall.local", 9, 0)
+        assert result is True
+
+
+def test_send_to_student_sends_if_no_previous_record():
+    cadet = {"_id": "c1"}
+    with (
+        patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
+        patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
+        patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
+        patch("utils.at_risk_email.set_at_risk_email_sent"),
+        patch("utils.at_risk_email.smtplib.SMTP_SSL") as mock_smtp,
+    ):
+        mock_smtp.return_value.__enter__.return_value = MagicMock()
+        mock_smtp.return_value.__exit__.return_value = False
+        result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
+        assert result is True
+
+
+def test_send_to_student_returns_false_on_exception():
+    cadet = {"_id": "c1"}
+    with (
+        patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
+        patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
+        patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
+        patch("utils.at_risk_email.smtplib.SMTP_SSL", side_effect=Exception("fail")),
+    ):
+        result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
+        assert result is False
