@@ -1,9 +1,11 @@
 import streamlit as st
 from utils.auth import get_current_user, restore_session
+from utils.theme import apply_theme_overrides
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
 st.logo("static/logo.svg", size="large")
 
+apply_theme_overrides()
 
 restore_session()
 
