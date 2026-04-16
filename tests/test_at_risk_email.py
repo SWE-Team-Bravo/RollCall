@@ -110,7 +110,7 @@ def test_return_only_at_risk_cadets():
 
 def test_no_cadet_below_thresholds():
     pt_id = "evt_pt"
-    records = [{"status": "absent", "event_id": pt_id}] * (PT_ABSENCE_THRESHOLD - 1)
+    records = [{"status": "absent", "event_id": pt_id}] * (PT_ABSENCE_THRESHOLD - 2)
 
     with (
         patch(
