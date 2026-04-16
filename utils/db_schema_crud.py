@@ -621,6 +621,20 @@ def get_event_codes_by_event(event_id: str | ObjectId) -> list[dict]:
     return list(col.find({"event_id": ObjectId(event_id)}).sort("created_at", -1))
 
 
+def find_active_event_code_by_value(code: str) -> dict | None:
+    col = get_collection("event_codes")
+    if col is None:
+        return None
+    now = datetime.now(timezone.utc)
+    return col.find_one(
+        {
+            "code": code,
+            "active": True,
+            "expires_at": {"$gt": now},
+        }
+    )
+
+
 def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
     col = get_collection("cadets")
     if col is None:

@@ -71,7 +71,6 @@ def cadet_attendance(
         key=lambda r: r["start_date"] or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    print(rows)
     return rows
 
 

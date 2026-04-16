@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 
 from utils.db_schema_crud import (
     create_event_code,
     deactivate_event_code,
+    find_active_event_code_by_value,
     get_active_event_code,
 )
 
@@ -13,6 +17,18 @@ from utils.db_schema_crud import (
 def generate_code() -> str:
     """Generate a random 6-digit numeric code."""
     return f"{secrets.randbelow(1000000):06}"
+
+
+def build_expires_at(exp_date: date, exp_time: time, tz_name: str) -> datetime:
+    """Combine a local date and time with a named timezone and return a UTC datetime."""
+    tz = ZoneInfo(tz_name)
+    local_dt = datetime.combine(exp_date, exp_time).replace(tzinfo=tz)
+    return local_dt.astimezone(timezone.utc)
+
+
+def is_expiry_valid(expires_at: datetime) -> bool:
+    """Return True if expires_at is strictly in the future (UTC)."""
+    return expires_at > datetime.now(timezone.utc)
 
 
 def create_code(
@@ -49,6 +65,10 @@ def expire_code(code_id: str | ObjectId) -> bool:
     """Manually deactivate a code. Returns True on success."""
     result = deactivate_event_code(code_id)
     return result is not None and result.modified_count == 1
+
+
+def validate_code(code: str) -> dict | None:
+    return find_active_event_code_by_value(code)
 
 
 def expires_at_from_preset(preset: str) -> datetime:

@@ -1,0 +1,21 @@
+<svg width="100%" viewBox="0 0 680 300" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>RollCall logo</title>
+  <desc>RollCall app logo featuring a military star and chevron with blue and gold color scheme</desc>
+
+  <rect x="60" y="30" width="160" height="200" rx="12" fill="#001F4D"/>
+  <rect x="60" y="30" width="160" height="200" rx="12" fill="none" stroke="#FFC72C" stroke-width="2.5"/>
+
+  <polyline points="80,170 140,120 200,170" fill="none" stroke="#FFC72C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="80,195 140,145 200,195" fill="none" stroke="#FFC72C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+
+  <polygon points="140,60 147,82 170,82 152,95 159,118 140,105 121,118 128,95 110,82 133,82" fill="#FFC72C"/>
+
+  <path d="M72,148 Q40,130 30,110 Q50,118 72,130" fill="#003380" stroke="#FFC72C" stroke-width="1.2"/>
+  <path d="M208,148 Q240,130 250,110 Q230,118 208,130" fill="#003380" stroke="#FFC72C" stroke-width="1.2"/>
+
+  <text x="280" y="170" font-family="sans-serif" font-size="64" font-weight="500" letter-spacing="-1">
+    <tspan fill="#F2F2F2">Roll</tspan><tspan fill="#FFC72C">Call</tspan>
+  </text>
+  <text x="283" y="200" font-family="sans-serif" font-size="15" font-weight="400" letter-spacing="3" fill="#FFC72C">ROTC ATTENDANCE</text>
+  <line x1="283" y1="212" x2="580" y2="212" stroke="#FFC72C" stroke-width="1" opacity="0.5"/>
+</svg>

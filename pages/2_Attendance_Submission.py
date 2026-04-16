@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 import streamlit as st
-from bson import ObjectId
 
+from services.attendance import is_already_checked_in
+from services.event_codes import validate_code
 from utils.auth import get_current_user, require_auth
 from utils.db_schema_crud import (
     create_attendance_record,
-    get_attendance_by_event,
+    get_attendance_by_cadet,
     get_cadet_by_user_id,
-    get_events_by_type,
     get_user_by_email,
 )
 from services.attendance import (
@@ -26,13 +24,12 @@ from utils.auth_logic import user_has_any_role
 
 
 require_auth()
-st.title("Attendance Submission Page")
+st.title("Attendance Submission")
 
 current_user = get_current_user()
 assert current_user is not None
 
-email = current_user["email"]
-user = get_user_by_email(email)
+user = get_user_by_email(str(current_user.get("email", "") or "").strip())
 if not user:
     st.error("Could not find your account.")
     st.stop()
@@ -47,109 +44,31 @@ if not cadet:
 else: 
     assert cadet is not None
 
-now = datetime.now(timezone.utc)
-events = get_events_by_type("pt") + get_events_by_type("lab")
-active_events = [e for e in events if is_within_checkin_window(e, now)]
+cadet_id = cadet["_id"]
 
-CODE_TTL_MINUTES = 15
+code = st.text_input("Enter event code", max_chars=6, placeholder="000000")
 
-
-def _get_current_cadet_id() -> ObjectId | None:
-    current_user = get_current_user()
-    if not current_user:
-        return None
-
-    email = str(current_user.get("email", "") or "").strip()
-    if not email:
-        return None
-
-    user_doc = get_user_by_email(email)
-    if not user_doc:
-        return None
-    cadet_doc = get_cadet_by_user_id(user_doc["_id"])
-    if not cadet_doc:
-        return None
-
-    cadet_id = cadet_doc.get("_id")
-    return cadet_id if isinstance(cadet_id, ObjectId) else None
-
-
-cadet_id = _get_current_cadet_id()
-
-# Generate password once per session
-if "password" not in st.session_state:
-    st.session_state.password = generate_attendance_password()
-    st.session_state.password_created_at = datetime.now(timezone.utc)
-    st.session_state.password_expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=CODE_TTL_MINUTES
-    )
-    issue_checkin_code(
-        code=st.session_state.password,
-        ttl_minutes=CODE_TTL_MINUTES,
-        kind="attendance_submission",
-        now=st.session_state.password_created_at,
-    )
-    st.session_state.correctPassword = False
-password = st.session_state.password
-correctPassword = st.session_state.correctPassword
-expires_at = st.session_state.get("password_expires_at")
-
-# Writes the password for testing purposes
-st.info("testing password: " + password)
-
-# Current day of the week
-weekDay = datetime.now().strftime("%A")
-# st.info(weekDay)
-
-# Default message for attendance status
-attendanceStatus = st.empty()
-if correctPassword:
-    attendanceStatus.markdown("Attendance Status: Reported")
-else:
-    attendanceStatus.markdown("Attendance Status: Needs Reported")
-
-# Password submission and checking
-answer = st.text_input("Password", type="password")
-
-if st.button("Report In"):
-    now = datetime.now(timezone.utc)
-
-    if correctPassword:
-        outcome = "duplicate"
+if st.button("Report In", type="primary"):
+    if not code.strip():
+        st.error("Please enter a code.")
     else:
-        db_outcome = validate_checkin_code(
-            code=answer,
-            kind="attendance_submission",
-            now=now,
-        )
-
-        if db_outcome in {"success", "expired_code", "invalid_code"}:
-            outcome = db_outcome
+        event_code = validate_code(code.strip())
+        if event_code is None:
+            st.error("Invalid or expired code.")
         else:
-            outcome = "invalid_code"
-
-        if outcome == "invalid_code" and isinstance(expires_at, datetime):
-            if now > expires_at:
-                outcome = "expired_code"
-
-    if cadet_id is not None:
-        log_checkin_attempt(
-            cadet_id=cadet_id,
-            outcome=outcome,
-            attempted_code=answer,
-            source="attendance_submission",
-            now=now,
-            metadata={"ttl_minutes": CODE_TTL_MINUTES},
-        )
-
-    if outcome == "success":
-        st.success("correct password")
-        st.balloons()
-        st.session_state.correctPassword = True
-        attendanceStatus.markdown("Attendance Status: Reported")
-    elif outcome == "duplicate":
-        st.info("Already reported in this session.")
-    elif outcome == "expired_code":
-        st.error("Code expired. Please refresh to get a new code.")
-    else:
-        st.error("wrong password")
+            event_id = event_code["event_id"]
+            existing = get_attendance_by_cadet(cadet_id)
+            if is_already_checked_in(str(event_id), str(cadet_id), existing):
+                st.info("You are already checked in for this event.")
+            else:
+                result = create_attendance_record(
+                    event_id=event_id,
+                    cadet_id=cadet_id,
+                    status="present",
+                    recorded_by_user_id=user["_id"],
+                )
+                if result is None:
+                    st.error("Database unavailable. Could not record attendance.")
+                else:
+                    st.success("Checked in!")
+                    st.balloons()

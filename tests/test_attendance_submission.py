@@ -105,9 +105,7 @@ def _go_to_attendance(browser):
         "nav.2",
         browser,
         10,
-        lambda d: (
-            "Attendance Submission Page" in d.find_element(By.TAG_NAME, "body").text
-        ),
+        lambda d: "Attendance Submission" in d.find_element(By.TAG_NAME, "body").text,
         "couldn't verify being on the attendance page",
     )
 
@@ -242,251 +240,171 @@ def test_move_to_attendance_submission_page(browser):
 
 
 # Test 7
-def test_check_for_attendance_password_and_box(browser):
+def test_check_for_event_code_input(browser):
     _go_to_attendance(browser)
     _wait(
-        "Test 7.6",
+        "Test 7.1",
         browser,
         10,
-        lambda d: "Password" in d.find_element(By.TAG_NAME, "body").text,
-        "couldn't find password label",
+        lambda d: "Enter event code" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find event code label",
     )
     _wait(
-        "Test 7.7",
+        "Test 7.2",
         browser,
         10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
-        "couldn't find password text input",
+        lambda d: d.find_element(
+            By.CSS_SELECTOR, "input[aria-label='Enter event code']"
+        ),
+        "couldn't find event code text input",
     )
 
 
 # Test 8
-def test_check_for_attendance_status(browser):
+def test_check_for_report_in_button(browser):
     _go_to_attendance(browser)
     _wait(
         "Test 8.1",
         browser,
         10,
-        lambda d: (
-            "Attendance Status: Needs Reported"
-            in d.find_element(By.TAG_NAME, "body").text
+        lambda d: d.find_element(
+            By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
         ),
-        "couldn't find the attendance needs reported text",
+        "couldn't find the Report In button",
     )
 
 
 # Test 9
-def test_check_for_report_in_button(browser):
-    _go_to_attendance(browser)
-    _wait(
-        "Test 9.6",
-        browser,
-        10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "button[kind='secondary']"),
-        "couldn't find the report attendance button",
-    )
-
-
-# Test 10
-def test_attendance_status_after_button_push_without_password(browser):
+def test_empty_code_shows_error(browser):
     _go_to_attendance(browser)
     button = _wait(
-        "Test 10.6",
+        "Test 9.1",
         browser,
         10,
         lambda d: d.find_element(
             By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
         ),
-        "couldn't find the report attendance button",
+        "couldn't find the Report In button",
     )
     sleep(1)
     button.click()
     _wait(
-        "Test 10.7",
+        "Test 9.2",
         browser,
         10,
-        lambda d: (
-            "Attendance Status: Needs Reported"
-            in d.find_element(By.TAG_NAME, "body").text
-        ),
-        "couldn't find the attendance status: needs reported text",
+        lambda d: "Please enter a code" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find empty-code error message",
     )
 
 
-# Test 11
-def test_password_works_and_changes_status(browser):
-    _login(browser, "cadet1")
-
-    # Navigate to Account Settings via the sidebar nav link
-    _wait(
-        "Test 11.0",
+# Test 10
+def test_invalid_code_shows_error(browser):
+    _go_to_attendance(browser)
+    code_input = _wait(
+        "Test 10.1",
         browser,
         10,
         lambda d: d.find_element(
-            By.CSS_SELECTOR, "a[href='http://localhost:8501/Account_Settings']"
+            By.CSS_SELECTOR, "input[aria-label='Enter event code']"
         ),
-        "couldn't find Account Settings nav link",
-    ).click()
-    _wait(
-        "Test 11.1",
-        browser,
-        10,
-        lambda d: "Account Settings" in d.find_element(By.TAG_NAME, "body").text,
-        "couldn't load Account Settings page",
+        "couldn't find event code input",
     )
+    code_input.send_keys("000000")
     _wait(
-        "Test 11.2",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "input[aria-label='Current Password']"
-        ),
-        "couldn't find Current Password field",
-    ).send_keys("password")
-    _wait(
-        "Test 11.3",
-        browser,
-        10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='New Password']"),
-        "couldn't find New Password field",
-    ).send_keys("newpassword1")
-    _wait(
-        "Test 11.4",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "input[aria-label='Confirm New Password']"
-        ),
-        "couldn't find Confirm New Password field",
-    ).send_keys("newpassword1")
-    _wait(
-        "Test 11.5",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.XPATH, "//button[.//*[contains(text(), 'Update Password')]]"
-        ),
-        "couldn't find Update Password button",
-    ).click()
-    _wait(
-        "Test 11.6",
-        browser,
-        10,
-        lambda d: (
-            "Password updated successfully" in d.find_element(By.TAG_NAME, "body").text
-        ),
-        "password change did not succeed",
-    )
-
-    # Navigate to attendance via nav link and check in with the hint code
-    _wait(
-        "Test 11.7",
-        browser,
-        10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "a[href='http://localhost:8501/']"),
-        "couldn't find Attendance nav link",
-    ).click()
-    _wait(
-        "Test 11.8",
-        browser,
-        10,
-        lambda d: (
-            "Attendance Submission Page" in d.find_element(By.TAG_NAME, "body").text
-        ),
-        "couldn't load Attendance Submission page",
-    )
-    passwordbox = _wait(
-        "Test 11.9",
-        browser,
-        10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='Password']"),
-        "couldn't find the password box",
-    )
-    hint = _wait(
-        "Test 11.10",
-        browser,
-        10,
-        lambda d: d.find_element(By.XPATH, "//p[contains(text(), 'testing')]"),
-        "couldn't find the testing password hint",
-    )
-    passwordbox.send_keys(hint.text[-6:])
-    _wait(
-        "Test 11.11",
+        "Test 10.2",
         browser,
         10,
         lambda d: d.find_element(
             By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
         ),
-        "couldn't find the report attendance button",
+        "couldn't find the Report In button",
     ).click()
     _wait(
-        "Test 11.12",
+        "Test 10.3",
         browser,
         10,
-        lambda d: (
-            "Attendance Status: Reported" in d.find_element(By.TAG_NAME, "body").text
-            or "already checked in" in d.find_element(By.TAG_NAME, "body").text
-        ),
-        "couldn't find reported status or already-checked-in message",
+        lambda d: "Invalid or expired code" in d.find_element(By.TAG_NAME, "body").text,
+        "couldn't find invalid code error message",
     )
 
-    # Teardown: reset password back to original so the test is repeatable
-    _wait(
-        "Test 11.13",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "a[href='http://localhost:8501/Account_Settings']"
-        ),
-        "couldn't find Account Settings nav link for teardown",
-    ).click()
-    _wait(
-        "Test 11.14",
-        browser,
-        10,
-        lambda d: "Account Settings" in d.find_element(By.TAG_NAME, "body").text,
-        "couldn't load Account Settings page for teardown",
-    )
-    _wait(
-        "Test 11.15",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "input[aria-label='Current Password']"
-        ),
-        "couldn't find Current Password field for teardown",
-    ).send_keys("newpassword1")
-    _wait(
-        "Test 11.16",
-        browser,
-        10,
-        lambda d: d.find_element(By.CSS_SELECTOR, "input[aria-label='New Password']"),
-        "couldn't find New Password field for teardown",
-    ).send_keys("password")
-    _wait(
-        "Test 11.17",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.CSS_SELECTOR, "input[aria-label='Confirm New Password']"
-        ),
-        "couldn't find Confirm New Password field for teardown",
-    ).send_keys("password")
-    _wait(
-        "Test 11.18",
-        browser,
-        10,
-        lambda d: d.find_element(
-            By.XPATH, "//button[.//*[contains(text(), 'Update Password')]]"
-        ),
-        "couldn't find Update Password button for teardown",
-    ).click()
-    _wait(
-        "Test 11.19",
-        browser,
-        10,
-        lambda d: (
-            "Password updated successfully" in d.find_element(By.TAG_NAME, "body").text
-        ),
-        "password teardown did not succeed",
-    )
+
+# Test 11
+def test_checked_in_success_with_valid_code(browser):
+    from pymongo import MongoClient
+    from config.settings import MONGODB_URI, MONGODB_DB
+    from datetime import datetime, timedelta, timezone
+    from bson import ObjectId
+
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
+        client.server_info()
+    except Exception:
+        pytest.skip("MongoDB not reachable")
+
+    db = client[MONGODB_DB]
+    event_id = ObjectId()
+    code_doc = {
+        "code": "999888",
+        "event_id": event_id,
+        "event_type": "pt",
+        "event_date": "2026-04-12",
+        "created_by_user_id": ObjectId(),
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+        "active": True,
+    }
+    inserted = db["event_codes"].insert_one(code_doc)
+
+    try:
+        _login(browser, "cadet1")
+        _wait(
+            "Test 11.1",
+            browser,
+            10,
+            lambda d: d.find_element(
+                By.CSS_SELECTOR, "a[href='http://localhost:8501/']"
+            ),
+            "couldn't find Attendance nav link",
+        ).click()
+        _wait(
+            "Test 11.2",
+            browser,
+            10,
+            lambda d: (
+                "Attendance Submission" in d.find_element(By.TAG_NAME, "body").text
+            ),
+            "couldn't load Attendance Submission page",
+        )
+        code_input = _wait(
+            "Test 11.3",
+            browser,
+            10,
+            lambda d: d.find_element(
+                By.CSS_SELECTOR, "input[aria-label='Enter event code']"
+            ),
+            "couldn't find event code input",
+        )
+        code_input.send_keys("999888")
+        _wait(
+            "Test 11.4",
+            browser,
+            10,
+            lambda d: d.find_element(
+                By.XPATH, "//button[.//*[contains(text(), 'Report In')]]"
+            ),
+            "couldn't find Report In button",
+        ).click()
+        _wait(
+            "Test 11.5",
+            browser,
+            10,
+            lambda d: (
+                "Checked in" in d.find_element(By.TAG_NAME, "body").text
+                or "already checked in" in d.find_element(By.TAG_NAME, "body").text
+            ),
+            "couldn't find checked-in confirmation",
+        )
+    finally:
+        db["event_codes"].delete_one({"_id": inserted.inserted_id})
+        db["attendance_records"].delete_many({"event_id": event_id})
+        client.close()
