@@ -8,8 +8,14 @@ require_role("admin", "cadre")
 
 if "confirm_delete_event_id" not in st.session_state:
     st.session_state.confirm_delete_event_id = None
+if "_success_msg" not in st.session_state:
+    st.session_state["_success_msg"] = None
 
 st.title("Event Management")
+
+if st.session_state["_success_msg"]:
+    st.success(st.session_state["_success_msg"])
+    st.session_state["_success_msg"] = None
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,7 +66,7 @@ with st.expander("Event Schedule Configuration", expanded=False):
 
     if st.button("Save Schedule Configuration"):
         if save_event_config(pt_days, llab_days):
-            st.success("Schedule configuration saved!")
+            st.session_state["_success_msg"] = "Schedule configuration saved!"
             config = get_event_config() or {}  # refresh so create form picks it up
             st.rerun()
         else:
@@ -103,7 +109,7 @@ if submitted:
         user = get_current_user()
         user_id = user.get("email", "unknown") if user else "unknown"
         if create_event(event_name.strip(), event_type, start_date, end_date, user_id):
-            st.success(f"Event '{event_name}' created successfully!")
+            st.session_state["_success_msg"] = f"Event '{event_name}' created successfully!"
             st.rerun()
         else:
             st.error("Database unavailable — could not create event.")
@@ -154,11 +160,11 @@ else:
         if c1.button("Yes, delete", type="primary"):
             if delete_event(selected_event["_id"]):
                 st.session_state.confirm_delete_event_id = None
-                st.success("Event deleted.")
+                st.session_state["_success_msg"] = "Event deleted."
                 st.rerun()
             else:
                 st.error("Could not delete event.")
-        if c2.button("Cancel"):
+        if c2.button("Cancel", type="secondary"):
             st.session_state.confirm_delete_event_id = None
             st.rerun()
     else:

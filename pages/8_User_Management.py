@@ -93,13 +93,13 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
         else:
             result = update_user(existing_user["_id"], updates)
             if result is not None:
-                st.success("User updated successfully.")
+                st.session_state["_success_msg"] = "User updated successfully."
                 st.session_state["admin_users_editing"] = None
                 st.rerun()
             else:
                 st.error("Failed to update user (database unavailable).")
 
-    if cancel_btn.button("Cancel", key=f"cancel_{user_id}"):
+    if cancel_btn.button("Cancel", key=f"cancel_{user_id}", type="secondary"):
         st.session_state["admin_users_editing"] = None
         st.rerun()
 
@@ -130,14 +130,14 @@ def _render_delete_confirmation(
         else:
             result = delete_user(existing_user["_id"])
             if result is not None:
-                st.success("User deleted successfully.")
+                st.session_state["_success_msg"] = "User deleted successfully."
             else:
                 st.error("Failed to delete user (database unavailable).")
 
         st.session_state["admin_users_confirm_delete"] = None
         st.rerun()
 
-    if cancel_btn.button("Cancel", key=f"cancel_delete_{summary['id']}"):
+    if cancel_btn.button("Cancel", key=f"cancel_delete_{summary['id']}", type="secondary"):
         st.session_state["admin_users_confirm_delete"] = None
         st.rerun()
 
@@ -145,6 +145,12 @@ def _render_delete_confirmation(
 require_role("admin")
 st.title("User Management")
 st.caption("Create, edit, and delete user accounts and roles.")
+
+if "_success_msg" not in st.session_state:
+    st.session_state["_success_msg"] = None
+if st.session_state["_success_msg"]:
+    st.success(st.session_state["_success_msg"])
+    st.session_state["_success_msg"] = None
 
 
 # ----------------------------

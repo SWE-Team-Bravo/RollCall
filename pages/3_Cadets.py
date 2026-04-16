@@ -103,11 +103,13 @@ def edit_cadet(cadet):
                 },
             )
             st.session_state.editing_id = None
+            st.session_state.success_msg = "Cadet updated successfully!"
+            st.session_state.success_time = time.time()
             st.rerun()
         else:
             st.error(msg)
 
-    if col2.button("Cancel", key=f"cancel_{cadet_id}"):
+    if col2.button("Cancel", key=f"cancel_{cadet_id}", type="secondary"):
         st.session_state.editing_id = None
         st.rerun()
 
@@ -115,21 +117,26 @@ def edit_cadet(cadet):
 def remove_cadet(cadet):
     cadet_id = str(cadet["_id"])
     st.warning(
-        f"Are you sure you want to delete {cadet.get('first_name', '')} {cadet.get('last_name', '')}?"
+        f"Type DELETE below to permanently delete "
+        f"{cadet.get('first_name', '')} {cadet.get('last_name', '')}."
     )
+    confirmation = st.text_input("Confirm delete", key=f"confirm_input_{cadet_id}")
     col1, col2, spacer = st.columns([2, 2, 10])
 
-    if col1.button("Yes", key=f"confirm_{cadet_id}"):
-        result = delete_cadet(cadet_id)
-        if result and result.deleted_count > 0:
-            st.session_state.confirm_delete_id = None
-            st.session_state.success_msg = "Cadet deleted successfully!"
-            st.session_state.success_time = time.time()
-            st.rerun()
+    if col1.button("Confirm Delete", key=f"confirm_{cadet_id}", type="primary"):
+        if confirmation.strip() != "DELETE":
+            st.error("Confirmation text does not match 'DELETE'.")
         else:
-            st.error("Failed to delete cadet.")
+            result = delete_cadet(cadet_id)
+            if result and result.deleted_count > 0:
+                st.session_state.confirm_delete_id = None
+                st.session_state.success_msg = "Cadet deleted successfully!"
+                st.session_state.success_time = time.time()
+                st.rerun()
+            else:
+                st.error("Failed to delete cadet.")
 
-    if col2.button("Cancel", key=f"canceldelete_{cadet_id}"):
+    if col2.button("Cancel", key=f"canceldelete_{cadet_id}", type="secondary"):
         st.session_state.confirm_delete_id = None
         st.rerun()
 
@@ -144,7 +151,7 @@ def show_cadets():
 
     cadets = get_all_cadets()
     if not cadets:
-        st.warning("No cadets found.")
+        st.info("No cadets found.")
         return
 
     if st.session_state.success_time:

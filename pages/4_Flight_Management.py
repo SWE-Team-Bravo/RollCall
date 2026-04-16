@@ -18,6 +18,11 @@ st.title("Flight Management")
 
 if "confirm_delete_flight_id" not in st.session_state:
     st.session_state.confirm_delete_flight_id = None
+if "_success_msg" not in st.session_state:
+    st.session_state["_success_msg"] = None
+if st.session_state["_success_msg"]:
+    st.success(st.session_state["_success_msg"])
+    st.session_state["_success_msg"] = None
 
 # ----------------------------
 # Create Flight Section
@@ -38,7 +43,7 @@ with st.expander("Create New Flight", expanded=False):
         selected_commander = cadet_display_map.get(selected_display)
         if flight_name and selected_commander:
             create_flight(flight_name, selected_commander)
-            st.success("Flight created successfully!")
+            st.session_state["_success_msg"] = "Flight created successfully!"
             st.rerun()
         else:
             st.warning("Please fill all fields.")
@@ -91,7 +96,7 @@ else:
             if st.button("Assign to Flight", key=f"btn_{flight_id}"):
                 if cadet_to_assign:
                     assign_cadet_to_flight(cadet_to_assign, flight["_id"])
-                    st.success("Cadet assigned.")
+                    st.session_state["_success_msg"] = "Cadet assigned."
                     st.rerun()
 
             st.markdown("**Cadets in this Flight**")
@@ -121,7 +126,7 @@ else:
                     delete_flight(flight["_id"])
                     st.session_state.confirm_delete_flight_id = None
                     st.rerun()
-                if c2.button("Cancel", key=f"cancel_del_{flight_id}"):
+                if c2.button("Cancel", key=f"cancel_del_{flight_id}", type="secondary"):
                     st.session_state.confirm_delete_flight_id = None
                     st.rerun()
             else:
