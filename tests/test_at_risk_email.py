@@ -124,6 +124,67 @@ def test_no_cadet_below_thresholds():
         assert result == []
 
 
+def test_approved_waiver_absence_does_not_count_for_at_risk():
+    pt_id = "evt_pt"
+    records = [
+        {"_id": f"rec{i}", "status": "absent", "event_id": pt_id}
+        for i in range(PT_ABSENCE_THRESHOLD - 1)
+    ]
+    waivers = [
+        {
+            "attendance_record_id": records[0]["_id"],
+            "status": "approved",
+        }
+    ]
+
+    with (
+        patch(
+            "utils.at_risk_email.get_events_by_type",
+            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+        ),
+        patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
+        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
+        patch(
+            "utils.at_risk_email.get_waivers_by_attendance_records",
+            return_value=waivers,
+            create=True,
+        ),
+    ):
+        result = get_at_risk_cadets()
+        assert result == []
+
+
+def test_pending_waiver_absence_still_counts_for_at_risk():
+    pt_id = "evt_pt"
+    records = [
+        {"_id": f"rec{i}", "status": "absent", "event_id": pt_id}
+        for i in range(PT_ABSENCE_THRESHOLD - 1)
+    ]
+    waivers = [
+        {
+            "attendance_record_id": records[0]["_id"],
+            "status": "pending",
+        }
+    ]
+
+    with (
+        patch(
+            "utils.at_risk_email.get_events_by_type",
+            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+        ),
+        patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
+        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
+        patch(
+            "utils.at_risk_email.get_waivers_by_attendance_records",
+            return_value=waivers,
+            create=True,
+        ),
+    ):
+        result = get_at_risk_cadets()
+        assert len(result) == 1
+        assert result[0]["pt_absences"] == PT_ABSENCE_THRESHOLD - 1
+
+
 def test_no_present_records():
     pt_id = "evt_pt"
     records = [{"status": "present", "event_id": pt_id}] * PT_ABSENCE_THRESHOLD
