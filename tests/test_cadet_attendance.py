@@ -59,6 +59,18 @@ def test_cadet_attendance_waivers():
     assert rows[0]["waiver_status"] == "pending"
 
 
+def test_cadet_attendance_approved_waiver_is_waived():
+    records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
+    events = [
+        {"_id": "evt1", "event_name": "PT", "event_type": "pt", "start_date": _dt(1)}
+    ]
+    waivers = [{"_id": "w1", "attendance_record_id": "rec1", "status": "approved"}]
+
+    rows = cadet_attendance(records, events, waivers)
+
+    assert rows[0]["status"] == "waived"
+
+
 def test_cadet_attendance_sort_newest():
     records = [
         {"_id": "rec1", "event_id": "evt1", "status": "present"},
@@ -167,6 +179,12 @@ def test_count_absences_ignores_other_types():
     assert count_absences(rows, "lab") == 1
 
 
+def test_count_absences_ignores_approved_waivers():
+    rows = [{"event_type": "PT", "status": "absent", "waiver_status": "approved"}]
+
+    assert count_absences(rows, "pt") == 0
+
+
 # ------------------ test filter_rows --------------------
 
 
@@ -197,6 +215,28 @@ def test_filter_rows_excused_waived():
     result = filter_rows(rows, "Excused", "All")
     assert len(result) == 2
     assert all(r["status"] in ("excused", "waived") for r in result)
+
+
+def test_filter_rows_excused_includes_approved_waiver_absence():
+    rows = [
+        {"event_type": "PT", "status": "absent", "waiver_status": "approved"},
+        {"event_type": "PT", "status": "absent"},
+    ]
+
+    result = filter_rows(rows, "Excused", "All")
+
+    assert result == [rows[0]]
+
+
+def test_filter_rows_absent_excludes_approved_waiver_absence():
+    rows = [
+        {"event_type": "PT", "status": "absent", "waiver_status": "approved"},
+        {"event_type": "PT", "status": "absent"},
+    ]
+
+    result = filter_rows(rows, "Absent", "All")
+
+    assert result == [rows[1]]
 
 
 def test_filter_rows_pt():

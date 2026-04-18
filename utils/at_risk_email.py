@@ -8,12 +8,14 @@ from utils.db_schema_crud import (
     get_events_by_type,
     get_all_cadets,
     get_attendance_by_cadet,
+    get_waivers_by_attendance_records,
     get_flight_by_id,
     get_users_by_role,
     get_cadet_by_user_id,
     get_flight_by_commander,
     set_at_risk_email_sent,
 )
+from utils.attendance_status import get_effective_attendance_status
 
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
@@ -30,16 +32,32 @@ def get_at_risk_cadets() -> list[dict]:
     at_risk = []
     for cadet in get_all_cadets():
         records = get_attendance_by_cadet(cadet["_id"])
+        record_ids = [r["_id"] for r in records if r.get("_id") is not None]
+        waivers_by_record_id = {
+            waiver["attendance_record_id"]: waiver
+            for waiver in get_waivers_by_attendance_records(record_ids)
+            if waiver.get("attendance_record_id") is not None
+        }
 
         pt_absences = sum(
             1
             for r in records
-            if r.get("status") == "absent" and r.get("event_id") in pt_events_ids
+            if get_effective_attendance_status(
+                r.get("status"),
+                waivers_by_record_id.get(r.get("_id"), {}).get("status"),
+            )
+            == "absent"
+            and r.get("event_id") in pt_events_ids
         )
         llab_absences = sum(
             1
             for r in records
-            if r.get("status") == "absent" and r.get("event_id") in llab_events_ids
+            if get_effective_attendance_status(
+                r.get("status"),
+                waivers_by_record_id.get(r.get("_id"), {}).get("status"),
+            )
+            == "absent"
+            and r.get("event_id") in llab_events_ids
         )
 
         if (

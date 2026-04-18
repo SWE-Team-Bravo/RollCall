@@ -6,6 +6,7 @@ from utils.db_schema_crud import (
     get_waivers_by_attendance_records,
     get_flight_by_id,
 )
+from utils.attendance_status import get_effective_attendance_status
 
 
 def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict]]:
@@ -33,7 +34,12 @@ def count_absences(rows: list[dict], event_type: str) -> int:
     return sum(
         1
         for r in rows
-        if r["event_type"].lower() == event_type.lower() and r["status"] == "absent"
+        if r["event_type"].lower() == event_type.lower()
+        and get_effective_attendance_status(
+            r.get("status"),
+            r.get("waiver_status"),
+        )
+        == "absent"
     )
 
 
@@ -53,16 +59,20 @@ def cadet_attendance(
         if not event:
             continue
 
+        waiver_status = (waiver.get("status") or "").lower() if waiver else None
+        status = get_effective_attendance_status(
+            record.get("status") or "—",
+            waiver_status,
+        )
+
         rows.append(
             {
                 "record_id": str(record.get("_id", "")),
                 "event_name": event.get("event_name", "—"),
                 "event_type": (event.get("event_type") or "—").upper(),
                 "start_date": event.get("start_date"),
-                "status": (record.get("status") or "—").lower(),
-                "waiver_status": (waiver.get("status") or "").lower()
-                if waiver
-                else None,
+                "status": status,
+                "waiver_status": waiver_status,
                 "waiver_eligible": (event.get("event_type") or "").lower()
                 in ("pt", "lab"),
             }
@@ -78,9 +88,25 @@ def filter_rows(rows: list[dict], filter_status: str, filter_type: str) -> list[
     filtered = rows
     if filter_status != "All":
         if filter_status.lower() == "excused":
-            filtered = [r for r in filtered if r["status"] in ("excused", "waived")]
+            filtered = [
+                r
+                for r in filtered
+                if get_effective_attendance_status(
+                    r.get("status"),
+                    r.get("waiver_status"),
+                )
+                in ("excused", "waived")
+            ]
         else:
-            filtered = [r for r in filtered if r["status"] == filter_status.lower()]
+            filtered = [
+                r
+                for r in filtered
+                if get_effective_attendance_status(
+                    r.get("status"),
+                    r.get("waiver_status"),
+                )
+                == filter_status.lower()
+            ]
     if filter_type != "All":
         filter_type = "LAB" if filter_type == "LLAB" else filter_type
         filtered = [r for r in filtered if r["event_type"] == filter_type]

@@ -11,4 +11,5 @@ dependencies = [
     "selenium>=4.43.0",
     "streamlit>=1.56.0",
     "streamlit-authenticator>=0.4.2",
+    "pymongo>=4.16.0",
 ]
