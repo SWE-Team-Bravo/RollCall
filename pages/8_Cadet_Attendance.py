@@ -18,6 +18,7 @@ from services.waivers import WAIVER_STATUS_BADGE
 from utils.at_risk_email import PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD
 from utils.auth_logic import user_has_any_role
 from utils.at_risk_email import send_to_student
+from utils.st_helpers import require
 from scripts.demo_admin import get_temp_cadet
 
 STATUS_BADGE = {
@@ -212,11 +213,7 @@ if not email:
     st.error("Could not find an account with this email.")
     st.stop()
 
-user = get_user_by_email(email)
-if not user:
-    st.error("Could not find an account with this email.")
-    st.stop()
-    raise RuntimeError("Unreachable")
+user = require(get_user_by_email(email), "Could not find an account with this email.")
 
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:

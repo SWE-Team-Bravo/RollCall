@@ -23,6 +23,7 @@ from utils.db_schema_crud import (
 from datetime import date, datetime, timedelta
 from utils.auth_logic import user_has_any_role
 from scripts.demo_admin import get_temp_cadet
+from utils.st_helpers import require
 
 
 STATUS_BADGE = WAIVER_STATUS_BADGE
@@ -386,11 +387,7 @@ if not email:
     st.error("Could not find an account with this email.")
     st.stop()
 
-user = get_user_by_email(email)
-if not user:
-    st.error("Could not find an account with this email.")
-    st.stop()
-    raise RuntimeError("Unreachable")
+user = require(get_user_by_email(email), "Could not find an account with this email.")
 
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
