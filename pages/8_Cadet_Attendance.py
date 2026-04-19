@@ -216,7 +216,7 @@ user = get_user_by_email(email)
 if not user:
     st.error("Could not find an account with this email.")
     st.stop()
-assert user is not None
+    raise RuntimeError("Unreachable")
 
 cadet = get_cadet_by_user_id(user["_id"])
 if not cadet:
