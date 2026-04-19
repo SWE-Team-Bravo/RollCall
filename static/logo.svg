@@ -14,7 +14,7 @@
   <path d="M208,148 Q240,130 250,110 Q230,118 208,130" fill="#003380" stroke="#FFC72C" stroke-width="1.2"/>
 
   <text x="280" y="170" font-family="sans-serif" font-size="64" font-weight="500" letter-spacing="-1">
-    <tspan fill="#F2F2F2">Roll</tspan><tspan fill="#FFC72C">Call</tspan>
+    <tspan fill="#FFC72C">Roll</tspan><tspan fill="#FFC72C">Call</tspan>
   </text>
   <text x="283" y="200" font-family="sans-serif" font-size="15" font-weight="400" letter-spacing="3" fill="#FFC72C">ROTC ATTENDANCE</text>
   <line x1="283" y1="212" x2="580" y2="212" stroke="#FFC72C" stroke-width="1" opacity="0.5"/>
