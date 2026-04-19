@@ -24,7 +24,11 @@ from datetime import date, datetime, timedelta
 from utils.auth_logic import user_has_any_role
 from scripts.demo_admin import get_temp_cadet
 
+
 STATUS_BADGE = WAIVER_STATUS_BADGE
+
+
+require_role("cadet")
 
 
 def load_waiver_data(cadet_id) -> tuple[list[dict], dict, dict]:
@@ -354,7 +358,6 @@ def waiver_form(
         st.switch_page("pages/8_Cadet_Attendance.py")
 
 
-require_role("cadet")
 st.title("My Waivers")
 
 if "waiver_record_id" not in st.session_state:
