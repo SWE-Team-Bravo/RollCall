@@ -29,15 +29,25 @@ def get_at_risk_cadets() -> list[dict]:
     pt_events_ids = {e["_id"] for e in get_events_by_type("pt")}
     llab_events_ids = {e["_id"] for e in get_events_by_type("lab")}
 
+    cadets = get_all_cadets()
+    records_by_cadet_id = {
+        cadet["_id"]: get_attendance_by_cadet(cadet["_id"]) for cadet in cadets
+    }
+    all_record_ids = [
+        record["_id"]
+        for records in records_by_cadet_id.values()
+        for record in records
+        if record.get("_id") is not None
+    ]
+    waivers_by_record_id = {
+        waiver["attendance_record_id"]: waiver
+        for waiver in get_waivers_by_attendance_records(all_record_ids)
+        if waiver.get("attendance_record_id") is not None
+    }
+
     at_risk = []
-    for cadet in get_all_cadets():
-        records = get_attendance_by_cadet(cadet["_id"])
-        record_ids = [r["_id"] for r in records if r.get("_id") is not None]
-        waivers_by_record_id = {
-            waiver["attendance_record_id"]: waiver
-            for waiver in get_waivers_by_attendance_records(record_ids)
-            if waiver.get("attendance_record_id") is not None
-        }
+    for cadet in cadets:
+        records = records_by_cadet_id[cadet["_id"]]
 
         pt_absences = sum(
             1

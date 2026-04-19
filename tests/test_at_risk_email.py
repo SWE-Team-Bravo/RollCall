@@ -147,7 +147,6 @@ def test_approved_waiver_absence_does_not_count_for_at_risk():
         patch(
             "utils.at_risk_email.get_waivers_by_attendance_records",
             return_value=waivers,
-            create=True,
         ),
     ):
         result = get_at_risk_cadets()
@@ -177,7 +176,6 @@ def test_pending_waiver_absence_still_counts_for_at_risk():
         patch(
             "utils.at_risk_email.get_waivers_by_attendance_records",
             return_value=waivers,
-            create=True,
         ),
     ):
         result = get_at_risk_cadets()
