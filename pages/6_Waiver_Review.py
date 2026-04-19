@@ -35,7 +35,7 @@ approver_user = get_user_by_email(approver_email)
 if approver_user is None:
     st.error("Could not resolve approver user in database.")
     st.stop()
-assert approver_user is not None
+    raise RuntimeError("Unreachable")
 approver_id = approver_user["_id"]
 
 status_filter = st.selectbox(
