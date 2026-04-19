@@ -16,6 +16,7 @@ from utils.db_schema_crud import (
     set_at_risk_email_sent,
 )
 from utils.attendance_status import get_effective_attendance_status
+from utils.names import format_full_name
 
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
@@ -107,7 +108,7 @@ def build_rows(cadets: list[dict]) -> str:
     rows = ""
     for c in cadets:
         cadet = c["cadet"]
-        name = f"{cadet.get('first_name', '')} {cadet.get('last_name', '')}".strip()
+        name = format_full_name(cadet)
 
         flight = (
             get_flight_by_id(cadet["flight_id"]) if cadet.get("flight_id") else None

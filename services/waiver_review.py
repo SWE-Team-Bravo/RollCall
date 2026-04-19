@@ -15,6 +15,7 @@ from utils.db_schema_crud import (
     update_waiver,
 )
 
+from utils.names import format_full_name
 from utils.waiver_email import send_waiver_decision_email
 
 
@@ -76,12 +77,7 @@ def get_waiver_context(waiver: dict) -> dict | None:
             if flight:
                 flight_name = flight.get("name", "Unassigned")
 
-    if user:
-        first = user.get("first_name", "")
-        last = user.get("last_name", "")
-        cadet_name = f"{first} {last}".strip() or "Unknown cadet"
-    else:
-        cadet_name = "Unknown cadet"
+    cadet_name = format_full_name(user, "Unknown cadet")
 
     return {
         "cadet_name": cadet_name,
