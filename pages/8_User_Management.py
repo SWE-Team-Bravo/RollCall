@@ -17,6 +17,9 @@ from services.admin_users import (
 )
 
 
+require_role("admin")
+
+
 def _load_users() -> list[dict[str, Any]]:
     col = get_collection("users")
     if col is None:
@@ -142,7 +145,6 @@ def _render_delete_confirmation(
         st.rerun()
 
 
-require_role("admin")
 st.title("User Management")
 st.caption("Create, edit, and delete user accounts and roles.")
 
