@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any
-from utils.db import get_collection, get_db
 import pandas as pd
+
+from utils.db import get_collection, get_db
+from utils.names import format_full_name
 
 
 def normalize_status(status: str | None) -> str:
@@ -47,8 +49,7 @@ def build_attendance_grid(
         where grid_rows[i][j] is the P/A/E status for event i and cadet j.
     """
     name_by_user_id = {
-        u["_id"]: f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
-        or "Unknown"
+        u["_id"]: format_full_name(u, "Unknown")
         for u in user_docs
     }
 

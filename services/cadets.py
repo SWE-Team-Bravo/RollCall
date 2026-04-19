@@ -6,6 +6,7 @@ import pandas as pd
 
 from utils.db import get_collection
 from utils.db_schema_crud import create_cadet, get_user_by_email, get_user_by_id
+from utils.names import format_full_name
 
 CLASS_TO_RANK = {
     "AS100": "100/150 (freshman)",
@@ -42,7 +43,7 @@ def build_cadet_display_map() -> dict[str, str]:
     for cadet in cadets:
         user = get_user_by_id(cadet["user_id"])
         if user:
-            name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+            name = format_full_name(user)
             rank = cadet.get("rank", "")
             display_map[f"{name} ({rank})"] = str(cadet["_id"])
     return display_map

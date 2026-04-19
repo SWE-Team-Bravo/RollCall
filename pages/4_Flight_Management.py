@@ -11,6 +11,7 @@ from utils.db_schema_crud import (
     get_cadet_by_id,
     get_user_by_id,
 )
+from utils.names import format_full_name
 
 require_role("admin", "cadre")
 
@@ -64,9 +65,7 @@ else:
         if commander:
             user = get_user_by_id(commander["user_id"])
             if user:
-                commander_name = (
-                    f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-                )
+                commander_name = format_full_name(user)
                 commander_rank = commander.get("rank", "")
 
         cadets_in_flight = get_cadets_by_flight(flight["_id"])
@@ -99,7 +98,7 @@ else:
                 for cadet in cadets_in_flight:
                     user = get_user_by_id(cadet["user_id"])
                     if user:
-                        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+                        name = format_full_name(user)
                         rank = cadet.get("rank", "")
                         col1, col2 = st.columns([5, 1])
                         with col1:
