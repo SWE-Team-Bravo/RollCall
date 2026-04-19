@@ -15,6 +15,8 @@ from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 from utils.export import to_excel
 
+from utils.st_helpers import require
+
 
 STATUS_BADGE = WAIVER_STATUS_BADGE
 
@@ -31,11 +33,9 @@ if not approver_email:
     st.error("Missing current user email; cannot record approvals.")
     st.stop()
 
-approver_user = get_user_by_email(approver_email)
-if approver_user is None:
-    st.error("Could not resolve approver user in database.")
-    st.stop()
-    raise RuntimeError("Unreachable")
+approver_user = require(
+    get_user_by_email(approver_email), "Could not resolve approver user in database."
+)
 approver_id = approver_user["_id"]
 
 status_filter = st.selectbox(
