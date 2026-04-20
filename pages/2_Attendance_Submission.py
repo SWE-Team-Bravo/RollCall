@@ -118,6 +118,7 @@ if (
             cadet_id=cadet_id,
             status="present",
             recorded_by_user_id=user["_id"],
+            recorded_by_roles=list(user.get("roles", [])),
         )
         if result is None:
             st.error("Database unavailable. Could not record attendance.")

@@ -7,6 +7,7 @@ from utils.db_schema_crud import (
     get_flight_by_id,
 )
 from utils.attendance_status import get_effective_attendance_status
+from services.attendance_merge import merge_attendance_records
 
 
 def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict]]:
@@ -48,6 +49,7 @@ def cadet_attendance(
     events: list[dict],
     waivers: list[dict],
 ) -> list[dict]:
+    records = merge_attendance_records(records, key_fields=("event_id", "cadet_id"))
     event_map = {e["_id"]: e for e in events}
     waiver_map = {w["attendance_record_id"]: w for w in waivers}
 
