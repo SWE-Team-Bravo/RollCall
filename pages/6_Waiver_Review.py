@@ -44,11 +44,7 @@ status_filter = st.selectbox(
 flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
-waivers = get_waivers(
-    status_filter,
-    viewer_id=approver_id,
-    viewer_roles=current_user.get("roles", []),
-)
+waivers = get_waivers(status_filter)
 
 if not waivers:
     st.info("No waivers found for the selected filters.")

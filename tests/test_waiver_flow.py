@@ -233,7 +233,7 @@ def test_medical_waiver_with_no_assigned_cadre_visible_to_all_cadre():
     """
     medical_waiver = {**BASE_WAIVER, "waiver_type": "medical", "assigned_cadre_ids": []}
     with patch("services.waiver_review.get_all_waivers", return_value=[medical_waiver]):
-        result = get_waivers("all", viewer_id="any_cadre_id", viewer_roles=["cadre"])
+        result = get_waivers("all")
     assert len(result) == 1
     assert result[0]["waiver_type"] == "medical"
 
@@ -241,92 +241,32 @@ def test_medical_waiver_with_no_assigned_cadre_visible_to_all_cadre():
 def test_medical_waiver_visible_to_admin():
     medical_waiver = {**BASE_WAIVER, "waiver_type": "medical", "assigned_cadre_ids": []}
     with patch("services.waiver_review.get_all_waivers", return_value=[medical_waiver]):
-        result = get_waivers("all", viewer_id="admin_id", viewer_roles=["admin"])
+        result = get_waivers("all")
     assert len(result) == 1
 
 
 # ===========================================================================
-# Flow 4: Cadre selector — non-medical with specific cadre (#240)
+# Flow 4: Cadre-only checkbox — any cadre sees all waivers (#240 revised)
 # ===========================================================================
 
 
-def test_non_medical_assigned_to_cadre1_hidden_from_cadre2():
-    """Cadre 2 must not see a waiver explicitly assigned to cadre 1."""
-    waiver = {**BASE_WAIVER, "assigned_cadre_ids": ["cadre1"]}
-    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
-        result = get_waivers("all", viewer_id="cadre2", viewer_roles=["cadre"])
-    assert result == []
-
-
-def test_non_medical_assigned_to_cadre1_visible_to_cadre1():
-    """The explicitly assigned cadre can see the waiver."""
-    waiver = {**BASE_WAIVER, "assigned_cadre_ids": ["cadre1"]}
-    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
-        result = get_waivers("all", viewer_id="cadre1", viewer_roles=["cadre"])
-    assert len(result) == 1
-
-
-def test_non_medical_no_assignment_visible_to_all_cadre():
-    """No assigned_cadre_ids means any cadre can review it."""
-    waiver = {**BASE_WAIVER, "assigned_cadre_ids": []}
-    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
-        for viewer in ("cadre1", "cadre2", "cadre_random"):
-            result = get_waivers("all", viewer_id=viewer, viewer_roles=["cadre"])
-            assert len(result) == 1, f"{viewer} should see unassigned waiver"
-
-
-def test_cadre_mixed_visibility():
-    """
-    Given two waivers — one assigned to cadre1, one unassigned —
-    cadre2 sees only the unassigned one.
-    """
-    w_assigned = {**BASE_WAIVER, "_id": "w1", "assigned_cadre_ids": ["cadre1"]}
-    w_open = {**BASE_WAIVER, "_id": "w2", "assigned_cadre_ids": []}
-    with patch(
-        "services.waiver_review.get_all_waivers", return_value=[w_assigned, w_open]
-    ):
-        result = get_waivers("all", viewer_id="cadre2", viewer_roles=["cadre"])
-    assert len(result) == 1
-    assert str(result[0]["_id"]) == "w2"
-
-
-# ===========================================================================
-# Flow 5: Admin sees all waivers regardless of assignment (#235)
-# ===========================================================================
-
-
-def test_admin_sees_all_waiver_types_and_assignments():
-    """Admin must see everything: medical, non-medical, sickness, any assignment."""
+def test_all_cadre_see_all_waivers_regardless_of_cadre_only():
+    """With checkbox model any cadre sees all waivers — no per-user filtering."""
     waivers = [
-        {
-            **BASE_WAIVER,
-            "_id": "w1",
-            "waiver_type": "medical",
-            "assigned_cadre_ids": ["cadre1"],
-        },
-        {
-            **BASE_WAIVER,
-            "_id": "w2",
-            "waiver_type": "sickness",
-            "assigned_cadre_ids": [],
-        },
-        {
-            **BASE_WAIVER,
-            "_id": "w3",
-            "waiver_type": "non-medical",
-            "assigned_cadre_ids": ["cadre2"],
-        },
+        {**BASE_WAIVER, "_id": "w1", "waiver_type": "medical", "cadre_only": True},
+        {**BASE_WAIVER, "_id": "w2", "waiver_type": "sickness", "cadre_only": True},
+        {**BASE_WAIVER, "_id": "w3", "waiver_type": "non-medical", "cadre_only": False},
     ]
     with patch("services.waiver_review.get_all_waivers", return_value=waivers):
-        result = get_waivers("all", viewer_id="admin_id", viewer_roles=["admin"])
+        result = get_waivers("all")
     assert len(result) == 3
 
 
-def test_no_viewer_id_shows_all_waivers_for_backward_compat():
+def test_get_waivers_still_returns_all_with_no_args():
     """Calling get_waivers without viewer context must not filter anything."""
     waivers = [
-        {**BASE_WAIVER, "_id": "w1", "assigned_cadre_ids": ["cadre1"]},
-        {**BASE_WAIVER, "_id": "w2", "assigned_cadre_ids": []},
+        {**BASE_WAIVER, "_id": "w1", "cadre_only": True},
+        {**BASE_WAIVER, "_id": "w2", "cadre_only": False},
     ]
     with patch("services.waiver_review.get_all_waivers", return_value=waivers):
         result = get_waivers("all")
@@ -334,7 +274,7 @@ def test_no_viewer_id_shows_all_waivers_for_backward_compat():
 
 
 # ===========================================================================
-# Flow 6: File attachments (#new issue)
+# Flow 5: File attachments (#new issue)
 # ===========================================================================
 
 
@@ -458,14 +398,16 @@ def test_export_df_type_defaults_to_non_medical_if_missing():
 # ===========================================================================
 
 
-def test_status_and_role_filters_compose_correctly():
-    """
-    Pending waiver assigned to cadre1 → cadre2 asking for 'pending' sees nothing.
-    """
-    waiver = {**BASE_WAIVER, "status": "pending", "assigned_cadre_ids": ["cadre1"]}
-    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
-        result = get_waivers("pending", viewer_id="cadre2", viewer_roles=["cadre"])
-    assert result == []
+def test_status_filter_still_works_after_cadre_selector_change():
+    """Status filter (pending/approved/etc) must still work with the checkbox model."""
+    pending = {**BASE_WAIVER, "status": "pending", "cadre_only": False}
+    approved = {**BASE_WAIVER, "_id": "w2", "status": "approved", "cadre_only": False}
+    with patch(
+        "services.waiver_review.get_all_waivers", return_value=[pending, approved]
+    ):
+        result = get_waivers("pending")
+    assert len(result) == 1
+    assert result[0]["status"] == "pending"
 
 
 def test_approved_sickness_visible_to_cadre_after_auto_approval():
@@ -482,6 +424,96 @@ def test_approved_sickness_visible_to_cadre_after_auto_approval():
     with patch(
         "services.waiver_review.get_all_waivers", return_value=[approved_sickness]
     ):
-        result = get_waivers("approved", viewer_id="any_cadre", viewer_roles=["cadre"])
+        result = get_waivers("approved")
     assert len(result) == 1
     assert result[0]["waiver_type"] == "sickness"
+
+
+# ===========================================================================
+# Flow 9: Cadre-only checkbox replaces multiselect (#240 revised)
+#
+# These tests describe the NEW expected behavior. They FAIL before the fix
+# because get_waivers still filters by assigned_cadre_ids per-viewer.
+# ===========================================================================
+
+
+def test_any_cadre_sees_waiver_even_when_assigned_cadre_ids_has_other_cadre():
+    """
+    With the checkbox model there are no specific per-cadre assignments.
+    Any cadre must be able to see any waiver, regardless of what was in
+    assigned_cadre_ids when it was created.
+    """
+    waiver = {**BASE_WAIVER, "assigned_cadre_ids": ["cadre1"]}
+    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
+        result = get_waivers("all")
+    assert len(result) == 1
+
+
+def test_get_waivers_does_not_exclude_cadre_based_on_assigned_ids():
+    """
+    Two waivers: one explicitly assigned to cadre1, one unassigned.
+    cadre2 must see BOTH — the assigned_cadre_ids field must not filter.
+    """
+    w_assigned = {**BASE_WAIVER, "_id": "w1", "assigned_cadre_ids": ["cadre1"]}
+    w_open = {**BASE_WAIVER, "_id": "w2", "assigned_cadre_ids": []}
+    with patch(
+        "services.waiver_review.get_all_waivers", return_value=[w_assigned, w_open]
+    ):
+        result = get_waivers("all")
+    assert len(result) == 2
+
+
+def test_cadre_only_true_waiver_still_visible_to_all_cadre():
+    """
+    cadre_only=True on a waiver means it is restricted to cadre role —
+    any cadre member can see it (no specific person restriction).
+    """
+    waiver = {**BASE_WAIVER, "cadre_only": True, "assigned_cadre_ids": []}
+    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
+        for viewer in ("cadre1", "cadre2", "cadreX"):
+            result = get_waivers("all")
+            assert len(result) == 1, f"{viewer} should see cadre_only waiver"
+
+
+def test_cadre_only_false_waiver_visible_to_cadre():
+    """cadre_only=False waivers are also visible to cadre (no restriction)."""
+    waiver = {**BASE_WAIVER, "cadre_only": False, "assigned_cadre_ids": []}
+    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
+        result = get_waivers("all")
+    assert len(result) == 1
+
+
+def test_medical_waiver_cadre_only_defaults_true_in_context():
+    """
+    Medical waivers must carry cadre_only=True so the review page can
+    display the restriction badge. The field must be present on the waiver.
+    """
+    medical_waiver = {**BASE_WAIVER, "waiver_type": "medical", "cadre_only": True}
+    p1, p2, p3, p4, p5 = _ctx_patches()
+    with p1, p2, p3, p4, p5:
+        ctx = get_waiver_context(medical_waiver)
+    assert ctx is not None
+    assert ctx.get("cadre_only") is True
+
+
+def test_non_medical_cadre_only_false_in_context():
+    waiver = {**BASE_WAIVER, "waiver_type": "non-medical", "cadre_only": False}
+    p1, p2, p3, p4, p5 = _ctx_patches()
+    with p1, p2, p3, p4, p5:
+        ctx = get_waiver_context(waiver)
+    assert ctx is not None
+    assert ctx.get("cadre_only") is False
+
+
+def test_legacy_waiver_without_cadre_only_defaults_false_in_context():
+    """Old waivers without the cadre_only field must not crash the review page."""
+    legacy = {
+        k: v
+        for k, v in BASE_WAIVER.items()
+        if k not in ("cadre_only", "assigned_cadre_ids")
+    }
+    p1, p2, p3, p4, p5 = _ctx_patches()
+    with p1, p2, p3, p4, p5:
+        ctx = get_waiver_context(legacy)
+    assert ctx is not None
+    assert ctx.get("cadre_only") is False

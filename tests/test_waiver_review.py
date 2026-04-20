@@ -305,40 +305,13 @@ def test_get_waiver_export_df_correct_columns():
 # ----------------------- test get_waivers role filtering -------------------------
 
 
-def test_get_waivers_admin_sees_all_regardless_of_assigned_cadre():
-    w1 = {**WAIVER, "assigned_cadre_ids": ["cadre2"]}
-    with patch("services.waiver_review.get_all_waivers", return_value=[w1]):
-        result = get_waivers("all", viewer_id="cadre1", viewer_roles=["admin"])
-        assert len(result) == 1
-
-
-def test_get_waivers_cadre_only_sees_assigned_waivers():
-    w1 = {**WAIVER, "assigned_cadre_ids": ["cadre1"]}
-    w2 = {**WAIVER, "_id": "w2", "assigned_cadre_ids": ["cadre2"]}
+def test_get_waivers_all_cadre_see_all_waivers():
+    """With checkbox model, any cadre sees any waiver — no per-user ID filtering."""
+    w1 = {**WAIVER, "cadre_only": True}
+    w2 = {**WAIVER, "_id": "w2", "cadre_only": False}
     with patch("services.waiver_review.get_all_waivers", return_value=[w1, w2]):
-        result = get_waivers("all", viewer_id="cadre1", viewer_roles=["cadre"])
-        assert len(result) == 1
-        assert str(result[0]["_id"]) == "w1"
-
-
-def test_get_waivers_empty_assigned_cadre_ids_visible_to_all_cadre():
-    w1 = {**WAIVER, "assigned_cadre_ids": []}
-    with patch("services.waiver_review.get_all_waivers", return_value=[w1]):
-        result = get_waivers("all", viewer_id="cadre1", viewer_roles=["cadre"])
-        assert len(result) == 1
-
-
-def test_get_waivers_missing_assigned_cadre_ids_visible_to_all_cadre():
-    with patch("services.waiver_review.get_all_waivers", return_value=[WAIVER]):
-        result = get_waivers("all", viewer_id="cadre1", viewer_roles=["cadre"])
-        assert len(result) == 1
-
-
-def test_get_waivers_no_viewer_skips_role_filtering():
-    w1 = {**WAIVER, "assigned_cadre_ids": ["cadre2"]}
-    with patch("services.waiver_review.get_all_waivers", return_value=[w1]):
         result = get_waivers("all")
-        assert len(result) == 1
+        assert len(result) == 2
 
 
 # ----------------------- test get_waiver_context new fields ----------------------

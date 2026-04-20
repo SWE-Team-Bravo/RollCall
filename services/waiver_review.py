@@ -30,26 +30,12 @@ def get_flight_options() -> list[str]:
     return ["All flights"] + [f.get("name", "Unnamed flight") for f in flights]
 
 
-def get_waivers(
-    status_filter: str,
-    viewer_id=None,
-    viewer_roles: list[str] | None = None,
-) -> list[dict]:
+def get_waivers(status_filter: str) -> list[dict]:
     waivers = get_all_waivers()
     if status_filter != "all":
         waivers = [
             w for w in waivers if (w.get("status") or "").lower() == status_filter
         ]
-
-    viewer_roles = viewer_roles or []
-    is_admin = "admin" in viewer_roles
-    if not is_admin and viewer_id is not None:
-        filtered = []
-        for w in waivers:
-            assigned = w.get("assigned_cadre_ids") or []
-            if not assigned or any(str(cid) == str(viewer_id) for cid in assigned):
-                filtered.append(w)
-        waivers = filtered
 
     waivers.sort(key=lambda w: w.get("created_at") or datetime.min, reverse=True)
     return waivers
@@ -103,6 +89,7 @@ def get_waiver_context(waiver: dict) -> dict | None:
         "event_type": (event.get("event_type") if event else "") or "unknown",
         "waiver_type": waiver.get("waiver_type") or "non-medical",
         "attachments": waiver.get("attachments") or [],
+        "cadre_only": bool(waiver.get("cadre_only", False)),
     }
 
 

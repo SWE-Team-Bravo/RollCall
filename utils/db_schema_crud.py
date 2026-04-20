@@ -396,7 +396,7 @@ def create_waiver(
     status: str,
     submitted_by_user_id: str | ObjectId,
     waiver_type: str = "non-medical",
-    assigned_cadre_ids: list | None = None,
+    cadre_only: bool = False,
     attachments: list | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("waivers")
@@ -408,7 +408,7 @@ def create_waiver(
         "status": status,
         "submitted_by_user_id": ObjectId(submitted_by_user_id),
         "waiver_type": waiver_type,
-        "assigned_cadre_ids": [ObjectId(c) for c in (assigned_cadre_ids or [])],
+        "cadre_only": cadre_only,
         "attachments": attachments or [],
         "created_at": datetime.now(timezone.utc),
     }

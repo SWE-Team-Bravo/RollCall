@@ -18,7 +18,6 @@ from utils.db_schema_crud import (
     get_cadet_by_user_id,
     get_event_by_id,
     get_user_by_email,
-    get_users_by_role,
     get_waiver_by_attendance_record,
     get_waiver_by_id,
     get_attendance_by_cadet,
@@ -272,10 +271,6 @@ def dropdown_row(record: dict, events_by_id: dict) -> str:
     return str(record["_id"])
 
 
-def _cadre_options() -> list[dict]:
-    return get_users_by_role("cadre")
-
-
 def waiver_form(
     user_id: str,
     records: list[dict],
@@ -300,12 +295,6 @@ def waiver_form(
                 break
 
     common_reasons = get_common_reasons()
-    cadre_users = _cadre_options()
-    cadre_name_to_id = {
-        f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
-        or u.get("email", str(u["_id"])): str(u["_id"])
-        for u in cadre_users
-    }
 
     with st.form("waiver_form", clear_on_submit=True):
         label = st.selectbox(
@@ -350,13 +339,10 @@ def waiver_form(
             )
 
         if waiver_type == "medical":
-            st.caption("Medical waivers go to all cadre by default.")
-            assigned_cadre_names: list[str] = []
+            cadre_only = True
+            st.caption("Medical waivers are sent to cadre staff only.")
         else:
-            assigned_cadre_names = st.multiselect(
-                "Notify specific cadre (leave empty to notify all cadre)",
-                options=list(cadre_name_to_id.keys()),
-            )
+            cadre_only = st.checkbox("Send to cadre staff only")
 
         col1, col2, spacer = st.columns([2, 2, 8])
         with col1:
@@ -387,12 +373,6 @@ def waiver_form(
                     }
                 ]
 
-            assigned_ids = [
-                cadre_name_to_id[n]
-                for n in assigned_cadre_names
-                if n in cadre_name_to_id
-            ]
-
             if (
                 existing
                 and (existing.get("status") or "").lower() == "denied"
@@ -418,7 +398,7 @@ def waiver_form(
                     status="pending",
                     submitted_by_user_id=user_id,
                     waiver_type=waiver_type,
-                    assigned_cadre_ids=assigned_ids,
+                    cadre_only=cadre_only,
                     attachments=attachments,
                 )
 
