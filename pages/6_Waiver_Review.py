@@ -21,7 +21,7 @@ from utils.st_helpers import require
 STATUS_BADGE = WAIVER_STATUS_BADGE
 
 
-require_role("admin", "cadre", "flight_commander")
+require_role("admin", "cadre")
 st.title("Waiver Review")
 st.caption("Review waiver requests and approve/deny with comments.")
 
