@@ -53,6 +53,15 @@ def apply_sickness_auto_approval(waiver_id, user_id) -> bool:
     return True
 
 
+def resolve_cadre_only(
+    waiver_type: str, has_attachment: bool, user_cadre_only: bool
+) -> bool:
+    """Medical waivers and waivers with attachments always go to cadre only."""
+    if waiver_type == "medical" or has_attachment:
+        return True
+    return user_cadre_only
+
+
 WAIVER_STATUS_BADGE: dict[str, str] = {
     "pending": "🟡 Pending",
     "approved": "🟢 Approved",

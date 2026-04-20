@@ -7,6 +7,7 @@ from services.waivers import (
     get_absent_records_without_waiver,
     get_all_waivers_for_cadet,
     get_common_reasons,
+    resolve_cadre_only,
     resubmit_auto_denied_waiver,
     withdraw_waiver,
     WAIVER_STATUS_BADGE,
@@ -338,11 +339,14 @@ def waiver_form(
                 type=["pdf", "png", "jpg", "jpeg", "docx"],
             )
 
-        if waiver_type == "medical":
-            cadre_only = True
-            st.caption("Medical waivers are sent to cadre staff only.")
-        else:
-            cadre_only = st.checkbox("Send to cadre staff only")
+        force_cadre_only = resolve_cadre_only(
+            waiver_type, uploaded_file is not None, False
+        )
+        cadre_only = st.checkbox(
+            "Send to cadre staff only",
+            value=force_cadre_only,
+            disabled=force_cadre_only,
+        )
 
         col1, col2, spacer = st.columns([2, 2, 8])
         with col1:
