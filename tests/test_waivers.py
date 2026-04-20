@@ -4,6 +4,9 @@ from unittest.mock import patch, MagicMock
 from services.waivers import (
     get_all_waivers_for_cadet,
     get_absent_records_without_waiver,
+    get_common_reasons,
+    is_first_sickness_waiver,
+    apply_sickness_auto_approval,
     resubmit_auto_denied_waiver,
     withdraw_waiver,
 )
@@ -357,3 +360,110 @@ def test_returns_false_when_not_found():
 def test_returns_false_when_update_is_none():
     with patch("services.waivers.update_waiver", return_value=None):
         assert withdraw_waiver("w1") is False
+
+
+# --------------- test get_common_reasons -------------------
+
+
+def test_get_common_reasons_returns_nonempty_list():
+    reasons = get_common_reasons()
+    assert isinstance(reasons, list)
+    assert len(reasons) > 0
+
+
+def test_get_common_reasons_all_strings():
+    reasons = get_common_reasons()
+    assert all(isinstance(r, str) for r in reasons)
+
+
+def test_get_common_reasons_includes_other():
+    reasons = get_common_reasons()
+    assert any("other" in r.lower() for r in reasons)
+
+
+# --------------- test is_first_sickness_waiver -------------------
+
+
+def test_is_first_sickness_waiver_true_when_none_exist():
+    with patch("services.waivers.get_sickness_waivers_by_user", return_value=[]):
+        assert is_first_sickness_waiver("user1") is True
+
+
+def test_is_first_sickness_waiver_false_when_existing():
+    with patch(
+        "services.waivers.get_sickness_waivers_by_user",
+        return_value=[{"_id": "w1"}],
+    ):
+        assert is_first_sickness_waiver("user1") is False
+
+
+# --------------- test apply_sickness_auto_approval -------------------
+
+
+def test_apply_sickness_auto_approval_approves_first():
+    waiver = {"_id": "w1", "waiver_type": "sickness", "status": "pending"}
+    with (
+        patch("services.waivers.get_waiver_by_id", return_value=waiver),
+        patch(
+            "services.waivers.get_sickness_waivers_by_user",
+            return_value=[{"_id": "w1"}],
+        ),
+        patch("services.waivers.update_waiver") as mock_update,
+        patch("services.waivers.create_waiver_approval") as mock_approval,
+    ):
+        result = apply_sickness_auto_approval("w1", "user1")
+        assert result is True
+        mock_update.assert_called_once()
+        mock_approval.assert_called_once()
+        assert mock_update.call_args[0][1]["status"] == "approved"
+
+
+def test_apply_sickness_auto_approval_skips_if_prior_sickness_exists():
+    waiver = {"_id": "w1", "waiver_type": "sickness", "status": "pending"}
+    with (
+        patch("services.waivers.get_waiver_by_id", return_value=waiver),
+        patch(
+            "services.waivers.get_sickness_waivers_by_user",
+            return_value=[{"_id": "w1"}, {"_id": "w2"}],
+        ),
+        patch("services.waivers.update_waiver") as mock_update,
+    ):
+        result = apply_sickness_auto_approval("w1", "user1")
+        assert result is False
+        mock_update.assert_not_called()
+
+
+def test_apply_sickness_auto_approval_skips_if_not_sickness_type():
+    waiver = {"_id": "w1", "waiver_type": "non-medical", "status": "pending"}
+    with patch("services.waivers.get_waiver_by_id", return_value=waiver):
+        result = apply_sickness_auto_approval("w1", "user1")
+        assert result is False
+
+
+def test_apply_sickness_auto_approval_skips_if_already_denied():
+    waiver = {"_id": "w1", "waiver_type": "sickness", "status": "denied"}
+    with patch("services.waivers.get_waiver_by_id", return_value=waiver):
+        result = apply_sickness_auto_approval("w1", "user1")
+        assert result is False
+
+
+def test_apply_sickness_auto_approval_skips_if_waiver_not_found():
+    with patch("services.waivers.get_waiver_by_id", return_value=None):
+        result = apply_sickness_auto_approval("w1", "user1")
+        assert result is False
+
+
+def test_apply_sickness_auto_approval_comment_mentions_auto():
+    waiver = {"_id": "w1", "waiver_type": "sickness", "status": "pending"}
+    with (
+        patch("services.waivers.get_waiver_by_id", return_value=waiver),
+        patch(
+            "services.waivers.get_sickness_waivers_by_user",
+            return_value=[{"_id": "w1"}],
+        ),
+        patch("services.waivers.update_waiver"),
+        patch("services.waivers.create_waiver_approval") as mock_approval,
+    ):
+        apply_sickness_auto_approval("w1", "user1")
+        comments = mock_approval.call_args[1]["comments"]
+        assert "auto" in comments.lower()

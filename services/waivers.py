@@ -2,9 +2,56 @@ from datetime import datetime, timezone
 
 from utils.db_schema_crud import (
     create_waiver_approval,
+    get_sickness_waivers_by_user,
+    get_waiver_by_id,
     update_waiver,
     validate_waiver,
 )
+
+COMMON_REASONS = [
+    "Illness/Sickness",
+    "Medical appointment",
+    "Family emergency",
+    "Academic conflict",
+    "Work conflict",
+    "Transportation issue",
+    "Other (describe below)",
+]
+
+
+def get_common_reasons() -> list[str]:
+    return COMMON_REASONS
+
+
+def is_first_sickness_waiver(user_id) -> bool:
+    """Return True if this cadet has no prior approved/pending sickness waivers."""
+    return len(get_sickness_waivers_by_user(user_id)) == 0
+
+
+def apply_sickness_auto_approval(waiver_id, user_id) -> bool:
+    """Auto-approve a sickness waiver if it is the cadet's first. Returns True if approved."""
+    waiver = get_waiver_by_id(waiver_id)
+    if not waiver:
+        return False
+    if waiver.get("waiver_type") != "sickness":
+        return False
+    if (waiver.get("status") or "").lower() != "pending":
+        return False
+
+    existing = get_sickness_waivers_by_user(user_id)
+    other_sickness = [w for w in existing if str(w["_id"]) != str(waiver_id)]
+    if other_sickness:
+        return False
+
+    update_waiver(waiver_id, {"status": "approved"})
+    create_waiver_approval(
+        waiver_id=waiver_id,
+        approver_id=None,
+        decision="approved",
+        comments="Auto-approved: first sickness waiver.",
+    )
+    return True
+
 
 WAIVER_STATUS_BADGE: dict[str, str] = {
     "pending": "🟡 Pending",
