@@ -395,19 +395,24 @@ def create_waiver(
     reason: str,
     status: str,
     submitted_by_user_id: str | ObjectId,
+    waiver_type: str = "non-medical",
+    assigned_cadre_ids: list | None = None,
+    attachments: list | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("waivers")
     if col is None:
         return None
-    result = col.insert_one(
-        {
-            "attendance_record_id": ObjectId(attendance_record_id),
-            "reason": reason,
-            "status": status,
-            "submitted_by_user_id": ObjectId(submitted_by_user_id),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
+    doc: dict = {
+        "attendance_record_id": ObjectId(attendance_record_id),
+        "reason": reason,
+        "status": status,
+        "submitted_by_user_id": ObjectId(submitted_by_user_id),
+        "waiver_type": waiver_type,
+        "assigned_cadre_ids": [ObjectId(c) for c in (assigned_cadre_ids or [])],
+        "attachments": attachments or [],
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = col.insert_one(doc)
     is_valid, why = validate_waiver(ObjectId(attendance_record_id))
     if not is_valid:
         col.update_one(
