@@ -83,7 +83,9 @@ def show_absence_summary(rows: list[dict]):
     attended_count = sum(
         1 for r in rows if r["status"] in ("present", "excused", "waived")
     )
-    attendance_rate = round(attended_count / total_records * 100) if total_records else 0
+    attendance_rate = (
+        round(attended_count / total_records * 100) if total_records else 0
+    )
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Attendance Rate", f"{attendance_rate}%")

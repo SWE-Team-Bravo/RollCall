@@ -52,13 +52,6 @@ def get_users_by_role(role: str) -> list[dict]:
     return list(col.find({"roles": role}))
 
 
-def get_users_by_role(role: str) -> list[dict]:
-    col = get_collection("users")
-    if col is None:
-        return []
-    return list(col.find({"roles": role}))
-
-
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("users")
     if col is None:
@@ -303,19 +296,21 @@ def create_attendance_record(
     cadet_id: str | ObjectId,
     status: str,
     recorded_by_user_id: str | ObjectId,
+    recorded_by_roles: list[str] | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("attendance_records")
     if col is None:
         return None
-    return col.insert_one(
-        {
-            "event_id": ObjectId(event_id),
-            "cadet_id": ObjectId(cadet_id),
-            "status": status,
-            "recorded_by_user_id": ObjectId(recorded_by_user_id),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
+    doc = {
+        "event_id": ObjectId(event_id),
+        "cadet_id": ObjectId(cadet_id),
+        "status": status,
+        "recorded_by_user_id": ObjectId(recorded_by_user_id),
+        "created_at": datetime.now(timezone.utc),
+    }
+    if recorded_by_roles is not None:
+        doc["recorded_by_roles"] = list(recorded_by_roles)
+    return col.insert_one(doc)
 
 
 def get_attendance_record_by_id(record_id: str | ObjectId) -> dict | None:
@@ -344,6 +339,7 @@ def upsert_attendance_record(
     cadet_id: str | ObjectId,
     status: str,
     recorded_by_user_id: str | ObjectId,
+    recorded_by_roles: list[str] | None = None,
 ) -> UpdateResult | None:
     """Insert or update a single attendance record atomically.
 
@@ -353,16 +349,20 @@ def upsert_attendance_record(
     col = get_collection("attendance_records")
     if col is None:
         return None
+    set_doc = {
+        "status": status,
+        "recorded_by_user_id": ObjectId(recorded_by_user_id),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if recorded_by_roles is not None:
+        set_doc["recorded_by_roles"] = list(recorded_by_roles)
     return col.update_one(
         {
             "event_id": ObjectId(event_id),
             "cadet_id": ObjectId(cadet_id),
         },
         {
-            "$set": {
-                "status": status,
-                "recorded_by_user_id": ObjectId(recorded_by_user_id),
-            },
+            "$set": set_doc,
             "$setOnInsert": {
                 "created_at": datetime.now(timezone.utc),
             },

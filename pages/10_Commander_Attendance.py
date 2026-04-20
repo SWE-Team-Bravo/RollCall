@@ -130,6 +130,7 @@ if st.button("Save All", type="primary"):
             cadet_id=op["cadet_id"],
             status=op["status"],
             recorded_by_user_id=user["_id"],
+            recorded_by_roles=list(user.get("roles", [])),
         )
     st.session_state["_success_msg"] = f"Saved attendance for {len(upserts)} cadet(s)."
     st.rerun()
