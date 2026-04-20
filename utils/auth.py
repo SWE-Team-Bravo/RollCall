@@ -68,7 +68,7 @@ def restore_session() -> None:
     assert AUTH_COOKIE_KEY is not None
     try:
         token = jwt.decode(raw_token, AUTH_COOKIE_KEY, algorithms=["HS256"])
-    except (DecodeError, InvalidSignatureError):
+    except DecodeError, InvalidSignatureError:
         return
 
     username = token.get("username")
