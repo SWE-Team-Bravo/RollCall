@@ -21,7 +21,7 @@ from utils.st_helpers import require
 STATUS_BADGE = WAIVER_STATUS_BADGE
 
 
-require_role("admin", "cadre")
+require_role("admin", "cadre", "waiver_reviewer")
 st.title("Waiver Review")
 st.caption("Review waiver requests and approve/deny with comments.")
 
@@ -44,7 +44,8 @@ status_filter = st.selectbox(
 flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
-waivers = get_waivers(status_filter)
+viewer_roles = list(current_user.get("roles") or [])
+waivers = get_waivers(status_filter, viewer_roles)
 
 if not waivers:
     st.info("No waivers found for the selected filters.")

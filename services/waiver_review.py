@@ -30,12 +30,18 @@ def get_flight_options() -> list[str]:
     return ["All flights"] + [f.get("name", "Unnamed flight") for f in flights]
 
 
-def get_waivers(status_filter: str) -> list[dict]:
+def get_waivers(
+    status_filter: str, viewer_roles: list[str] | None = None
+) -> list[dict]:
     waivers = get_all_waivers()
     if status_filter != "all":
         waivers = [
             w for w in waivers if (w.get("status") or "").lower() == status_filter
         ]
+
+    roles = set(viewer_roles or [])
+    if not (roles & {"admin", "cadre"}):
+        waivers = [w for w in waivers if not w.get("cadre_only", False)]
 
     waivers.sort(key=lambda w: w.get("created_at") or datetime.min, reverse=True)
     return waivers

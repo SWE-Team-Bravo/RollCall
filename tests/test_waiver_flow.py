@@ -251,27 +251,28 @@ def test_medical_waiver_visible_to_admin():
 # ===========================================================================
 
 
-def test_all_cadre_see_all_waivers_regardless_of_cadre_only():
-    """With checkbox model any cadre sees all waivers — no per-user filtering."""
+def test_cadre_sees_all_waivers_including_cadre_only():
+    """Cadre role sees all waivers regardless of cadre_only flag."""
     waivers = [
         {**BASE_WAIVER, "_id": "w1", "waiver_type": "medical", "cadre_only": True},
         {**BASE_WAIVER, "_id": "w2", "waiver_type": "sickness", "cadre_only": True},
         {**BASE_WAIVER, "_id": "w3", "waiver_type": "non-medical", "cadre_only": False},
     ]
     with patch("services.waiver_review.get_all_waivers", return_value=waivers):
-        result = get_waivers("all")
+        result = get_waivers("all", viewer_roles=["cadre"])
     assert len(result) == 3
 
 
-def test_get_waivers_still_returns_all_with_no_args():
-    """Calling get_waivers without viewer context must not filter anything."""
+def test_waiver_reviewer_cadet_excludes_cadre_only():
+    """waiver_reviewer cadets only see cadre_only=False waivers."""
     waivers = [
         {**BASE_WAIVER, "_id": "w1", "cadre_only": True},
         {**BASE_WAIVER, "_id": "w2", "cadre_only": False},
     ]
     with patch("services.waiver_review.get_all_waivers", return_value=waivers):
-        result = get_waivers("all")
-    assert len(result) == 2
+        result = get_waivers("all", viewer_roles=["cadet", "waiver_reviewer"])
+    assert len(result) == 1
+    assert result[0]["_id"] == "w2"
 
 
 # ===========================================================================
@@ -464,16 +465,16 @@ def test_get_waivers_does_not_exclude_cadre_based_on_assigned_ids():
     assert len(result) == 2
 
 
-def test_cadre_only_true_waiver_still_visible_to_all_cadre():
-    """
-    cadre_only=True on a waiver means it is restricted to cadre role —
-    any cadre member can see it (no specific person restriction).
-    """
-    waiver = {**BASE_WAIVER, "cadre_only": True, "assigned_cadre_ids": []}
+def test_cadre_only_true_waiver_visible_to_cadre_role():
+    """cadre_only=True waivers are visible to any user with the cadre role."""
+    waiver = {**BASE_WAIVER, "cadre_only": True}
     with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
-        for viewer in ("cadre1", "cadre2", "cadreX"):
-            result = get_waivers("all")
-            assert len(result) == 1, f"{viewer} should see cadre_only waiver"
+        result = get_waivers("all", viewer_roles=["cadre"])
+        assert len(result) == 1
+
+    with patch("services.waiver_review.get_all_waivers", return_value=[waiver]):
+        result = get_waivers("all", viewer_roles=["cadet", "waiver_reviewer"])
+        assert len(result) == 0
 
 
 def test_cadre_only_false_waiver_visible_to_cadre():

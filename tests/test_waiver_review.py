@@ -305,13 +305,41 @@ def test_get_waiver_export_df_correct_columns():
 # ----------------------- test get_waivers role filtering -------------------------
 
 
-def test_get_waivers_all_cadre_see_all_waivers():
-    """With checkbox model, any cadre sees any waiver — no per-user ID filtering."""
+def test_get_waivers_cadre_sees_all_including_cadre_only():
+    """Cadre role sees both cadre-only and non-cadre-only waivers."""
     w1 = {**WAIVER, "cadre_only": True}
     w2 = {**WAIVER, "_id": "w2", "cadre_only": False}
     with patch("services.waiver_review.get_all_waivers", return_value=[w1, w2]):
-        result = get_waivers("all")
+        result = get_waivers("all", viewer_roles=["cadre"])
         assert len(result) == 2
+
+
+def test_get_waivers_admin_sees_all_including_cadre_only():
+    """Admin role sees both cadre-only and non-cadre-only waivers."""
+    w1 = {**WAIVER, "cadre_only": True}
+    w2 = {**WAIVER, "_id": "w2", "cadre_only": False}
+    with patch("services.waiver_review.get_all_waivers", return_value=[w1, w2]):
+        result = get_waivers("all", viewer_roles=["admin"])
+        assert len(result) == 2
+
+
+def test_get_waivers_waiver_reviewer_excludes_cadre_only():
+    """waiver_reviewer cadets only see waivers where cadre_only=False."""
+    w1 = {**WAIVER, "cadre_only": True}
+    w2 = {**WAIVER, "_id": "w2", "cadre_only": False}
+    with patch("services.waiver_review.get_all_waivers", return_value=[w1, w2]):
+        result = get_waivers("all", viewer_roles=["cadet", "waiver_reviewer"])
+        assert len(result) == 1
+        assert result[0]["_id"] == "w2"
+
+
+def test_get_waivers_no_roles_excludes_cadre_only():
+    """Viewer with no roles (edge case) cannot see cadre-only waivers."""
+    w1 = {**WAIVER, "cadre_only": True}
+    w2 = {**WAIVER, "_id": "w2", "cadre_only": False}
+    with patch("services.waiver_review.get_all_waivers", return_value=[w1, w2]):
+        result = get_waivers("all", viewer_roles=[])
+        assert len(result) == 1
 
 
 # ----------------------- test get_waiver_context new fields ----------------------
