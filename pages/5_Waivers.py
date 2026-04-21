@@ -1,8 +1,12 @@
-import streamlit as st
+from datetime import date, datetime, timedelta
+
 import pandas as pd
+import streamlit as st
 
-
+from scripts.demo_admin import get_temp_cadet
+from services.admin_users import confirm_destructive_action
 from services.waivers import (
+    WAIVER_STATUS_BADGE,
     apply_sickness_auto_approval,
     get_absent_records_without_waiver,
     get_all_waivers_for_cadet,
@@ -10,24 +14,20 @@ from services.waivers import (
     resolve_cadre_only,
     resubmit_auto_denied_waiver,
     withdraw_waiver,
-    WAIVER_STATUS_BADGE,
 )
 from utils.auth import get_current_user, require_role
+from utils.auth_logic import user_has_any_role
 from utils.db_schema_crud import (
     create_waiver,
     get_approvals_by_waiver,
+    get_attendance_by_cadet,
     get_cadet_by_user_id,
     get_event_by_id,
     get_user_by_email,
     get_waiver_by_attendance_record,
     get_waiver_by_id,
-    get_attendance_by_cadet,
 )
-from datetime import date, datetime, timedelta
-from utils.auth_logic import user_has_any_role
-from scripts.demo_admin import get_temp_cadet
 from utils.st_helpers import require
-
 
 STATUS_BADGE = WAIVER_STATUS_BADGE
 
@@ -243,7 +243,7 @@ def show_waivers(
             )
             c1, c2 = st.columns(2)
             if c1.button("Confirm Withdraw", key=f"yes_{waiver_id}", type="primary"):
-                if confirmation.strip() != "DELETE":
+                if not confirm_destructive_action(confirmation):
                     st.error("Confirmation text does not match 'DELETE'.")
                 else:
                     success = withdraw_waiver(selected["_id"])

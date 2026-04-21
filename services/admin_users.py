@@ -209,5 +209,9 @@ def confirm_delete_user(confirmation_input: str) -> bool:
     "DELETE" (case-insensitive, ignoring surrounding whitespace).
     """
 
-    normalized = (confirmation_input or "").strip().upper()
-    return normalized == "DELETE"
+    return confirm_destructive_action(confirmation_input)
+
+
+def confirm_destructive_action(confirmation_input: str) -> bool:
+    """Return True only when the exact DELETE keyword is entered."""
+    return (confirmation_input or "").strip() == "DELETE"

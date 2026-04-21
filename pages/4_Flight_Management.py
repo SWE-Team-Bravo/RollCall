@@ -1,6 +1,7 @@
 import streamlit as st
 
 from utils.auth import require_role
+from services.admin_users import confirm_destructive_action
 from services.cadets import build_cadet_display_map
 from services.flight_management import (
     assign_selected_cadets_to_flight,
@@ -16,6 +17,7 @@ from services.flight_management import (
     get_selected_cadet_ids,
     unassign_selected_cadets,
 )
+
 from utils.db_schema_crud import (
     create_flight,
     delete_flight,
@@ -333,7 +335,7 @@ else:
                 if c1.button(
                     "Confirm Delete", key=f"confirm_del_{flight_id}", type="primary"
                 ):
-                    if confirmation.strip() != "DELETE":
+                    if not confirm_destructive_action(confirmation):
                         st.error("Confirmation text does not match 'DELETE'.")
                     else:
                         unassign_all_cadets_from_flight(flight["_id"])
