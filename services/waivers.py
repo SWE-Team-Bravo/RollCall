@@ -9,12 +9,23 @@ from utils.db_schema_crud import (
 )
 
 COMMON_REASONS = [
-    "Illness/Sickness",
-    "Medical appointment",
-    "Family emergency",
-    "Academic conflict",
-    "Work conflict",
-    "Transportation issue",
+    "Military Orders",
+    "Sick with documentation",
+    "Sick without documentation",
+    "Sport team",
+    "Crosstown (PASSED PFA)",
+    "Crosstown (FAILED PFA)",
+    "Missed alarm",
+    "Out of regs",
+    "Late",
+    "Vacation, wedding, out of town, etc.",
+    "Lack of sleep",
+    "Flat tire, icy roads, etc.",
+    "Injury",
+    "School obligation (change of class time, scholarship requirement, etc.)",
+    "Work",
+    "Personal/family emergency",
+    "FTX excuse",
     "Other (describe below)",
 ]
 

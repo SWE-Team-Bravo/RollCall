@@ -14,6 +14,7 @@ from services.waivers import (
     apply_sickness_auto_approval,
     get_common_reasons,
     is_first_sickness_waiver,
+    resolve_cadre_only,
 )
 
 # ---------------------------------------------------------------------------
@@ -76,8 +77,8 @@ def test_common_reasons_covers_medical_and_personal():
     """Dropdown must include both medical-adjacent and personal reasons."""
     reasons = get_common_reasons()
     lower = [r.lower() for r in reasons]
-    assert any("illness" in r or "sickness" in r or "medical" in r for r in lower)
-    assert any("family" in r or "emergency" in r for r in lower)
+    assert any("sick" in r or "injury" in r or "military" in r for r in lower)
+    assert any("family" in r or "emergency" in r or "personal" in r for r in lower)
 
 
 def test_common_reasons_is_stable():
@@ -517,3 +518,111 @@ def test_legacy_waiver_without_cadre_only_defaults_false_in_context():
         ctx = get_waiver_context(legacy)
     assert ctx is not None
     assert ctx.get("cadre_only") is False
+
+
+# ===========================================================================
+# resolve_cadre_only — the rule that locks the checkbox (#240 / medical rule)
+#
+# These tests FAIL before the fix because resolve_cadre_only doesn't exist yet.
+# ===========================================================================
+
+
+def test_medical_type_forces_cadre_only_regardless_of_user_choice():
+    """Medical waivers must always be cadre-only — the checkbox cannot be unchecked."""
+    assert (
+        resolve_cadre_only("medical", has_attachment=False, user_cadre_only=False)
+        is True
+    )
+    assert (
+        resolve_cadre_only("medical", has_attachment=False, user_cadre_only=True)
+        is True
+    )
+
+
+def test_any_type_with_attachment_forces_cadre_only():
+    """Uploading a file (doctor's note) locks cadre-only, regardless of type."""
+    assert (
+        resolve_cadre_only("non-medical", has_attachment=True, user_cadre_only=False)
+        is True
+    )
+    assert (
+        resolve_cadre_only("sickness", has_attachment=True, user_cadre_only=False)
+        is True
+    )
+    assert (
+        resolve_cadre_only("medical", has_attachment=True, user_cadre_only=False)
+        is True
+    )
+
+
+def test_non_medical_without_attachment_respects_user_choice():
+    """Non-medical waiver, no file → cadre_only follows the checkbox."""
+    assert (
+        resolve_cadre_only("non-medical", has_attachment=False, user_cadre_only=False)
+        is False
+    )
+    assert (
+        resolve_cadre_only("non-medical", has_attachment=False, user_cadre_only=True)
+        is True
+    )
+
+
+def test_sickness_without_attachment_respects_user_choice():
+    """Sickness waiver with no file attached → checkbox is the deciding factor."""
+    assert (
+        resolve_cadre_only("sickness", has_attachment=False, user_cadre_only=False)
+        is False
+    )
+    assert (
+        resolve_cadre_only("sickness", has_attachment=False, user_cadre_only=True)
+        is True
+    )
+
+
+# ===========================================================================
+# Attachment download — bytes format must survive the round-trip (#new)
+# ===========================================================================
+
+
+def test_attachment_data_is_bytes_convertible_for_download():
+    """
+    st.download_button expects bytes(data). This test ensures the attachment
+    data stored in the waiver document can be converted without error.
+    """
+    raw = b"PDF content here"
+    attachment = {
+        "filename": "note.pdf",
+        "content_type": "application/pdf",
+        "data": raw,
+    }
+    waiver = {**BASE_WAIVER, "attachments": [attachment]}
+    p1, p2, p3, p4, p5 = _ctx_patches()
+    with p1, p2, p3, p4, p5:
+        ctx = get_waiver_context(waiver)
+    assert ctx is not None
+    file_data = ctx["attachments"][0]["data"]
+    assert bytes(file_data) == raw
+
+
+def test_multiple_attachments_all_bytes_convertible():
+    attachments = [
+        {"filename": "a.pdf", "content_type": "application/pdf", "data": b"AAAA"},
+        {"filename": "b.jpg", "content_type": "image/jpeg", "data": b"BBBB"},
+    ]
+    waiver = {**BASE_WAIVER, "attachments": attachments}
+    p1, p2, p3, p4, p5 = _ctx_patches()
+    with p1, p2, p3, p4, p5:
+        ctx = get_waiver_context(waiver)
+    assert ctx is not None
+    for i, att in enumerate(ctx["attachments"]):
+        assert bytes(att["data"]) == attachments[i]["data"]
+
+
+def test_waiver_with_no_attachments_download_loop_is_empty():
+    """No attachments → download loop must iterate zero times (no crash)."""
+    waiver = {**BASE_WAIVER, "attachments": []}
+    p1, p2, p3, p4, p5 = _ctx_patches()
+    with p1, p2, p3, p4, p5:
+        ctx = get_waiver_context(waiver)
+    assert ctx is not None
+    assert list(ctx["attachments"]) == []
