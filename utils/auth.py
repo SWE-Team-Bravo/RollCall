@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import jwt
@@ -48,7 +49,7 @@ def _get_or_create_authenticator() -> stauth.Authenticate:
         try:
             authenticator.credentials = credentials
         except Exception:
-            pass
+            logging.exception("Failed to update authenticator credentials")
 
     return authenticator
 
@@ -68,7 +69,7 @@ def restore_session() -> None:
     assert AUTH_COOKIE_KEY is not None
     try:
         token = jwt.decode(raw_token, AUTH_COOKIE_KEY, algorithms=["HS256"])
-    except (DecodeError, InvalidSignatureError):
+    except DecodeError, InvalidSignatureError:
         return
 
     username = token.get("username")

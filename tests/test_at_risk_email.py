@@ -53,6 +53,7 @@ def test_returns_cadet_above_pt_threshold():
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
         patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
+        patch("utils.at_risk_email.get_waivers_by_attendance_records", return_value=[]),
     ):
         result = get_at_risk_cadets()
         assert len(result) == 1

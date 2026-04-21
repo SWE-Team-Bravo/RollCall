@@ -46,15 +46,17 @@ def get_waiver_flag_df() -> pd.DataFrame | str:
     )
 
 
-def filter_cadets() -> list[dict]:
+def filter_cadets(flight_id=None) -> list[dict]:
     cadets = get_at_risk_cadets()
+    if flight_id is not None:
+        cadets = [c for c in cadets if c["cadet"].get("flight_id") == flight_id]
     return sorted(
         cadets, key=lambda c: c["pt_absences"] + c["llab_absences"], reverse=True
     )
 
 
-def get_df() -> pd.DataFrame | str:
-    cadets = filter_cadets()
+def get_df(flight_id=None) -> pd.DataFrame | str:
+    cadets = filter_cadets(flight_id=flight_id)
     if not cadets:
         return "No cadets found."
 
