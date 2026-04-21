@@ -9,6 +9,10 @@ import streamlit as st
 from services.commander_attendance import build_commander_roster, compute_upserts
 from services.events import closest_event_index, get_all_events
 from utils.auth import get_current_user, require_role
+from utils.attendance_status import (
+    get_attendance_status_cell_style,
+    get_attendance_status_label,
+)
 from utils.db_schema_crud import (
     get_all_cadets,
     get_attendance_by_event,
@@ -19,7 +23,6 @@ from utils.db_schema_crud import (
 
 STATUS_OPTIONS = ["Present", "Absent", "Excused"]
 STATUS_TO_DB = {"Present": "present", "Absent": "absent", "Excused": "excused"}
-DB_TO_STATUS = {"present": "Present", "absent": "Absent", "excused": "Excused"}
 
 require_role("admin", "cadre")
 st.title("Modify Attendance")
@@ -101,15 +104,32 @@ df = pd.DataFrame(
             or "Unknown"
             for e in roster
         ],
-        "Status": [DB_TO_STATUS.get(e["current_status"], "Present") for e in roster],
+        "Current Status": [
+            get_attendance_status_label(e["current_status"], default="Present")
+            for e in roster
+        ],
+        "Set Status": [
+            get_attendance_status_label(e["current_status"], default="Present")
+            for e in roster
+        ],
     }
 )
 
+styler = df.style
+if hasattr(styler, "map"):
+    styler = styler.map(get_attendance_status_cell_style, subset=["Current Status"])
+else:
+    styler = styler.applymap(
+        get_attendance_status_cell_style,
+        subset=["Current Status"],
+    )
+
 edited = st.data_editor(
-    df,
+    styler,
     column_config={
         "Cadet": st.column_config.TextColumn(disabled=True),
-        "Status": st.column_config.SelectboxColumn(
+        "Current Status": st.column_config.TextColumn(disabled=True),
+        "Set Status": st.column_config.SelectboxColumn(
             options=STATUS_OPTIONS, required=True
         ),
     },
@@ -120,7 +140,7 @@ edited = st.data_editor(
 st.divider()
 if st.button("Save All", type="primary"):
     new_statuses = {
-        cadet_ids[idx]: STATUS_TO_DB[row["Status"]]
+        cadet_ids[idx]: STATUS_TO_DB[row["Set Status"]]
         for idx, (_, row) in enumerate(edited.iterrows())
     }
     upserts = compute_upserts(roster, new_statuses)
