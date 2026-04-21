@@ -603,10 +603,43 @@ def delete_waiver_approval(approval_id: str | ObjectId) -> DeleteResult | None:
 # -- Flights
 
 
+def _validate_flight_association(
+    cadet_id: str | ObjectId,
+    target_flight_id: str | ObjectId | None = None,
+) -> None:
+    cadets_col = get_collection("cadets")
+    flights_col = get_collection("flights")
+    if cadets_col is None or flights_col is None:
+        return
+
+    cadet_object_id = ObjectId(cadet_id)
+    target_object_id = ObjectId(target_flight_id) if target_flight_id is not None else None
+
+    cadet = cadets_col.find_one({"_id": cadet_object_id})
+    if (
+        cadet
+        and cadet.get("flight_id")
+        and cadet["flight_id"] != target_object_id
+    ):
+        raise ValueError("Cadet is already assigned to another flight. Unassign them first.")
+
+    commander_query = {"commander_cadet_id": cadet_object_id}
+    if target_object_id is not None:
+        commander_query["_id"] = {"$ne": target_object_id}
+
+    if flights_col.find_one(commander_query):
+        raise ValueError(
+            "Cadet is already commanding another flight. Remove them as commander first."
+        )
+
+
 def create_flight(name: str, commander_cadet_id: str | ObjectId):
     col = get_collection("flights")
     if col is None:
         return None
+
+    _validate_flight_association(commander_cadet_id)
+
     return col.insert_one(
         {
             "name": name,
@@ -640,6 +673,10 @@ def update_flight(flight_id: str | ObjectId, updates: dict):
     col = get_collection("flights")
     if col is None:
         return None
+
+    if "commander_cadet_id" in updates:
+        _validate_flight_association(updates["commander_cadet_id"], flight_id)
+
     return col.update_one({"_id": ObjectId(flight_id)}, {"$set": updates})
 
 
@@ -732,11 +769,7 @@ def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
     if col is None:
         return None
 
-    cadet = col.find_one({"_id": ObjectId(cadet_id)})
-    if cadet and cadet.get("flight_id") and cadet["flight_id"] != ObjectId(flight_id):
-        raise ValueError(
-            "Cadet is already assigned to another flight. Unassign them first."
-        )
+    _validate_flight_association(cadet_id, flight_id)
 
     return col.update_one(
         {"_id": ObjectId(cadet_id)},
