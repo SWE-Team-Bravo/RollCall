@@ -177,7 +177,7 @@ if event_type_choice == "PT":
 elif event_type_choice == "LLAB":
     event_query["event_type"] = "lab"
 
-total_event_count = events_col.count_documents(event_query)
+total_event_count = events_col.count_documents({})
 
 event_docs = list(
     events_col.find(
