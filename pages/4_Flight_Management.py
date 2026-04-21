@@ -1,12 +1,16 @@
 import streamlit as st
 
 from utils.auth import require_role
-from services.cadets import build_cadet_display_map, get_cadets_by_flight
+from services.cadets import (
+    assign_cadet_to_flight,
+    build_cadet_display_map,
+    get_assignable_cadet_display_map,
+    get_cadets_by_flight,
+)
 from utils.db_schema_crud import (
     create_flight,
     delete_flight,
     get_all_flights,
-    assign_cadet_to_flight,
     unassign_cadet_from_flight,
     unassign_all_cadets_from_flight,
     get_cadet_by_id,
@@ -20,6 +24,19 @@ st.title("Flight Management")
 
 if "confirm_delete_flight_id" not in st.session_state:
     st.session_state.confirm_delete_flight_id = None
+if "flight_feedback" not in st.session_state:
+    st.session_state.flight_feedback = None
+if "expanded_flight_id" not in st.session_state:
+    st.session_state.expanded_flight_id = None
+
+
+def set_flight_feedback(flight_id: str, level: str, message: str) -> None:
+    st.session_state.flight_feedback = {
+        "flight_id": flight_id,
+        "level": level,
+        "message": message,
+    }
+    st.session_state.expanded_flight_id = flight_id
 
 # ----------------------------
 # Create Flight Section
@@ -55,6 +72,8 @@ st.divider()
 # ----------------------------
 
 flights = get_all_flights()
+assignable_cadet_display_map = get_assignable_cadet_display_map()
+rendered_feedback = False
 
 if not flights:
     st.info("No flights created yet.")
@@ -76,29 +95,58 @@ else:
         cadet_count = len(cadets_in_flight)
 
         with st.expander(
-            f"{flight['name']}  ·  Commander: {commander_name}  ·  {cadet_count} cadet(s)"
+            f"{flight['name']}  ·  Commander: {commander_name}  ·  {cadet_count} cadet(s)",
+            expanded=(
+                st.session_state.expanded_flight_id == flight_id
+                or st.session_state.confirm_delete_flight_id == flight_id
+            ),
         ):
+            feedback = st.session_state.flight_feedback
+            if feedback and feedback.get("flight_id") == flight_id:
+                level = feedback.get("level")
+                message = feedback.get("message")
+                if level == "success":
+                    st.success(message)
+                elif level == "warning":
+                    st.warning(message)
+                else:
+                    st.error(message)
+                rendered_feedback = True
+
             st.caption(
                 f"Commander: {commander_name}"
                 + (f" ({commander_rank})" if commander_rank else "")
             )
 
             st.markdown("**Assign / Reassign Cadet**")
-            cadet_to_assign_display = st.selectbox(
-                "Select cadet",
-                options=list(cadet_display_map.keys()),
-                key=f"assign_{flight_id}",
-                label_visibility="collapsed",
-            )
-            cadet_to_assign = cadet_display_map.get(cadet_to_assign_display)
-            if st.button("Assign to Flight", key=f"btn_{flight_id}"):
+            cadet_to_assign = None
+            if assignable_cadet_display_map:
+                cadet_to_assign_display = st.selectbox(
+                    "Select cadet",
+                    options=list(assignable_cadet_display_map.keys()),
+                    key=f"assign_{flight_id}",
+                    label_visibility="collapsed",
+                )
+                cadet_to_assign = assignable_cadet_display_map.get(cadet_to_assign_display)
+                assign_clicked = st.button("Assign to Flight", key=f"btn_{flight_id}")
+            else:
+                st.caption("No assignable cadets are available.")
+                assign_clicked = st.button(
+                    "Assign to Flight",
+                    key=f"btn_{flight_id}",
+                    disabled=True,
+                )
+
+            if assign_clicked:
+                st.session_state.expanded_flight_id = flight_id
                 if cadet_to_assign:
                     try:
                         assign_cadet_to_flight(cadet_to_assign, flight["_id"])
-                        st.success("Cadet assigned.")
+                        set_flight_feedback(flight_id, "success", "Cadet assigned.")
                         st.rerun()
                     except ValueError as e:
-                        st.error(str(e))
+                        set_flight_feedback(flight_id, "error", str(e))
+                        st.rerun()
 
             st.markdown("**Cadets in this Flight**")
             if cadets_in_flight:
@@ -113,6 +161,11 @@ else:
                         with col2:
                             if st.button("Unassign", key=f"unassign_{cadet['_id']}"):
                                 unassign_cadet_from_flight(cadet["_id"])
+                                set_flight_feedback(
+                                    flight_id,
+                                    "success",
+                                    "Cadet unassigned.",
+                                )
                                 st.rerun()
             else:
                 st.caption("No cadets assigned yet.")
@@ -148,4 +201,8 @@ else:
             else:
                 if st.button("Delete Flight", key=f"delete_{flight_id}"):
                     st.session_state.confirm_delete_flight_id = flight_id
+                    st.session_state.expanded_flight_id = flight_id
                     st.rerun()
+
+if rendered_feedback:
+    st.session_state.flight_feedback = None
