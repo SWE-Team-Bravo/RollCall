@@ -1,4 +1,5 @@
 from __future__ import annotations
+from utils.st_helpers import confirm_destructive_action
 
 from typing import Any, Dict, List, Tuple
 
@@ -209,5 +210,4 @@ def confirm_delete_user(confirmation_input: str) -> bool:
     "DELETE" (case-insensitive, ignoring surrounding whitespace).
     """
 
-    normalized = (confirmation_input or "").strip().upper()
-    return normalized == "DELETE"
+    return confirm_destructive_action(confirmation_input)

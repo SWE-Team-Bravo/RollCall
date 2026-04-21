@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/Users/husey/RollCall/tests/*.py)",
+      "Bash(python:*)",
+      "Bash(grep:*)",
+      "Bash(pip install:*)"
+    ]
+  }
+}

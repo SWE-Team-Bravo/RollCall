@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from utils.st_helpers import confirm_destructive_action, require
+
 
 
 from services.waivers import (
@@ -243,7 +245,7 @@ def show_waivers(
             )
             c1, c2 = st.columns(2)
             if c1.button("Confirm Withdraw", key=f"yes_{waiver_id}", type="primary"):
-                if confirmation.strip() != "DELETE":
+                if not confirm_destructive_action(confirmation):
                     st.error("Confirmation text does not match 'DELETE'.")
                 else:
                     success = withdraw_waiver(selected["_id"])
