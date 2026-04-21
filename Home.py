@@ -3,7 +3,7 @@ from utils.auth import get_current_user, restore_session
 from utils.theme import apply_theme_overrides
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
-st.sidebar.image("static/logo.svg", use_container_width=True)
+st.sidebar.image("static/logo.svg", width="stretch")
 
 apply_theme_overrides()
 
