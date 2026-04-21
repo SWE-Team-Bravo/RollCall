@@ -186,10 +186,7 @@ def build_update_user_payload(
     secondary = [
         r for r in normalized_roles if r != raw_role and r != "waiver_reviewer"
     ]
-    if raw_role in normalized_roles:
-        updated_roles = [raw_role] + secondary
-    else:
-        updated_roles = [raw_role] + secondary
+    updated_roles = [raw_role] + secondary
     if waiver_reviewer:
         updated_roles.append("waiver_reviewer")
 
