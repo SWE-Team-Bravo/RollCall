@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 from typing import Any, cast
 
@@ -102,7 +104,9 @@ with st.form("change_password_form"):
                             "password_hash"
                         ]
                     except Exception:
-                        pass
+                        logging.exception(
+                            "Failed to sync password hash in session state"
+                        )
 
                 authenticator = st.session_state.get("authenticator")
                 if authenticator is not None:
@@ -111,6 +115,8 @@ with st.form("change_password_form"):
                             updates["password_hash"]
                         )
                     except Exception:
-                        pass
+                        logging.exception(
+                            "Failed to sync authenticator credentials in session state"
+                        )
 
                 st.success("Password updated successfully.")

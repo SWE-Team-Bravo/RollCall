@@ -13,7 +13,6 @@ from utils.auth import get_current_user, require_role
 from utils.db import get_collection, get_db
 from utils.export import to_excel
 
-_DEFAULT_DAYS = 30
 _MAX_ROWS = 2000
 _MAX_EVENTS = 200
 
@@ -118,7 +117,7 @@ if is_flight_commander_only and current_user:
 st.subheader("Filters")
 
 today = datetime.now(timezone.utc).date()
-default_start = today.fromordinal(today.toordinal() - _DEFAULT_DAYS)
+default_start = today.replace(month=1, day=1)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -178,18 +177,18 @@ if event_type_choice == "PT":
 elif event_type_choice == "LLAB":
     event_query["event_type"] = "lab"
 
+total_event_count = events_col.count_documents({})
+
 event_docs = list(
     events_col.find(
         event_query,
         {"_id": 1, "start_date": 1, "event_name": 1, "event_type": 1},
     )
     .sort("start_date", -1)
-    .limit(_MAX_EVENTS + 1)
+    .limit(_MAX_EVENTS)
 )
 
-too_many_events = len(event_docs) > _MAX_EVENTS
-if too_many_events:
-    event_docs = event_docs[:_MAX_EVENTS]
+too_many_events = total_event_count > _MAX_EVENTS
 
 if not event_docs:
     st.info("No events found for the selected filters.")
@@ -229,12 +228,12 @@ else:
 
         # --- Event summary (one row per event)
 
+        st.subheader("Event Summary")
+        st.caption(f"Showing {len(event_docs)}/{total_event_count} events")
         if too_many_events:
             st.warning(
-                f"Showing newest {_MAX_EVENTS} events. Narrow the date range to see older events."
+                f"Showing newest {_MAX_EVENTS} of {total_event_count} events. Narrow the date range to see older events."
             )
-
-        st.subheader("Event Summary")
 
         # Aggregate counts by event_id and status. Prefer doing this server-side.
         status_counts: dict[ObjectId, dict[str, int]] = {
@@ -270,8 +269,9 @@ else:
                     grp.get("count") or 0
                 )
         except Exception:
-            # Fallback: if aggregation is unavailable for some reason, do nothing.
-            pass
+            st.warning(
+                "Could not load attendance summary. Some counts may be incomplete."
+            )
 
         for eid, counts in status_counts.items():
             total_counts[eid] = sum(counts.values())

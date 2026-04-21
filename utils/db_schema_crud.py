@@ -517,8 +517,10 @@ def get_waivers_by_status(status: str) -> list[dict]:
 
 
 def get_waivers_by_attendance_records(record_ids: list[str | ObjectId]) -> list[dict]:
+    if not record_ids:
+        return []
     col = get_collection("waivers")
-    if col is None or not record_ids:
+    if col is None:
         return []
     object_ids = [ObjectId(r_id) for r_id in record_ids]
     return list(col.find({"attendance_record_id": {"$in": object_ids}}))

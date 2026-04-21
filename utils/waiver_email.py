@@ -1,3 +1,4 @@
+import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -59,4 +60,5 @@ def send_waiver_decision_email(
         update_waiver(waiver_id, {"email_sent": True})
         return True
     except Exception:
+        logging.exception("Failed to send waiver email to %s", to_email)
         return False

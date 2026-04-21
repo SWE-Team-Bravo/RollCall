@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pandas as pd
+from bson import ObjectId
 
 from services.at_risk_cadets import (
     WAIVER_FLAG_THRESHOLD,
@@ -233,3 +234,93 @@ def test_get_df_sorted_worst_first():
         llab = list(result["LLAB Absences"])
         totals = [pt[i] + llab[i] for i in range(len(pt))]
         assert totals == sorted(totals, reverse=True)
+
+
+_FLIGHT_A = ObjectId()
+_FLIGHT_B = ObjectId()
+
+_CADET_FLIGHT_A = {
+    "cadet": {
+        "_id": "10",
+        "first_name": "Alpha",
+        "last_name": "One",
+        "flight_id": _FLIGHT_A,
+    },
+    "pt_absences": 9,
+    "llab_absences": 0,
+}
+_CADET_FLIGHT_B = {
+    "cadet": {
+        "_id": "11",
+        "first_name": "Beta",
+        "last_name": "Two",
+        "flight_id": _FLIGHT_B,
+    },
+    "pt_absences": 0,
+    "llab_absences": 2,
+}
+_CADET_NO_FLIGHT = {
+    "cadet": {"_id": "12", "first_name": "Gamma", "last_name": "Three"},
+    "pt_absences": 9,
+    "llab_absences": 1,
+}
+
+
+def test_filter_cadets_scoped_to_flight_excludes_other_flights():
+    with patch(
+        "services.at_risk_cadets.get_at_risk_cadets",
+        return_value=[_CADET_FLIGHT_A, _CADET_FLIGHT_B],
+    ):
+        result = filter_cadets(flight_id=_FLIGHT_A)
+    assert len(result) == 1
+    assert result[0]["cadet"]["first_name"] == "Alpha"
+
+
+def test_filter_cadets_scoped_to_other_flight():
+    with patch(
+        "services.at_risk_cadets.get_at_risk_cadets",
+        return_value=[_CADET_FLIGHT_A, _CADET_FLIGHT_B],
+    ):
+        result = filter_cadets(flight_id=_FLIGHT_B)
+    assert len(result) == 1
+    assert result[0]["cadet"]["first_name"] == "Beta"
+
+
+def test_filter_cadets_no_flight_id_returns_all():
+    with patch(
+        "services.at_risk_cadets.get_at_risk_cadets",
+        return_value=[_CADET_FLIGHT_A, _CADET_FLIGHT_B],
+    ):
+        result = filter_cadets(flight_id=None)
+    assert len(result) == 2
+
+
+def test_filter_cadets_cadet_without_flight_excluded_when_scoped():
+    with patch(
+        "services.at_risk_cadets.get_at_risk_cadets",
+        return_value=[_CADET_FLIGHT_A, _CADET_NO_FLIGHT],
+    ):
+        result = filter_cadets(flight_id=_FLIGHT_A)
+    assert len(result) == 1
+    assert result[0]["cadet"]["first_name"] == "Alpha"
+
+
+def test_get_df_scoped_to_flight_returns_only_matching_cadets():
+    with patch(
+        "services.at_risk_cadets.get_at_risk_cadets",
+        return_value=[_CADET_FLIGHT_A, _CADET_FLIGHT_B],
+    ):
+        result = get_df(flight_id=_FLIGHT_A)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 1
+    assert result["First Name"].iloc[0] == "Alpha"
+
+
+def test_get_df_no_flight_id_returns_all_cadets():
+    with patch(
+        "services.at_risk_cadets.get_at_risk_cadets",
+        return_value=[_CADET_FLIGHT_A, _CADET_FLIGHT_B],
+    ):
+        result = get_df(flight_id=None)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 2

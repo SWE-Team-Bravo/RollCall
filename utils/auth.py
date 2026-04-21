@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import jwt
@@ -48,7 +49,7 @@ def _get_or_create_authenticator() -> stauth.Authenticate:
         try:
             authenticator.credentials = credentials
         except Exception:
-            pass
+            logging.exception("Failed to update authenticator credentials")
 
     return authenticator
 
