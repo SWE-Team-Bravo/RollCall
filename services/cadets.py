@@ -52,24 +52,6 @@ def get_cadets_by_flight(flight_id) -> list[dict]:
     return [cadet for cadet in cadets if cadet["_id"] != flight["commander_cadet_id"]]
 
 
-def get_assignable_cadet_display_map() -> dict[str, str]:
-    flights_col = get_collection("flights")
-    if flights_col is None:
-        return build_cadet_display_map()
-
-    commander_cadet_ids = {
-        str(flight["commander_cadet_id"])
-        for flight in flights_col.find({}, {"commander_cadet_id": 1})
-        if flight.get("commander_cadet_id")
-    }
-
-    return {
-        display: cadet_id
-        for display, cadet_id in build_cadet_display_map().items()
-        if cadet_id not in commander_cadet_ids
-    }
-
-
 def assign_cadet_to_flight(cadet_id, flight_id):
     cadet = get_cadet_by_id(cadet_id)
     if cadet and cadet.get("flight_id") == ObjectId(flight_id):
