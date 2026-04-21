@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
-from services.attendance import is_already_checked_in
+from services.attendance import is_already_checked_in, is_within_checkin_window
 from services.cadet_attendance import get_cadet_flight_label, load_cadet_flights
 from services.event_codes import validate_code
 from utils.auth import get_current_user, require_auth
@@ -50,7 +52,7 @@ rank = str(cadet.get("rank", "") or "").strip()
 flights = load_cadet_flights(cadet)
 flight_label = get_cadet_flight_label(cadet, flights)
 name_parts = [p for p in [rank, first, last] if p]
-st.caption(f"Checking in as **{' '.join(name_parts)}** · Flight: {flight_label}")
+st.caption(f"Checking in as **{' '.join(name_parts)}** - Flight: {flight_label}")
 st.divider()
 
 st.subheader("Enter your 6-digit event code")
@@ -74,34 +76,40 @@ if len(code_clean) == 6:
     else:
         event = get_event_by_id(event_code["event_id"])
         if event:
-            event_name = str(event.get("event_name", "") or "Event")
-            event_type = (event.get("event_type") or "").upper()
-            start = event.get("start_date")
-            if hasattr(start, "strftime"):
-                date_str = start.strftime("%B %d, %Y")
-            elif start:
-                date_str = str(start)[:10]
-            else:
-                date_str = ""
-
-            existing = get_attendance_by_cadet(cadet_id)
-            already_checked_in = is_already_checked_in(
-                str(event_code["event_id"]), str(cadet_id), existing
-            )
-
-            if already_checked_in:
-                st.success(
-                    f"You are already checked in for **{event_name}**"
-                    + (f" ({event_type} · {date_str})" if date_str else "")
-                    + "."
+            if not is_within_checkin_window(event, datetime.now(timezone.utc)):
+                st.error(
+                    "Check-in is only available during the 10-minute window before the event starts."
                 )
+                event_code = None
             else:
-                label = event_name
-                if event_type:
-                    label += f" · {event_type}"
-                if date_str:
-                    label += f" · {date_str}"
-                st.info(label)
+                event_name = str(event.get("event_name", "") or "Event")
+                event_type = (event.get("event_type") or "").upper()
+                start = event.get("start_date")
+                if hasattr(start, "strftime"):
+                    date_str = start.strftime("%B %d, %Y")
+                elif start:
+                    date_str = str(start)[:10]
+                else:
+                    date_str = ""
+
+                existing = get_attendance_by_cadet(cadet_id)
+                already_checked_in = is_already_checked_in(
+                    str(event_code["event_id"]), str(cadet_id), existing
+                )
+
+                if already_checked_in:
+                    st.success(
+                        f"You are already checked in for **{event_name}**"
+                        + (f" ({event_type} - {date_str})" if date_str else "")
+                        + "."
+                    )
+                else:
+                    label = event_name
+                    if event_type:
+                        label += f" - {event_type}"
+                    if date_str:
+                        label += f" - {date_str}"
+                    st.info(label)
 
 button_disabled = event_code is None or already_checked_in
 
