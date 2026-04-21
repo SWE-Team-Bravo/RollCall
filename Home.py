@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 from utils.auth import get_current_user, restore_session
 from utils.theme import apply_theme_overrides
@@ -106,7 +108,7 @@ else:
                 try:
                     auth.cookie_controller.delete_cookie()
                 except Exception:
-                    pass
+                    logging.exception("Failed to delete auth cookie during logout")
             for key in [
                 "authentication_status",
                 "username",

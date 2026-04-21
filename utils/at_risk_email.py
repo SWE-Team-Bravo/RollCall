@@ -1,3 +1,4 @@
+import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -215,6 +216,7 @@ def send_email(to_email: str, msg: MIMEMultipart) -> bool:
             server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
         return True
     except Exception:
+        logging.exception("Failed to send email to %s", to_email)
         return False
 
 
@@ -248,6 +250,7 @@ def send_to_student(
         set_at_risk_email_sent(cadet_id, pt_absences, llab_absences)
         return True
     except Exception:
+        logging.exception("Failed to send at-risk email to %s", to_email)
         return False
 
 
