@@ -109,6 +109,18 @@ def test_upsert_updates_record_when_one_exists():
     assert upserts[0]["status"] == "absent"
 
 
+def test_upsert_skips_unchanged_existing_record():
+    roster = [
+        {
+            "cadet": {"_id": "c1"},
+            "record": {"_id": "r1", "status": "present"},
+            "current_status": "present",
+        }
+    ]
+
+    assert compute_upserts(roster, {"c1": "present"}) == []
+
+
 def test_upsert_commander_wins_over_existing_status():
     roster = [
         {
