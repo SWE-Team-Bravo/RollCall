@@ -14,7 +14,7 @@ def closest_event_index(events: list[dict]) -> int:
             if isinstance(start, datetime):
                 return abs((start.date() - today).days)
             return abs((date.fromisoformat(str(start)[:10]) - today).days)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return 999_999
 
     return min(range(len(events)), key=lambda i: _distance(events[i]))
