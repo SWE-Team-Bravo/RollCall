@@ -5,7 +5,7 @@ from utils.at_risk_email import send_at_risk_emails
 from utils.auth import require_role
 from utils.export import to_excel
 
-from services.at_risk_cadets import get_df
+from services.at_risk_cadets import get_df, get_waiver_flag_df, WAIVER_FLAG_THRESHOLD
 
 require_role("admin", "cadre", "flight_commander")
 
@@ -39,3 +39,11 @@ elif isinstance(df, pd.DataFrame):
 
     st.divider()
     st.dataframe(df, hide_index=True, width="stretch")
+
+st.divider()
+st.subheader(f"Waiver-Flagged Cadets ({WAIVER_FLAG_THRESHOLD}+ approved waivers)")
+waiver_df = get_waiver_flag_df()
+if isinstance(waiver_df, str):
+    st.info(waiver_df)
+else:
+    st.dataframe(waiver_df, hide_index=True, width="stretch")

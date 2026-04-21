@@ -1,5 +1,49 @@
-from utils.at_risk_email import get_at_risk_cadets
 import pandas as pd
+
+from utils.at_risk_email import get_at_risk_cadets
+from utils.db_schema_crud import (
+    get_all_cadets,
+    get_approved_waivers_by_user,
+    get_user_by_id,
+)
+
+WAIVER_FLAG_THRESHOLD = 3
+
+
+def get_waiver_flagged_cadets() -> list[dict]:
+    """Return cadets with WAIVER_FLAG_THRESHOLD or more approved waivers."""
+    flagged = []
+    for cadet in get_all_cadets():
+        user_id = cadet.get("user_id")
+        if user_id is None:
+            continue
+        approved = get_approved_waivers_by_user(user_id)
+        count = len(approved)
+        if count >= WAIVER_FLAG_THRESHOLD:
+            user = get_user_by_id(user_id)
+            flagged.append({"cadet": cadet, "user": user, "waiver_count": count})
+    return sorted(flagged, key=lambda x: x["waiver_count"], reverse=True)
+
+
+def get_waiver_flag_df() -> pd.DataFrame | str:
+    flagged = get_waiver_flagged_cadets()
+    if not flagged:
+        return "No cadets flagged."
+    rows = []
+    for i, entry in enumerate(flagged):
+        user = entry["user"] or {}
+        rows.append(
+            {
+                "No.": i + 1,
+                "First Name": str(user.get("first_name", "") or ""),
+                "Last Name": str(user.get("last_name", "") or ""),
+                "Approved Waivers": entry["waiver_count"],
+            }
+        )
+    return pd.DataFrame(
+        rows,
+        columns=pd.Index(["No.", "First Name", "Last Name", "Approved Waivers"]),
+    )
 
 
 def filter_cadets() -> list[dict]:

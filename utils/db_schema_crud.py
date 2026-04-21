@@ -479,6 +479,20 @@ def get_sickness_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
     )
 
 
+def get_approved_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(
+        col.find(
+            {
+                "submitted_by_user_id": ObjectId(user_id),
+                "status": "approved",
+            }
+        )
+    )
+
+
 def get_waiver_by_id(waiver_id: str | ObjectId) -> dict | None:
     col = get_collection("waivers")
     if col is None:
