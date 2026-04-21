@@ -8,6 +8,7 @@ from utils.db_schema_crud import (
     get_all_flights,
     assign_cadet_to_flight,
     unassign_cadet_from_flight,
+    unassign_all_cadets_from_flight,
     get_cadet_by_id,
     get_user_by_id,
 )
@@ -89,9 +90,12 @@ else:
             cadet_to_assign = cadet_display_map.get(cadet_to_assign_display)
             if st.button("Assign to Flight", key=f"btn_{flight_id}"):
                 if cadet_to_assign:
-                    assign_cadet_to_flight(cadet_to_assign, flight["_id"])
-                    st.success("Cadet assigned.")
-                    st.rerun()
+                    try:
+                        assign_cadet_to_flight(cadet_to_assign, flight["_id"])
+                        st.success("Cadet assigned.")
+                        st.rerun()
+                    except ValueError as e:
+                        st.error(str(e))
 
             st.markdown("**Cadets in this Flight**")
             if cadets_in_flight:
@@ -112,11 +116,18 @@ else:
 
             st.divider()
             if st.session_state.confirm_delete_flight_id == flight_id:
-                st.warning(f"Delete **{flight['name']}**? This cannot be undone.")
+                if cadet_count > 0:
+                    st.warning(
+                        f"Delete **{flight['name']}**? "
+                        f"{cadet_count} cadet(s) will be unassigned. This cannot be undone."
+                    )
+                else:
+                    st.warning(f"Delete **{flight['name']}**? This cannot be undone.")
                 c1, c2 = st.columns(2)
                 if c1.button(
                     "Yes, delete", key=f"confirm_del_{flight_id}", type="primary"
                 ):
+                    unassign_all_cadets_from_flight(flight["_id"])
                     delete_flight(flight["_id"])
                     st.session_state.confirm_delete_flight_id = None
                     st.rerun()

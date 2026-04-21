@@ -730,9 +730,26 @@ def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
     if col is None:
         return None
 
+    cadet = col.find_one({"_id": ObjectId(cadet_id)})
+    if cadet and cadet.get("flight_id") and cadet["flight_id"] != ObjectId(flight_id):
+        raise ValueError(
+            "Cadet is already assigned to another flight. Unassign them first."
+        )
+
     return col.update_one(
         {"_id": ObjectId(cadet_id)},
         {"$set": {"flight_id": ObjectId(flight_id)}},
+    )
+
+
+def unassign_all_cadets_from_flight(flight_id: str | ObjectId):
+    col = get_collection("cadets")
+    if col is None:
+        return None
+
+    return col.update_many(
+        {"flight_id": ObjectId(flight_id)},
+        {"$unset": {"flight_id": ""}},
     )
 
 
