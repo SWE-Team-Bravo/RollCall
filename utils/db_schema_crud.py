@@ -395,19 +395,24 @@ def create_waiver(
     reason: str,
     status: str,
     submitted_by_user_id: str | ObjectId,
+    waiver_type: str = "non-medical",
+    cadre_only: bool = False,
+    attachments: list | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("waivers")
     if col is None:
         return None
-    result = col.insert_one(
-        {
-            "attendance_record_id": ObjectId(attendance_record_id),
-            "reason": reason,
-            "status": status,
-            "submitted_by_user_id": ObjectId(submitted_by_user_id),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
+    doc: dict = {
+        "attendance_record_id": ObjectId(attendance_record_id),
+        "reason": reason,
+        "status": status,
+        "submitted_by_user_id": ObjectId(submitted_by_user_id),
+        "waiver_type": waiver_type,
+        "cadre_only": cadre_only,
+        "attachments": attachments or [],
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = col.insert_one(doc)
     is_valid, why = validate_waiver(ObjectId(attendance_record_id))
     if not is_valid:
         col.update_one(
@@ -457,6 +462,35 @@ def validate_waiver(attendance_record_id: str | ObjectId) -> tuple[bool, str]:
         return False, f"Waivers are not allowed for event type '{event_type}'."
 
     return True, ""
+
+
+def get_sickness_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(
+        col.find(
+            {
+                "submitted_by_user_id": ObjectId(user_id),
+                "waiver_type": "sickness",
+                "status": {"$in": ["approved", "pending"]},
+            }
+        )
+    )
+
+
+def get_approved_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(
+        col.find(
+            {
+                "submitted_by_user_id": ObjectId(user_id),
+                "status": "approved",
+            }
+        )
+    )
 
 
 def get_waiver_by_id(waiver_id: str | ObjectId) -> dict | None:

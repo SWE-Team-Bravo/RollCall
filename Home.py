@@ -3,7 +3,7 @@ from utils.auth import get_current_user, restore_session
 from utils.theme import apply_theme_overrides
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
-st.sidebar.image("static/logo.svg", use_container_width=True)
+st.sidebar.image("static/logo.svg", width="stretch")
 
 apply_theme_overrides()
 
@@ -82,12 +82,13 @@ else:
             dashboard,
             fc_live_view,
             attendance,
-            waiver_review,
             at_risk_report,
             event_code_admin,
         ]
     elif "cadet" in st.session_state.view_role:
         pages = [attendance, waivers, cadet_attendance]
+        if "waiver_reviewer" in st.session_state.view_role:
+            pages.append(waiver_review)
     else:
         pages = []
 

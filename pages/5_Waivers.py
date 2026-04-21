@@ -3,8 +3,11 @@ import pandas as pd
 
 
 from services.waivers import (
+    apply_sickness_auto_approval,
     get_absent_records_without_waiver,
     get_all_waivers_for_cadet,
+    get_common_reasons,
+    resolve_cadre_only,
     resubmit_auto_denied_waiver,
     withdraw_waiver,
     WAIVER_STATUS_BADGE,
@@ -292,13 +295,56 @@ def waiver_form(
                 default_index = i
                 break
 
+    common_reasons = get_common_reasons()
+
     with st.form("waiver_form", clear_on_submit=True):
         label = st.selectbox(
             "Select Absent Event",
             options=list(record_labels.keys()),
             index=default_index,
         )
-        reason = st.text_area("Reason for Waiver Request")
+
+        waiver_type = st.radio(
+            "Waiver type",
+            options=["non-medical", "medical", "sickness"],
+            format_func=lambda x: {
+                "non-medical": "Non-Medical",
+                "medical": "Medical",
+                "sickness": "Sickness",
+            }.get(x, x),
+            horizontal=True,
+        )
+
+        if waiver_type == "sickness":
+            st.info(
+                "Your first sickness waiver is automatically approved. Subsequent sickness waivers go to cadre for review."
+            )
+
+        if waiver_type == "medical":
+            st.info(
+                "Medical waivers are visible to cadre only (not flight commanders)."
+            )
+
+        selected_reason = st.selectbox("Reason", options=common_reasons)
+        extra_details = ""
+        if selected_reason == common_reasons[-1]:
+            extra_details = st.text_area("Describe your reason")
+        else:
+            extra_details = st.text_area("Additional details (optional)")
+
+        uploaded_file = st.file_uploader(
+            "Attach supporting document (optional)",
+            type=["pdf", "png", "jpg", "jpeg", "docx"],
+        )
+
+        force_cadre_only = resolve_cadre_only(
+            waiver_type, uploaded_file is not None, False
+        )
+        cadre_only = st.checkbox(
+            "Send to cadre staff only",
+            value=force_cadre_only,
+            disabled=force_cadre_only,
+        )
 
         col1, col2, spacer = st.columns([2, 2, 8])
         with col1:
@@ -307,11 +353,27 @@ def waiver_form(
             cancel = st.form_submit_button("Cancel", type="secondary")
 
     if submit:
-        if not reason.strip():
+        reason_text = (
+            extra_details.strip()
+            if selected_reason == common_reasons[-1]
+            else f"{selected_reason}. {extra_details}".strip(". ")
+        )
+        if not reason_text:
             st.error("Please provide a reason for your waiver request.")
         else:
             selected_record = record_labels[label]
             existing = get_waiver_by_attendance_record(selected_record["_id"])
+
+            attachments = []
+            if uploaded_file is not None:
+                attachments = [
+                    {
+                        "filename": uploaded_file.name,
+                        "content_type": uploaded_file.type
+                        or "application/octet-stream",
+                        "data": uploaded_file.read(),
+                    }
+                ]
 
             if (
                 existing
@@ -319,7 +381,7 @@ def waiver_form(
                 and bool(existing.get("auto_denied"))
             ):
                 became_pending, why = resubmit_auto_denied_waiver(
-                    existing, selected_record["_id"], reason
+                    existing, selected_record["_id"], reason_text
                 )
                 if not became_pending:
                     st.error(
@@ -334,9 +396,12 @@ def waiver_form(
             else:
                 result = create_waiver(
                     attendance_record_id=selected_record["_id"],
-                    reason=reason,
+                    reason=reason_text,
                     status="pending",
                     submitted_by_user_id=user_id,
+                    waiver_type=waiver_type,
+                    cadre_only=cadre_only,
+                    attachments=attachments,
                 )
 
                 if result:
@@ -345,6 +410,8 @@ def waiver_form(
                     if created_status.lower() == "denied":
                         st.session_state.show_error = "Waiver was auto-denied. See notes under your waiver status."
                     else:
+                        if waiver_type == "sickness":
+                            apply_sickness_auto_approval(result.inserted_id, user_id)
                         st.session_state.show_success = (
                             "Waiver request submitted successfully!"
                         )

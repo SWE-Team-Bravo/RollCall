@@ -2,7 +2,13 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from services.at_risk_cadets import filter_cadets, get_df
+from services.at_risk_cadets import (
+    WAIVER_FLAG_THRESHOLD,
+    filter_cadets,
+    get_df,
+    get_waiver_flag_df,
+    get_waiver_flagged_cadets,
+)
 
 CADET_A = {
     "cadet": {"_id": "1", "first_name": "Tyler", "last_name": "Brooks"},
@@ -116,6 +122,104 @@ def test_get_df_contains_absence_counts():
         assert isinstance(result, pd.DataFrame)
         assert result["PT Absences"].iloc[0] == 9
         assert result["LLAB Absences"].iloc[0] == 0
+
+
+# ----------------------- get_waiver_flagged_cadets ----------------------------------
+
+CADET_DOC = {"_id": "c1", "user_id": "u1", "first_name": "Tyler", "last_name": "Brooks"}
+USER_DOC = {"_id": "u1", "first_name": "Tyler", "last_name": "Brooks"}
+APPROVED_WAIVER = {"_id": "w1", "status": "approved", "submitted_by_user_id": "u1"}
+
+
+def test_get_waiver_flagged_cadets_flags_at_threshold():
+    waivers = [APPROVED_WAIVER] * WAIVER_FLAG_THRESHOLD
+    with (
+        patch("services.at_risk_cadets.get_all_cadets", return_value=[CADET_DOC]),
+        patch(
+            "services.at_risk_cadets.get_approved_waivers_by_user", return_value=waivers
+        ),
+        patch("services.at_risk_cadets.get_user_by_id", return_value=USER_DOC),
+    ):
+        result = get_waiver_flagged_cadets()
+    assert len(result) == 1
+    assert result[0]["waiver_count"] == WAIVER_FLAG_THRESHOLD
+
+
+def test_get_waiver_flagged_cadets_not_flagged_below_threshold():
+    waivers = [APPROVED_WAIVER] * (WAIVER_FLAG_THRESHOLD - 1)
+    with (
+        patch("services.at_risk_cadets.get_all_cadets", return_value=[CADET_DOC]),
+        patch(
+            "services.at_risk_cadets.get_approved_waivers_by_user", return_value=waivers
+        ),
+        patch("services.at_risk_cadets.get_user_by_id", return_value=USER_DOC),
+    ):
+        result = get_waiver_flagged_cadets()
+    assert result == []
+
+
+def test_get_waiver_flagged_cadets_empty_when_no_cadets():
+    with (
+        patch("services.at_risk_cadets.get_all_cadets", return_value=[]),
+    ):
+        result = get_waiver_flagged_cadets()
+    assert result == []
+
+
+def test_get_waiver_flagged_cadets_skips_cadet_without_user_id():
+    cadet_no_user = {**CADET_DOC, "user_id": None}
+    with (
+        patch("services.at_risk_cadets.get_all_cadets", return_value=[cadet_no_user]),
+    ):
+        result = get_waiver_flagged_cadets()
+    assert result == []
+
+
+def test_get_waiver_flagged_cadets_sorted_most_waivers_first():
+    cadet2 = {**CADET_DOC, "_id": "c2", "user_id": "u2"}
+    with (
+        patch(
+            "services.at_risk_cadets.get_all_cadets", return_value=[CADET_DOC, cadet2]
+        ),
+        patch(
+            "services.at_risk_cadets.get_approved_waivers_by_user",
+            side_effect=[
+                [APPROVED_WAIVER] * 3,
+                [APPROVED_WAIVER] * 5,
+            ],
+        ),
+        patch("services.at_risk_cadets.get_user_by_id", return_value=USER_DOC),
+    ):
+        result = get_waiver_flagged_cadets()
+    assert result[0]["waiver_count"] == 5
+    assert result[1]["waiver_count"] == 3
+
+
+def test_get_waiver_flag_df_returns_dataframe():
+    waivers = [APPROVED_WAIVER] * WAIVER_FLAG_THRESHOLD
+    with (
+        patch("services.at_risk_cadets.get_all_cadets", return_value=[CADET_DOC]),
+        patch(
+            "services.at_risk_cadets.get_approved_waivers_by_user", return_value=waivers
+        ),
+        patch("services.at_risk_cadets.get_user_by_id", return_value=USER_DOC),
+    ):
+        result = get_waiver_flag_df()
+    assert isinstance(result, pd.DataFrame)
+    assert list(result.columns) == [
+        "No.",
+        "First Name",
+        "Last Name",
+        "Approved Waivers",
+    ]
+
+
+def test_get_waiver_flag_df_returns_str_when_empty():
+    with (
+        patch("services.at_risk_cadets.get_all_cadets", return_value=[]),
+    ):
+        result = get_waiver_flag_df()
+    assert isinstance(result, str)
 
 
 def test_get_df_sorted_worst_first():

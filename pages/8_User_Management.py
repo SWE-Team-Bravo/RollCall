@@ -68,6 +68,11 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
         else 0,
         key=f"edit_role_{user_id}",
     )
+    new_waiver_reviewer = cols[2].checkbox(
+        "Waiver reviewer",
+        value=bool(summary.get("waiver_reviewer", False)),
+        key=f"edit_wr_{user_id}",
+    )
 
     save_btn, cancel_btn = cols[3].columns(2)
 
@@ -88,6 +93,7 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
             new_email=new_email,
             new_role=new_role,
             other_emails=other_emails,
+            waiver_reviewer=new_waiver_reviewer,
         )
 
         if errors:
