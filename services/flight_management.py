@@ -49,7 +49,9 @@ def get_flight_management_cadet_rows() -> list[dict[str, str | bool]]:
                 "rank": cadet.get("rank", ""),
                 "email": user.get("email", ""),
                 "current_flight_id": current_flight_id,
-                "current_flight": flight_name_by_id.get(current_flight_id, "") if current_flight_id else "",
+                "current_flight": flight_name_by_id.get(current_flight_id, "")
+                if current_flight_id
+                else "",
                 "is_assigned": bool(current_flight_id),
             }
         )
@@ -81,7 +83,9 @@ def get_assignment_table(
 
     if normalized_search:
         base_rows = [
-            row for row in candidate_rows if normalized_search in _assignment_haystack(row)
+            row
+            for row in candidate_rows
+            if normalized_search in _assignment_haystack(row)
         ]
     elif show_assigned:
         base_rows = candidate_rows
@@ -143,15 +147,13 @@ def get_commander_member_table(flight: dict) -> pd.DataFrame:
 
 def get_selected_cadet_ids(
     edited_table: pd.DataFrame,
-    cadet_ids: list[str | None],
+    cadet_ids: list[str],
     selection_column: str,
 ) -> list[str]:
     return [
         cadet_ids[idx]
         for idx, (_, row) in enumerate(edited_table.iterrows())
-        if cadet_ids[idx] is not None
-        and pd.notna(row[selection_column])
-        and bool(row[selection_column])
+        if pd.notna(row[selection_column]) and bool(row[selection_column])
     ]
 
 
@@ -226,7 +228,7 @@ def unassign_selected_cadets(
 def get_member_selection_table(
     member_table: pd.DataFrame,
     selected_cadet_ids: list[str],
-    member_cadet_ids: list[str | None],
+    member_cadet_ids: list[str],
 ) -> pd.DataFrame:
     selected_set = set(selected_cadet_ids)
     table = member_table.copy()
@@ -236,13 +238,13 @@ def get_member_selection_table(
     table.insert(
         0,
         "Unassign",
-        [cadet_id in selected_set if cadet_id is not None else None for cadet_id in member_cadet_ids],
+        [cadet_id in selected_set for cadet_id in member_cadet_ids],
     )
     return table
 
 
-def get_selectable_member_ids(member_cadet_ids: list[str | None]) -> list[str]:
-    return [cadet_id for cadet_id in member_cadet_ids if cadet_id is not None]
+def get_selectable_member_ids(member_cadet_ids: list[str]) -> list[str]:
+    return member_cadet_ids
 
 
 def _get_commander_cadet_ids() -> set[str]:

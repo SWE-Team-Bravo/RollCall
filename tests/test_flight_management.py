@@ -138,7 +138,9 @@ def test_assign_cadet_to_same_flight_is_allowed(mock_get_collection):
 
 
 @patch("utils.db_schema_crud.get_collection")
-def test_assign_cadet_to_flight_raises_if_commanding_different_flight(mock_get_collection):
+def test_assign_cadet_to_flight_raises_if_commanding_different_flight(
+    mock_get_collection,
+):
     cadets_collection = MagicMock()
     flights_collection = MagicMock()
     mock_get_collection.side_effect = lambda name: {
@@ -305,7 +307,10 @@ def test_assign_cadet_to_flight_service_calls_db_for_new_assignment(
     current_flight_id = ObjectId()
     new_flight_id = ObjectId()
 
-    mock_get_cadet_by_id.return_value = {"_id": cadet_id, "flight_id": current_flight_id}
+    mock_get_cadet_by_id.return_value = {
+        "_id": cadet_id,
+        "flight_id": current_flight_id,
+    }
 
     assign_cadet_to_flight_service(cadet_id, new_flight_id)
 
@@ -321,7 +326,11 @@ def test_get_flight_commander_details_returns_name_and_rank(
     commander_id = ObjectId()
     user_id = ObjectId()
 
-    mock_get_cadet_by_id.return_value = {"_id": commander_id, "user_id": user_id, "rank": "300"}
+    mock_get_cadet_by_id.return_value = {
+        "_id": commander_id,
+        "user_id": user_id,
+        "rank": "300",
+    }
     mock_get_user_by_id.return_value = {
         "first_name": "Taylor",
         "last_name": "Smith",
@@ -351,7 +360,9 @@ def test_get_flight_management_cadet_rows_excludes_commanders_and_adds_flight_in
     flights_collection = MagicMock()
     flights_collection.find.return_value = [{"commander_cadet_id": commander_id}]
     mock_get_collection.return_value = flights_collection
-    mock_get_all_flights.return_value = [{"_id": assigned_flight_id, "name": "Bravo Flight"}]
+    mock_get_all_flights.return_value = [
+        {"_id": assigned_flight_id, "name": "Bravo Flight"}
+    ]
     mock_get_all_cadets.return_value = [
         {"_id": commander_id, "user_id": ObjectId(), "rank": "300"},
         {
@@ -364,7 +375,7 @@ def test_get_flight_management_cadet_rows_excludes_commanders_and_adds_flight_in
             "_id": unassigned_cadet_id,
             "user_id": ObjectId(),
             "rank": "100",
-        }
+        },
     ]
     mock_get_user_by_id.side_effect = [
         {"first_name": "Taylor", "last_name": "Smith", "email": "tsmith@test.local"},
@@ -655,7 +666,7 @@ def test_get_selected_cadet_ids_returns_checked_rows_only():
 
     selected_ids = get_selected_cadet_ids(
         edited_table,
-        [None, "cadet-2", "cadet-3"],
+        ["cadet-1", "cadet-2", "cadet-3"],
         "Assign",
     )
 
@@ -667,11 +678,11 @@ def test_get_selected_cadet_ids_handles_pandas_bool_values():
 
     selected_ids = get_selected_cadet_ids(
         edited_table,
-        [None, "cadet-2", "cadet-3"],
+        ["cadet-1", "cadet-2", "cadet-3"],
         "Assign",
     )
 
-    assert selected_ids == ["cadet-2"]
+    assert selected_ids == ["cadet-1", "cadet-2"]
 
 
 @patch("services.flight_management.assign_cadet_to_flight")
@@ -707,7 +718,9 @@ def test_assign_selected_cadets_to_flight_warns_when_nothing_selected():
 
 @patch("services.flight_management.unassign_cadet_from_flight")
 def test_unassign_selected_cadets_returns_success(mock_unassign_cadet_from_flight):
-    level, message = unassign_selected_cadets(["cadet-1"], {"cadet-1": {"name": "Jordan Lee"}})
+    level, message = unassign_selected_cadets(
+        ["cadet-1"], {"cadet-1": {"name": "Jordan Lee"}}
+    )
 
     mock_unassign_cadet_from_flight.assert_called_once_with("cadet-1")
     assert level == "success"
