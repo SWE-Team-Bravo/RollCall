@@ -1,5 +1,4 @@
 from __future__ import annotations
-from utils.st_helpers import confirm_destructive_action
 
 from typing import Any, Dict, List, Tuple
 
@@ -211,3 +210,8 @@ def confirm_delete_user(confirmation_input: str) -> bool:
     """
 
     return confirm_destructive_action(confirmation_input)
+
+
+def confirm_destructive_action(confirmation_input: str) -> bool:
+    """Return True only when the exact DELETE keyword is entered."""
+    return (confirmation_input or "").strip() == "DELETE"
