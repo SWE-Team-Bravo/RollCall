@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 
-def summarize_user(user: Dict[str, Any]) -> Dict[str, str]:
+def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
     # Return a normalized summary for admin user listing.
 
     # id
@@ -36,15 +36,19 @@ def summarize_user(user: Dict[str, Any]) -> Dict[str, str]:
     else:
         primary_role = str(user.get("role", "") or "")
 
+    all_roles = roles if isinstance(roles, (list, tuple)) else []
+    waiver_reviewer = "waiver_reviewer" in all_roles
+
     return {
         "id": user_id,
         "email": email,
         "name": name,
         "role": primary_role,
+        "waiver_reviewer": waiver_reviewer,
     }
 
 
-def list_users_for_admin(users: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+def list_users_for_admin(users: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # Return normalized user summaries for the admin users page.
 
     summaries = [summarize_user(user) for user in users]
@@ -120,6 +124,7 @@ def build_update_user_payload(
     new_email: str,
     new_role: str,
     other_emails: set[str],
+    waiver_reviewer: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     """Build an update dict for an existing user with validation.
 
@@ -177,10 +182,16 @@ def build_update_user_payload(
     # Preserve secondary roles while updating primary role:
     # - Move the chosen role to the front
     # - Keep any other existing roles after it, without duplicates
+    # - Add or remove "waiver_reviewer" based on the checkbox
+    secondary = [
+        r for r in normalized_roles if r != raw_role and r != "waiver_reviewer"
+    ]
     if raw_role in normalized_roles:
-        updated_roles = [raw_role] + [r for r in normalized_roles if r != raw_role]
+        updated_roles = [raw_role] + secondary
     else:
-        updated_roles = [raw_role] + normalized_roles
+        updated_roles = [raw_role] + secondary
+    if waiver_reviewer:
+        updated_roles.append("waiver_reviewer")
 
     updates: Dict[str, Any] = {
         "first_name": first.strip(),

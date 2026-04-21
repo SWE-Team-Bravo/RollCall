@@ -173,6 +173,72 @@ def test_build_update_user_payload_preserves_additional_roles():
     assert updates["roles"] == ["cadre", "admin"]
 
 
+def test_summarize_user_detects_waiver_reviewer_tag():
+    user_doc = {
+        "_id": "u1",
+        "first_name": "Tyler",
+        "last_name": "Brooks",
+        "email": "tyler@rollcall.local",
+        "roles": ["cadet", "waiver_reviewer"],
+    }
+    summary = summarize_user(user_doc)
+    assert summary["waiver_reviewer"] is True
+    assert summary["role"] == "cadet"
+
+
+def test_summarize_user_waiver_reviewer_false_when_absent():
+    user_doc = {
+        "_id": "u2",
+        "email": "plain@rollcall.local",
+        "roles": ["cadet"],
+    }
+    summary = summarize_user(user_doc)
+    assert summary["waiver_reviewer"] is False
+
+
+def test_build_update_user_payload_adds_waiver_reviewer():
+    existing_user = {
+        "_id": "u1",
+        "first_name": "Tyler",
+        "last_name": "Brooks",
+        "email": "tyler@rollcall.local",
+        "roles": ["cadet"],
+    }
+    updates, errors = build_update_user_payload(
+        existing_user=existing_user,
+        new_first_name="Tyler",
+        new_last_name="Brooks",
+        new_email="tyler@rollcall.local",
+        new_role="cadet",
+        other_emails=set(),
+        waiver_reviewer=True,
+    )
+    assert errors == {}
+    assert "waiver_reviewer" in updates["roles"]
+    assert updates["roles"][0] == "cadet"
+
+
+def test_build_update_user_payload_removes_waiver_reviewer():
+    existing_user = {
+        "_id": "u1",
+        "first_name": "Tyler",
+        "last_name": "Brooks",
+        "email": "tyler@rollcall.local",
+        "roles": ["cadet", "waiver_reviewer"],
+    }
+    updates, errors = build_update_user_payload(
+        existing_user=existing_user,
+        new_first_name="Tyler",
+        new_last_name="Brooks",
+        new_email="tyler@rollcall.local",
+        new_role="cadet",
+        other_emails=set(),
+        waiver_reviewer=False,
+    )
+    assert errors == {}
+    assert "waiver_reviewer" not in updates["roles"]
+
+
 def test_confirm_delete_user_requires_exact_keyword():
     # Only the exact keyword (case-insensitive, trimmed) should allow delete.
     assert confirm_delete_user("DELETE") is True
