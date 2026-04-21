@@ -242,6 +242,8 @@ def test_build_update_user_payload_removes_waiver_reviewer():
 def test_confirm_delete_user_requires_exact_keyword():
     # Only the exact keyword (case-insensitive, trimmed) should allow delete.
     assert confirm_delete_user("DELETE") is True
-    assert confirm_delete_user("  delete  ") is True
+    assert confirm_delete_user("  DELETE  ") is True
+    assert confirm_delete_user("delete") is False
+    assert confirm_delete_user("Delete") is False
     assert confirm_delete_user("del") is False
     assert confirm_delete_user("DELETE EVERYTHING") is False
