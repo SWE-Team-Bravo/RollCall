@@ -332,12 +332,10 @@ def waiver_form(
         else:
             extra_details = st.text_area("Additional details (optional)")
 
-        uploaded_file = None
-        if waiver_type in ("medical", "sickness"):
-            uploaded_file = st.file_uploader(
-                "Attach supporting document (e.g. doctor's note)",
-                type=["pdf", "png", "jpg", "jpeg", "docx"],
-            )
+        uploaded_file = st.file_uploader(
+            "Attach supporting document (optional)",
+            type=["pdf", "png", "jpg", "jpeg", "docx"],
+        )
 
         force_cadre_only = resolve_cadre_only(
             waiver_type, uploaded_file is not None, False
