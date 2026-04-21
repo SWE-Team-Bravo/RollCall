@@ -5,7 +5,13 @@ import secrets
 import pandas as pd
 
 from utils.db import get_collection
-from utils.db_schema_crud import create_cadet, get_user_by_email, get_user_by_id
+from utils.db_schema_crud import (
+    assign_cadet_to_flight as db_assign_cadet_to_flight,
+    create_cadet,
+    get_cadet_by_id,
+    get_user_by_email,
+    get_user_by_id,
+)
 from utils.names import format_full_name
 
 CLASS_TO_RANK = {
@@ -30,10 +36,46 @@ def get_all_cadets() -> list[dict]:
 
 
 def get_cadets_by_flight(flight_id) -> list[dict]:
-    col = get_collection("cadets")
-    if col is None:
+    cadets_col = get_collection("cadets")
+    flights_col = get_collection("flights")
+    if cadets_col is None:
         return []
-    return list(col.find({"flight_id": ObjectId(flight_id)}))
+
+    cadets = list(cadets_col.find({"flight_id": ObjectId(flight_id)}))
+    if flights_col is None:
+        return cadets
+
+    flight = flights_col.find_one({"_id": ObjectId(flight_id)})
+    if not flight or not flight.get("commander_cadet_id"):
+        return cadets
+
+    return [cadet for cadet in cadets if cadet["_id"] != flight["commander_cadet_id"]]
+
+
+def get_assignable_cadet_display_map() -> dict[str, str]:
+    flights_col = get_collection("flights")
+    if flights_col is None:
+        return build_cadet_display_map()
+
+    commander_cadet_ids = {
+        str(flight["commander_cadet_id"])
+        for flight in flights_col.find({}, {"commander_cadet_id": 1})
+        if flight.get("commander_cadet_id")
+    }
+
+    return {
+        display: cadet_id
+        for display, cadet_id in build_cadet_display_map().items()
+        if cadet_id not in commander_cadet_ids
+    }
+
+
+def assign_cadet_to_flight(cadet_id, flight_id):
+    cadet = get_cadet_by_id(cadet_id)
+    if cadet and cadet.get("flight_id") == ObjectId(flight_id):
+        raise ValueError("Cadet is already in this flight.")
+
+    return db_assign_cadet_to_flight(cadet_id, flight_id)
 
 
 def build_cadet_display_map() -> dict[str, str]:

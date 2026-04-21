@@ -621,15 +621,23 @@ def _validate_flight_association(
         and cadet.get("flight_id")
         and cadet["flight_id"] != target_object_id
     ):
-        raise ValueError("Cadet is already assigned to another flight. Unassign them first.")
+        assigned_flight = flights_col.find_one({"_id": cadet["flight_id"]})
+        assigned_flight_name = (
+            assigned_flight.get("name") if assigned_flight else "another flight"
+        )
+        raise ValueError(
+            f"Cadet is already assigned to {assigned_flight_name}. Unassign them first."
+        )
 
     commander_query = {"commander_cadet_id": cadet_object_id}
     if target_object_id is not None:
         commander_query["_id"] = {"$ne": target_object_id}
 
-    if flights_col.find_one(commander_query):
+    commanded_flight = flights_col.find_one(commander_query)
+    if commanded_flight:
+        commanded_flight_name = commanded_flight.get("name", "another flight")
         raise ValueError(
-            "Cadet is already commanding another flight. Remove them as commander first."
+            f"Cadet is already commanding {commanded_flight_name}. Remove them as commander first."
         )
 
 
