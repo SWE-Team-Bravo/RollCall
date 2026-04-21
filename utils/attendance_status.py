@@ -8,6 +8,8 @@ STATUS_LABELS = {
     "waived": "Excused",
 }
 
+NO_RECORD_STATUS_LABEL = "No Record"
+
 
 def get_effective_attendance_status(
     status: str | None,
@@ -34,6 +36,8 @@ def get_attendance_status_label(
 
 def get_attendance_status_cell_style(val: Any) -> str:
     status = str(val or "")
+    if status == NO_RECORD_STATUS_LABEL:
+        return "background-color: #D9DDE6; color: #1f2937; font-weight: 700;"
     if status == "Present":
         return "background-color: #7FE08A; color: #0b2e13; font-weight: 700;"
     if status == "Absent":

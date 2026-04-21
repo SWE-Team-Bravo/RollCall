@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from typing import Any
 from bson import ObjectId
 from utils.db import get_db
 
@@ -18,6 +19,28 @@ def closest_event_index(events: list[dict]) -> int:
             return 999_999
 
     return min(range(len(events)), key=lambda i: _distance(events[i]))
+
+
+def has_event_ended(
+    event: dict[str, Any] | None,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    if not event:
+        return False
+
+    end_at = event.get("end_date") or event.get("start_date")
+    if not isinstance(end_at, datetime):
+        return False
+
+    if end_at.tzinfo is None:
+        end_at = end_at.replace(tzinfo=timezone.utc)
+
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+
+    return current_time > end_at
 
 
 def get_all_events() -> list[dict]:

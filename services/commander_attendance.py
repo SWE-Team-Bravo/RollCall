@@ -50,6 +50,8 @@ def compute_upserts(
 
         record = entry["record"]
         if record is not None:
+            if entry.get("current_status") == new_status:
+                continue
             upserts.append(
                 {
                     "action": "update",

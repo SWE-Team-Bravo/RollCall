@@ -7,9 +7,10 @@ import pandas as pd
 import streamlit as st
 
 from services.commander_attendance import build_commander_roster, compute_upserts
-from services.events import closest_event_index, get_all_events
+from services.events import closest_event_index, get_all_events, has_event_ended
 from utils.auth import get_current_user, require_role
 from utils.attendance_status import (
+    NO_RECORD_STATUS_LABEL,
     get_attendance_status_cell_style,
     get_attendance_status_label,
 )
@@ -21,7 +22,7 @@ from utils.db_schema_crud import (
     upsert_attendance_record,
 )
 
-STATUS_OPTIONS = ["Present", "Absent", "Excused"]
+STATUS_OPTIONS = [NO_RECORD_STATUS_LABEL, "Present", "Absent", "Excused"]
 STATUS_TO_DB = {"Present": "present", "Absent": "absent", "Excused": "excused"}
 
 require_role("admin", "cadre")
@@ -72,6 +73,8 @@ if selected_event is None:
     st.stop()
 
 event_id: str = selected_event["_id"]
+event_has_ended = has_event_ended(selected_event)
+default_status = "Absent" if event_has_ended else NO_RECORD_STATUS_LABEL
 
 all_cadets = get_all_cadets()
 if not all_cadets:
@@ -95,6 +98,10 @@ records = get_attendance_by_event(event_id)
 roster = build_commander_roster(all_cadets, records)
 
 cadet_ids = [str(entry["cadet"]["_id"]) for entry in roster]
+initial_statuses = [
+    get_attendance_status_label(entry["current_status"], default=default_status)
+    for entry in roster
+]
 
 df = pd.DataFrame(
     {
@@ -104,14 +111,8 @@ df = pd.DataFrame(
             or "Unknown"
             for e in roster
         ],
-        "Current Status": [
-            get_attendance_status_label(e["current_status"], default="Present")
-            for e in roster
-        ],
-        "Set Status": [
-            get_attendance_status_label(e["current_status"], default="Present")
-            for e in roster
-        ],
+        "Current Status": initial_statuses,
+        "Set Status": initial_statuses,
     }
 )
 
@@ -139,9 +140,22 @@ edited = st.data_editor(
 
 st.divider()
 if st.button("Save All", type="primary"):
+    invalid_no_record_rows = [
+        roster[idx]["cadet"]
+        for idx, (_, row) in enumerate(edited.iterrows())
+        if row["Set Status"] == NO_RECORD_STATUS_LABEL and roster[idx]["record"] is not None
+    ]
+    if invalid_no_record_rows:
+        st.error(
+            "No Record can only be used for cadets who do not already have an attendance entry."
+        )
+        st.stop()
+
     new_statuses = {
         cadet_ids[idx]: STATUS_TO_DB[row["Set Status"]]
         for idx, (_, row) in enumerate(edited.iterrows())
+        if row["Set Status"] != initial_statuses[idx]
+        and row["Set Status"] in STATUS_TO_DB
     }
     upserts = compute_upserts(roster, new_statuses)
     for op in upserts:
