@@ -24,10 +24,24 @@ st.title("Flight Management")
 
 if "confirm_delete_flight_id" not in st.session_state:
     st.session_state.confirm_delete_flight_id = None
+if "create_flight_success" not in st.session_state:
+    st.session_state.create_flight_success = None
 if "flight_feedback" not in st.session_state:
     st.session_state.flight_feedback = None
-if "expanded_flight_id" not in st.session_state:
-    st.session_state.expanded_flight_id = None
+if "expanded_flight_ids" not in st.session_state:
+    st.session_state.expanded_flight_ids = []
+
+
+def keep_flight_expanded(flight_id: str) -> None:
+    expanded_ids = set(st.session_state.expanded_flight_ids)
+    expanded_ids.add(flight_id)
+    st.session_state.expanded_flight_ids = sorted(expanded_ids)
+
+
+def forget_flight_expanded(flight_id: str) -> None:
+    expanded_ids = set(st.session_state.expanded_flight_ids)
+    expanded_ids.discard(flight_id)
+    st.session_state.expanded_flight_ids = sorted(expanded_ids)
 
 
 def set_flight_feedback(flight_id: str, level: str, message: str) -> None:
@@ -36,7 +50,7 @@ def set_flight_feedback(flight_id: str, level: str, message: str) -> None:
         "level": level,
         "message": message,
     }
-    st.session_state.expanded_flight_id = flight_id
+    keep_flight_expanded(flight_id)
 
 # ----------------------------
 # Create Flight Section
@@ -58,12 +72,16 @@ with st.expander("Create New Flight", expanded=False):
         if flight_name and selected_commander:
             try:
                 create_flight(flight_name, selected_commander)
-                st.success("Flight created successfully!")
+                st.session_state.create_flight_success = "Flight created successfully!"
                 st.rerun()
             except ValueError as e:
                 st.error(str(e))
         else:
             st.warning("Please fill all fields.")
+
+if st.session_state.create_flight_success:
+    st.success(st.session_state.create_flight_success)
+    st.session_state.create_flight_success = None
 
 st.divider()
 
@@ -94,13 +112,20 @@ else:
         cadets_in_flight = get_cadets_by_flight(flight["_id"])
         cadet_count = len(cadets_in_flight)
 
-        with st.expander(
-            f"{flight['name']}  ·  Commander: {commander_name}  ·  {cadet_count} cadet(s)",
-            expanded=(
-                st.session_state.expanded_flight_id == flight_id
-                or st.session_state.confirm_delete_flight_id == flight_id
-            ),
-        ):
+        expander_label = (
+            f"{flight['name']}  ·  Commander: {commander_name}  ·  {cadet_count} cadet(s)"
+        )
+        force_expanded = (
+            flight_id in st.session_state.expanded_flight_ids
+            or st.session_state.confirm_delete_flight_id == flight_id
+        )
+
+        if force_expanded:
+            expander = st.expander(expander_label, expanded=True)
+        else:
+            expander = st.expander(expander_label)
+
+        with expander:
             feedback = st.session_state.flight_feedback
             if feedback and feedback.get("flight_id") == flight_id:
                 level = feedback.get("level")
@@ -138,7 +163,7 @@ else:
                 )
 
             if assign_clicked:
-                st.session_state.expanded_flight_id = flight_id
+                keep_flight_expanded(flight_id)
                 if cadet_to_assign:
                     try:
                         assign_cadet_to_flight(cadet_to_assign, flight["_id"])
@@ -194,14 +219,16 @@ else:
                         unassign_all_cadets_from_flight(flight["_id"])
                         delete_flight(flight["_id"])
                         st.session_state.confirm_delete_flight_id = None
+                        forget_flight_expanded(flight_id)
                         st.rerun()
                 if c2.button("Cancel", key=f"cancel_del_{flight_id}"):
                     st.session_state.confirm_delete_flight_id = None
+                    keep_flight_expanded(flight_id)
                     st.rerun()
             else:
                 if st.button("Delete Flight", key=f"delete_{flight_id}"):
                     st.session_state.confirm_delete_flight_id = flight_id
-                    st.session_state.expanded_flight_id = flight_id
+                    keep_flight_expanded(flight_id)
                     st.rerun()
 
 if rendered_feedback:
