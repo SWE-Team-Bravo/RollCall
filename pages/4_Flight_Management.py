@@ -39,9 +39,12 @@ with st.expander("Create New Flight", expanded=False):
     if submitted:
         selected_commander = cadet_display_map.get(selected_display)
         if flight_name and selected_commander:
-            create_flight(flight_name, selected_commander)
-            st.success("Flight created successfully!")
-            st.rerun()
+            try:
+                create_flight(flight_name, selected_commander)
+                st.success("Flight created successfully!")
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
         else:
             st.warning("Please fill all fields.")
 
