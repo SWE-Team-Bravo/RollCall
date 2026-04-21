@@ -8,6 +8,8 @@ require_role("admin", "cadre")
 
 if "confirm_delete_event_id" not in st.session_state:
     st.session_state.confirm_delete_event_id = None
+if "create_event_success" not in st.session_state:
+    st.session_state.create_event_success = None
 
 st.title("Event Management")
 
@@ -103,10 +105,16 @@ if submitted:
         user = get_current_user()
         user_id = user.get("email", "unknown") if user else "unknown"
         if create_event(event_name.strip(), event_type, start_date, end_date, user_id):
-            st.success(f"Event '{event_name}' created successfully!")
+            st.session_state.create_event_success = (
+                f"Event '{event_name.strip()}' created successfully!"
+            )
             st.rerun()
         else:
             st.error("Database unavailable — could not create event.")
+
+if st.session_state.create_event_success:
+    st.success(st.session_state.create_event_success)
+    st.session_state.create_event_success = None
 
 st.divider()
 

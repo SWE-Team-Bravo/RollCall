@@ -10,6 +10,10 @@ from bson import ObjectId
 
 from services.events import closest_event_index
 from utils.auth import get_current_user, require_role
+from utils.attendance_status import (
+    get_attendance_status_cell_style,
+    get_attendance_status_label,
+)
 from utils.db import get_collection, get_db
 from utils.export import to_excel
 
@@ -23,14 +27,7 @@ def _utc_datetime(d: date, end_of_day: bool) -> datetime:
 
 
 def _status_bucket(raw: str | None) -> str:
-    s = (raw or "").strip().lower()
-    if s == "present":
-        return "Present"
-    if s == "absent":
-        return "Absent"
-    if s in {"excused", "waived"}:
-        return "Excused"
-    return "Absent"
+    return get_attendance_status_label(raw, default="Absent")
 
 
 def _format_name(user_doc: dict[str, Any] | None) -> str:
@@ -49,20 +46,6 @@ def _event_label(event_doc: dict[str, Any]) -> str:
     ev_type = str(event_doc.get("event_type", "") or "").upper()
     left = f"{ev_date} — {ev_name}".strip(" —")
     return f"{left} ({ev_type})".strip()
-
-
-def _status_cell_style(val: Any) -> str:
-    """Return CSS style for a Status cell."""
-    s = str(val or "")
-    if s == "Present":
-        return "background-color: #7FE08A; color: #0b2e13; font-weight: 700;"
-    if s == "Absent":
-        return "background-color: #E07F7F; color: #2b0b0b; font-weight: 700;"
-    if s == "Excused":
-        return "background-color: #E0D27F; color: #2b240b; font-weight: 700;"
-    return ""
-
-
 require_role("admin", "cadre", "flight_commander")
 
 st.title("Dashboard")
@@ -350,9 +333,15 @@ else:
                     cadet_df = pd.DataFrame(cadet_rows)
                     styler = cadet_df.style
                     if hasattr(styler, "map"):
-                        styler = styler.map(_status_cell_style, subset=["Status"])
+                        styler = styler.map(
+                            get_attendance_status_cell_style,
+                            subset=["Status"],
+                        )
                     else:
-                        styler = styler.applymap(_status_cell_style, subset=["Status"])
+                        styler = styler.applymap(
+                            get_attendance_status_cell_style,
+                            subset=["Status"],
+                        )
 
                     col1, col2, spacer = st.columns([1.5, 2, 10])
                     if isinstance(cadet_df, pd.DataFrame):
