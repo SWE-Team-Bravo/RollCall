@@ -68,6 +68,7 @@ def expire_code(code_id: str | ObjectId) -> bool:
 
 
 def validate_code(code: str) -> dict | None:
+    code = code.replace(" ", "")
     return find_active_event_code_by_value(code)
 
 
