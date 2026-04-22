@@ -15,6 +15,8 @@ if "confirm_delete_event_id" not in st.session_state:
     st.session_state.confirm_delete_event_id = None
 if "create_event_success" not in st.session_state:
     st.session_state.create_event_success = None
+if "delete_event_success" not in st.session_state:
+    st.session_state.delete_event_success = None
 
 st.title("Event Management")
 
@@ -138,6 +140,9 @@ if submitted:
 if st.session_state.create_event_success:
     st.success(st.session_state.create_event_success)
     st.session_state.create_event_success = None
+if st.session_state.delete_event_success:
+    st.success(st.session_state.delete_event_success)
+    st.session_state.delete_event_success = None
 
 st.divider()
 
@@ -185,7 +190,7 @@ else:
         if c1.button("Yes, delete", type="primary"):
             if delete_event(selected_event["_id"]):
                 st.session_state.confirm_delete_event_id = None
-                st.success("Event deleted.")
+                st.session_state.delete_event_success = "Event deleted successfully."
                 st.rerun()
             else:
                 st.error("Could not delete event.")

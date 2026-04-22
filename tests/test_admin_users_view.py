@@ -4,6 +4,7 @@ from services.admin_users import (
     validate_new_user_data,
     build_update_user_payload,
     confirm_delete_user,
+    get_delete_success_message,
 )
 
 
@@ -247,3 +248,10 @@ def test_confirm_delete_user_requires_exact_keyword():
     assert confirm_delete_user("Delete") is False
     assert confirm_delete_user("del") is False
     assert confirm_delete_user("DELETE EVERYTHING") is False
+
+
+def test_get_delete_success_message_returns_consistent_copy():
+    assert get_delete_success_message("flight") == "Flight deleted successfully."
+    assert get_delete_success_message("user") == "User deleted successfully."
+    assert get_delete_success_message("waiver") == "Waiver withdrawn successfully."
+    assert get_delete_success_message("other") == "Deleted successfully."

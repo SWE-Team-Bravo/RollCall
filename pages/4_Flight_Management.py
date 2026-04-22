@@ -1,5 +1,12 @@
+<<<<<<< Updated upstream
 import streamlit as st
 from services.admin_users import confirm_destructive_action
+=======
+import streamlit as st
+
+from services.admin_users import get_delete_success_message
+from utils.st_helpers import confirm_destructive_action
+>>>>>>> Stashed changes
 
 from utils.auth import require_role
 from services.admin_users import confirm_destructive_action
@@ -28,6 +35,7 @@ from utils.db_schema_crud import (
 
 require_role("admin", "cadre")
 
+<<<<<<< Updated upstream
 st.title("Flight Management")
 
 if "confirm_delete_flight_id" not in st.session_state:
@@ -88,6 +96,41 @@ def clear_flight_table_state(flight_id: str) -> None:
         get_member_selection_key(flight_id),
     ):
         st.session_state.pop(key, None)
+=======
+st.title("Flight Management")
+
+if "confirm_delete_flight_id" not in st.session_state:
+    st.session_state.confirm_delete_flight_id = None
+if "create_flight_success" not in st.session_state:
+    st.session_state.create_flight_success = None
+if "delete_flight_success" not in st.session_state:
+    st.session_state.delete_flight_success = None
+if "flight_feedback" not in st.session_state:
+    st.session_state.flight_feedback = None
+if "expanded_flight_ids" not in st.session_state:
+    st.session_state.expanded_flight_ids = []
+
+
+def keep_flight_expanded(flight_id: str) -> None:
+    expanded_ids = set(st.session_state.expanded_flight_ids)
+    expanded_ids.add(flight_id)
+    st.session_state.expanded_flight_ids = sorted(expanded_ids)
+
+
+def forget_flight_expanded(flight_id: str) -> None:
+    expanded_ids = set(st.session_state.expanded_flight_ids)
+    expanded_ids.discard(flight_id)
+    st.session_state.expanded_flight_ids = sorted(expanded_ids)
+
+
+def set_flight_feedback(flight_id: str, level: str, message: str) -> None:
+    st.session_state.flight_feedback = {
+        "flight_id": flight_id,
+        "level": level,
+        "message": message,
+    }
+    keep_flight_expanded(flight_id)
+>>>>>>> Stashed changes
 
 # ----------------------------
 # Create Flight Section
@@ -104,6 +147,7 @@ with st.expander("Create New Flight", expanded=False):
         )
         submitted = st.form_submit_button("Create Flight", type="primary")
 
+<<<<<<< Updated upstream
     if submitted:
         selected_commander = cadet_display_map.get(selected_display)
         if flight_name and selected_commander:
@@ -121,6 +165,28 @@ if st.session_state.create_flight_success:
     st.session_state.create_flight_success = None
 
 st.divider()
+=======
+    if submitted:
+        selected_commander = cadet_display_map.get(selected_display)
+        if flight_name and selected_commander:
+            try:
+                create_flight(flight_name, selected_commander)
+                st.session_state.create_flight_success = "Flight created successfully!"
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
+        else:
+            st.warning("Please fill all fields.")
+
+if st.session_state.create_flight_success:
+    st.success(st.session_state.create_flight_success)
+    st.session_state.create_flight_success = None
+if st.session_state.delete_flight_success:
+    st.success(st.session_state.delete_flight_success)
+    st.session_state.delete_flight_success = None
+
+st.divider()
+>>>>>>> Stashed changes
 
 # ----------------------------
 # Existing Flights
@@ -338,6 +404,7 @@ else:
                 ):
                     if not confirm_destructive_action(confirmation):
                         st.error("Confirmation text does not match 'DELETE'.")
+<<<<<<< Updated upstream
                     else:
                         unassign_all_cadets_from_flight(flight["_id"])
                         delete_flight(flight["_id"])
@@ -356,3 +423,26 @@ else:
 
 if rendered_feedback:
     st.session_state.flight_feedback = None
+=======
+                    else:
+                        unassign_all_cadets_from_flight(flight["_id"])
+                        delete_flight(flight["_id"])
+                        st.session_state.confirm_delete_flight_id = None
+                        st.session_state.delete_flight_success = (
+                            get_delete_success_message("flight")
+                        )
+                        forget_flight_expanded(flight_id)
+                        st.rerun()
+                if c2.button("Cancel", key=f"cancel_del_{flight_id}"):
+                    st.session_state.confirm_delete_flight_id = None
+                    keep_flight_expanded(flight_id)
+                    st.rerun()
+            else:
+                if st.button("Delete Flight", key=f"delete_{flight_id}"):
+                    st.session_state.confirm_delete_flight_id = flight_id
+                    keep_flight_expanded(flight_id)
+                    st.rerun()
+
+if rendered_feedback:
+    st.session_state.flight_feedback = None
+>>>>>>> Stashed changes
