@@ -12,6 +12,12 @@ from utils.db_schema_crud import (
 from utils.names import format_full_name
 
 
+def _ensure_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def get_semester_data() -> dict | None:
     cadets = get_all_cadets()
     if not cadets:
@@ -28,7 +34,8 @@ def get_semester_data() -> dict | None:
     events = [
         e
         for e in all_events
-        if isinstance(e.get("start_date"), datetime) and start <= e["start_date"] <= end
+        if isinstance(e.get("start_date"), datetime)
+        and start <= _ensure_utc(e["start_date"]) <= end
     ]
     if not events:
         return None
