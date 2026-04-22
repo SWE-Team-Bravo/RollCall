@@ -3,7 +3,10 @@ import logging
 import streamlit as st
 from typing import Any, cast
 
-from services.account_settings import build_password_change_updates
+from services.account_settings import (
+    build_password_change_updates,
+    build_profile_updates,
+)
 from utils.auth import require_auth, get_current_user
 from utils.db_schema_crud import get_user_by_email, update_user
 from utils.password import verify_password
@@ -36,6 +39,102 @@ if user_doc is None:
     st.stop()
 
 user_doc = cast(dict[str, Any], user_doc)
+
+st.subheader("Update Profile")
+with st.form("update_profile_form"):
+    new_first_name = st.text_input("First Name", value=first_name)
+    new_last_name = st.text_input("Last Name", value=last_name)
+    new_email = st.text_input("Email", value=email)
+
+    submitted_profile = st.form_submit_button("Update Profile")
+
+    if submitted_profile:
+        updates, errors = build_profile_updates(
+            user_doc=user_doc,
+            first_name=new_first_name,
+            last_name=new_last_name,
+            email=new_email,
+            lookup_user_by_email=get_user_by_email,
+        )
+
+        if errors:
+            for field, msg in errors.items():
+                st.error(f"{field.replace('_', ' ').capitalize()}: {msg}")
+        else:
+            old_email = str(user_doc.get("email", "") or "").strip()
+            result = update_user(user_doc["_id"], updates)
+            if result is None:
+                st.error("Failed to update profile (database unavailable).")
+            elif getattr(result, "matched_count", 0) != 1:
+                st.error(
+                    "Could not update profile (your account was not found in the database)."
+                )
+            elif getattr(result, "modified_count", 0) != 1:
+                st.error(
+                    "Profile update did not apply (no changes were written). Please try again."
+                )
+            else:
+                # Keep session + authenticator credentials in sync so the user can
+                # keep using the app without restarting.
+                new_email_value = str(updates.get("email", "") or "").strip()
+                old_key = old_email.lower()
+                new_key = new_email_value.lower() if new_email_value else old_key
+
+                raw = st.session_state.get("_raw_users")
+                if isinstance(raw, dict):
+                    try:
+                        store = raw.get("usernames", {})
+                        if isinstance(store, dict):
+                            user_info = store.pop(old_key, None)
+                            if isinstance(user_info, dict):
+                                user_info["first_name"] = updates["first_name"]
+                                user_info["last_name"] = updates["last_name"]
+                                user_info["name"] = updates["name"]
+                                user_info["email"] = updates["email"]
+                                store[new_key] = user_info
+                            else:
+                                # If we can't find the existing raw doc, just ensure
+                                # the key exists with minimal info.
+                                store[new_key] = {
+                                    "first_name": updates["first_name"],
+                                    "last_name": updates["last_name"],
+                                    "name": updates["name"],
+                                    "email": updates["email"],
+                                    "roles": st.session_state.get("roles", []),
+                                }
+                    except Exception:
+                        logging.exception(
+                            "Failed to sync raw user info in session state"
+                        )
+
+                authenticator = st.session_state.get("authenticator")
+                if authenticator is not None:
+                    try:
+                        users = authenticator.credentials.get("usernames", {})
+                        if isinstance(users, dict):
+                            existing_creds = users.pop(old_key, None)
+                            if not isinstance(existing_creds, dict):
+                                existing_creds = {}
+                            existing_password = existing_creds.get("password")
+                            if not existing_password:
+                                existing_password = user_doc.get("password_hash")
+
+                            users[new_key] = {
+                                "email": updates["email"],
+                                "name": updates["name"],
+                                "password": existing_password,
+                            }
+                    except Exception:
+                        logging.exception(
+                            "Failed to sync authenticator credentials in session state"
+                        )
+
+                st.session_state["username"] = new_key
+                st.session_state["email"] = updates["email"]
+                st.session_state["name"] = updates["name"]
+
+                st.success("Profile updated successfully.")
+                st.rerun()
 
 st.subheader("Change Password")
 with st.form("change_password_form"):

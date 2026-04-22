@@ -1,4 +1,8 @@
-from services.cadets import validate_cadet_input
+from unittest.mock import patch
+
+import pandas as pd
+
+from services.cadets import get_cadet_export_df, validate_cadet_input
 
 
 def test_valid_input_returns_true():
@@ -100,3 +104,33 @@ def test_last_name_with_trailing_space_returns_false():
 def test_email_with_plus_addressing_is_valid():
     ok, msg = validate_cadet_input("Jane", "Doe", "jane+tag@example.com")
     assert ok is True
+
+
+def test_get_cadet_export_df_uses_user_names_and_email():
+    cadets = [
+        {
+            "_id": "c1",
+            "user_id": "u1",
+            "rank": "200/250/500 (sophomore)",
+            "first_name": "(stale)",
+            "last_name": "(stale)",
+            "email": "(stale)",
+        }
+    ]
+    user = {
+        "_id": "u1",
+        "first_name": "Tyler",
+        "last_name": "Brooks",
+        "email": "cadet1@rollcall.local",
+    }
+
+    with (
+        patch("services.cadets.get_all_cadets", return_value=cadets),
+        patch("services.cadets.get_user_by_id", return_value=user),
+    ):
+        df = get_cadet_export_df()
+
+    assert isinstance(df, pd.DataFrame)
+    assert df["First Name"].iloc[0] == "Tyler"
+    assert df["Last Name"].iloc[0] == "Brooks"
+    assert df["Email"].iloc[0] == "cadet1@rollcall.local"

@@ -101,17 +101,22 @@ def get_cadet_export_df() -> pd.DataFrame | str:
     cadets = get_all_cadets()
     if not cadets:
         return "No cadets found."
-    return pd.DataFrame(
-        [
+
+    rows = []
+    for cadet in cadets:
+        user_id = cadet.get("user_id")
+        user = get_user_by_id(user_id) if user_id is not None else None
+        source = user or cadet
+        rows.append(
             {
-                "First Name": c.get("first_name", ""),
-                "Last Name": c.get("last_name", ""),
-                "Email": c.get("email", ""),
-                "Rank": c.get("rank", ""),
+                "First Name": source.get("first_name", ""),
+                "Last Name": source.get("last_name", ""),
+                "Email": source.get("email", ""),
+                "Rank": cadet.get("rank", ""),
             }
-            for c in cadets
-        ]
-    )
+        )
+
+    return pd.DataFrame(rows)
 
 
 def parse_roster_xlsx(file) -> tuple[list[dict], list[str]]:

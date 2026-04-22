@@ -82,17 +82,26 @@ if not all_cadets:
     st.stop()
 
 for i, c in enumerate(all_cadets):
-    first = str(c.get("first_name", "") or "").strip()
-    last = str(c.get("last_name", "") or "").strip()
-    if not first and not last:
-        uid = c.get("user_id")
-        if uid is not None:
-            user_doc = get_user_by_id(uid)
-            if user_doc is not None:
-                c = dict(c)
-                c["first_name"] = user_doc.get("first_name", "")
-                c["last_name"] = user_doc.get("last_name", "")
-                all_cadets[i] = c
+    uid = c.get("user_id")
+    if uid is None:
+        continue
+
+    try:
+        user_doc = get_user_by_id(uid)
+    except Exception:
+        user_doc = None
+    if user_doc is None:
+        continue
+
+    user_first = str(user_doc.get("first_name", "") or "").strip()
+    user_last = str(user_doc.get("last_name", "") or "").strip()
+    if not user_first and not user_last:
+        continue
+
+    c = dict(c)
+    c["first_name"] = user_first or c.get("first_name", "")
+    c["last_name"] = user_last or c.get("last_name", "")
+    all_cadets[i] = c
 
 records = get_attendance_by_event(event_id)
 roster = build_commander_roster(all_cadets, records)
@@ -143,7 +152,8 @@ if st.button("Save All", type="primary"):
     invalid_no_record_rows = [
         roster[idx]["cadet"]
         for idx, (_, row) in enumerate(edited.iterrows())
-        if row["Set Status"] == NO_RECORD_STATUS_LABEL and roster[idx]["record"] is not None
+        if row["Set Status"] == NO_RECORD_STATUS_LABEL
+        and roster[idx]["record"] is not None
     ]
     if invalid_no_record_rows:
         st.error(
