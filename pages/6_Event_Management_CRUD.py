@@ -5,6 +5,8 @@ from services.event_config import (
     save_event_config,
     _DEFAULT_PT_THRESHOLD,
     _DEFAULT_LLAB_THRESHOLD,
+    _DEFAULT_CHECKIN_WINDOW_MINUTES,
+    _DEFAULT_EMAILS_ENABLED,
 )
 from services.events import get_all_events, create_event, delete_event
 from utils.auth import require_role, get_current_user
@@ -83,8 +85,28 @@ with st.expander("Event Schedule Configuration", expanded=False):
         step=1,
     )
 
+    st.divider()
+
+    st.markdown("Configure check-in window and email notifications.")
+    checkin_window_minutes = st.number_input(
+        "Check-in Window (minutes)",
+        min_value=1,
+        max_value=60,
+        value=config.get("checkin_window_minutes", _DEFAULT_CHECKIN_WINDOW_MINUTES),
+        step=1,
+        help="How many minutes before event start cadets can check in.",
+    )
+    emails_enabled = st.checkbox(
+        "Enable email notifications",
+        value=config.get("emails_enabled", _DEFAULT_EMAILS_ENABLED),
+        help="When unchecked, no at-risk or waiver emails will be sent.",
+    )
+
     if st.button("Save Schedule Configuration"):
-        if save_event_config(pt_days, llab_days, pt_threshold, llab_threshold):
+        if save_event_config(
+            pt_days, llab_days, pt_threshold, llab_threshold,
+            checkin_window_minutes, emails_enabled
+        ):
             st.success("Schedule configuration saved!")
             config = get_event_config() or {}  # refresh so create form picks it up
             st.rerun()

@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo, available_timezones
 
 import streamlit as st
 
-from services.attendance import CHECKIN_WINDOW_MINUTES
 from services.event_code_display import (
     build_code_panel_html,
     build_fullscreen_code_html,
@@ -18,6 +17,7 @@ from services.event_codes import (
     is_expiry_valid,
     latest_allowed_expiry,
 )
+from services.event_config import get_checkin_window_minutes
 from services.events import closest_event_index, get_all_events
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
@@ -81,7 +81,7 @@ if max_expires_at is not None:
     local_event_start = max_expires_at.astimezone(ZoneInfo(tz_name))
     st.caption(
         "Codes must expire no later than the event start time "
-        f"({CHECKIN_WINDOW_MINUTES}-minute check-in window)."
+        f"({get_checkin_window_minutes()}-minute check-in window)."
     )
     st.caption(
         f"Selected event starts at {local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')}"

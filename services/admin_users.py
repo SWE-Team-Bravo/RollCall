@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Tuple
+
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 
 def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
@@ -85,7 +88,7 @@ def validate_new_user_data(
     raw_email = (email or "").strip()
     if not raw_email:
         errors["email"] = "Email is required."
-    elif "@" not in raw_email or "." not in raw_email.split("@", 1)[-1]:
+    elif not _EMAIL_RE.fullmatch(raw_email):
         errors["email"] = "Email looks invalid."
     elif raw_email.lower() in {e.lower() for e in existing_emails}:
         errors["email"] = "A user with this email already exists."
@@ -148,7 +151,7 @@ def build_update_user_payload(
 
     if not raw_email:
         errors["email"] = "Email is required."
-    elif "@" not in raw_email or "." not in raw_email.split("@", 1)[-1]:
+    elif not _EMAIL_RE.fullmatch(raw_email):
         errors["email"] = "Email looks invalid."
     elif raw_email.lower() in {e.lower() for e in other_emails}:
         errors["email"] = "A user with this email already exists."

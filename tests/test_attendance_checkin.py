@@ -55,41 +55,44 @@ def test_returns_false_when_same_cadet_checked_into_different_event_only():
 # ------------------ test is_within_checkin_window -------------------------
 
 
+W = {"window_minutes": 10}
+
+
 def test_returns_true_within_window():
     event = create_event(5)
-    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
+    assert is_within_checkin_window(event, datetime.now(timezone.utc), **W) is True
 
 
 def test_returns_true_at_window_open():
     event = create_event(10)
-    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
+    assert is_within_checkin_window(event, datetime.now(timezone.utc), **W) is True
 
 
 def test_returns_true_at_event_start():
     now = datetime.now(timezone.utc)
     event = create_event(0)
-    assert is_within_checkin_window(event, now) is True
+    assert is_within_checkin_window(event, now, **W) is True
 
 
 def test_returns_false_before_window():
     event = create_event(20)
-    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is False
+    assert is_within_checkin_window(event, datetime.now(timezone.utc), **W) is False
 
 
 def test_returns_false_after_event_starts():
     event = create_event(-5)
-    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is False
+    assert is_within_checkin_window(event, datetime.now(timezone.utc), **W) is False
 
 
 def test_returns_false_missing_start_date():
-    assert is_within_checkin_window({}, datetime.now(timezone.utc)) is False
+    assert is_within_checkin_window({}, datetime.now(timezone.utc), **W) is False
 
 
 def test_returns_false_if_start_date_is_not_datetime():
     event = {"start_date": "2026-01-01"}
-    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is False
+    assert is_within_checkin_window(event, datetime.now(timezone.utc), **W) is False
 
 
 def test_no_timezone_info():
     event = {"start_date": datetime.now(timezone.utc) + timedelta(minutes=5)}
-    assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
+    assert is_within_checkin_window(event, datetime.now(timezone.utc), **W) is True

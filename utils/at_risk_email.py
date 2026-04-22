@@ -18,7 +18,7 @@ from utils.db_schema_crud import (
 )
 from utils.attendance_status import get_effective_attendance_status
 from utils.names import format_full_name
-from services.event_config import get_absence_thresholds
+from services.event_config import get_absence_thresholds, get_emails_enabled
 
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
@@ -226,6 +226,8 @@ def send_to_student(
     pt_absences: int,
     llab_absences: int,
 ) -> bool:
+    if not get_emails_enabled():
+        return False
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
@@ -281,6 +283,8 @@ def send_to_flight_commander(at_risk: list[dict], sent, failed) -> tuple[int, in
 
 
 def send_at_risk_emails() -> tuple[int, int]:
+    if not get_emails_enabled():
+        return 0, 0
     at_risk = get_at_risk_cadets()
     if not at_risk:
         return 0, 0
