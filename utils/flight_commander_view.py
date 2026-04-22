@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
-
-def _ensure_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
+from utils.datetime_utils import ensure_utc
 
 def _is_active_event(event: dict[str, Any], now: datetime) -> bool:
     start = event.get("start_date")
@@ -16,9 +11,9 @@ def _is_active_event(event: dict[str, Any], now: datetime) -> bool:
     if not isinstance(start, datetime) or not isinstance(end, datetime):
         return False
 
-    start = _ensure_utc(start)
-    end = _ensure_utc(end)
-    now = _ensure_utc(now)
+    start = ensure_utc(start)
+    end = ensure_utc(end)
+    now = ensure_utc(now)
 
     return start <= now <= end
 
@@ -32,7 +27,7 @@ def get_active_events(
     events: list[dict[str, Any]],
     now: datetime,
 ) -> list[dict[str, Any]]:
-    now = _ensure_utc(now)
+    now = ensure_utc(now)
     return [event for event in events if _is_active_event(event, now)]
 
 
@@ -68,7 +63,7 @@ def build_checkin_view(
         if events is None or now is None:
             return None
 
-        now = _ensure_utc(now)
+        now = ensure_utc(now)
         active_event = next((e for e in events if _is_active_event(e, now)), None)
         if active_event is None:
             return None

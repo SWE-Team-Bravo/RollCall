@@ -9,13 +9,8 @@ from utils.db_schema_crud import (
     get_users_by_ids,
     get_waivers_by_attendance_records,
 )
+from utils.datetime_utils import ensure_utc
 from utils.names import format_full_name
-
-
-def _ensure_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def get_semester_data() -> dict | None:
@@ -35,7 +30,7 @@ def get_semester_data() -> dict | None:
         e
         for e in all_events
         if isinstance(e.get("start_date"), datetime)
-        and start <= _ensure_utc(e["start_date"]) <= end
+        and start <= ensure_utc(e["start_date"]) <= end
     ]
     if not events:
         return None

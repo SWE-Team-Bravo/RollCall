@@ -8,20 +8,16 @@ try:
 except Exception:  # pragma: no cover
     ObjectId = None  # type: ignore
 
+from utils.datetime_utils import ensure_utc
+
 
 _HIGH_PRIORITY_ROLES = {"admin", "cadre", "flight_commander"}
-
-
-def _as_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def _record_time(record: dict[str, Any]) -> datetime:
     dt = record.get("updated_at") or record.get("created_at")
     if isinstance(dt, datetime):
-        return _as_utc(dt)
+        return ensure_utc(dt)
 
     _id = record.get("_id")
     if ObjectId is not None and isinstance(_id, ObjectId):
