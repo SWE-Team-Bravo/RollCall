@@ -2,8 +2,9 @@ import secrets
 from typing import Any
 from datetime import datetime, timedelta, timezone
 
+from services.event_config import get_checkin_window_minutes
 
-CHECKIN_WINDOW_MINUTES = 10
+CHECKIN_WINDOW_MINUTES = 10  # fallback used by tests and legacy imports
 
 
 def generate_attendance_password() -> str:
@@ -29,7 +30,12 @@ def _ensure_utc(dt: datetime) -> datetime:
     return dt
 
 
-def is_within_checkin_window(event: dict[str, Any], now: datetime) -> bool:
+def is_within_checkin_window(
+    event: dict[str, Any],
+    now: datetime,
+    *,
+    window_minutes: int | None = None,
+) -> bool:
     start = event.get("start_date")
     if not isinstance(start, datetime):
         return False
@@ -37,5 +43,6 @@ def is_within_checkin_window(event: dict[str, Any], now: datetime) -> bool:
     start = _ensure_utc(start)
     now = _ensure_utc(now)
 
-    checkin_open = start - timedelta(minutes=CHECKIN_WINDOW_MINUTES)
+    minutes = window_minutes if window_minutes is not None else get_checkin_window_minutes()
+    checkin_open = start - timedelta(minutes=minutes)
     return checkin_open <= now <= start

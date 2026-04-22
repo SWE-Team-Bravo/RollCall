@@ -4,6 +4,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from services.event_config import get_emails_enabled
 from utils.db_schema_crud import update_waiver, get_waiver_by_id
 
 
@@ -44,6 +45,8 @@ def send_waiver_decision_email(
     status: str,
     comments: str = "",
 ) -> bool:
+    if not get_emails_enabled():
+        return False
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
