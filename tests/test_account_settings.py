@@ -1,4 +1,7 @@
-from services.account_settings import build_password_change_updates
+from services.account_settings import (
+    build_password_change_updates,
+    build_profile_updates,
+)
 from utils.password import hash_password, verify_password
 
 
@@ -68,3 +71,122 @@ def test_success_returns_password_hash_update():
     assert updates["password_hash"] != "newpassword"
     assert updates["password_hash"].startswith("$2")
     assert verify_password("newpassword", updates["password_hash"]) is True
+
+
+def test_profile_rejects_empty_first_name():
+    user_doc = {
+        "_id": "user1",
+        "email": "user@example.com",
+    }
+
+    updates, errors = build_profile_updates(
+        user_doc=user_doc,
+        first_name="   ",
+        last_name="Brooks",
+        email="user@example.com",
+        lookup_user_by_email=lambda e: None,
+    )
+
+    assert updates == {}
+    assert "first_name" in errors
+
+
+def test_profile_rejects_empty_last_name():
+    user_doc = {
+        "_id": "user1",
+        "email": "user@example.com",
+    }
+
+    updates, errors = build_profile_updates(
+        user_doc=user_doc,
+        first_name="Tyler",
+        last_name="\t\n",
+        email="user@example.com",
+        lookup_user_by_email=lambda e: None,
+    )
+
+    assert updates == {}
+    assert "last_name" in errors
+
+
+def test_profile_rejects_invalid_email():
+    user_doc = {
+        "_id": "user1",
+        "email": "user@example.com",
+    }
+
+    updates, errors = build_profile_updates(
+        user_doc=user_doc,
+        first_name="Tyler",
+        last_name="Brooks",
+        email="not-an-email",
+        lookup_user_by_email=lambda e: None,
+    )
+
+    assert updates == {}
+    assert "email" in errors
+
+
+def test_profile_rejects_duplicate_email():
+    user_doc = {
+        "_id": "user1",
+        "email": "user@example.com",
+    }
+    other_user = {
+        "_id": "user2",
+        "email": "other@example.com",
+    }
+
+    updates, errors = build_profile_updates(
+        user_doc=user_doc,
+        first_name="Tyler",
+        last_name="Brooks",
+        email="Other@Example.com",
+        lookup_user_by_email=lambda e: other_user,
+    )
+
+    assert updates == {}
+    assert "email" in errors
+    assert "already" in errors["email"].lower()
+
+
+def test_profile_allows_keep_same_email_case_insensitive():
+    user_doc = {
+        "_id": "user1",
+        "email": "User@Example.com",
+    }
+
+    updates, errors = build_profile_updates(
+        user_doc=user_doc,
+        first_name="Tyler",
+        last_name="Brooks",
+        email="user@example.com",
+        lookup_user_by_email=lambda e: {
+            "_id": "user1",
+            "email": "User@Example.com",
+        },
+    )
+
+    assert errors == {}
+    assert updates["email"] == "user@example.com"
+
+
+def test_profile_success_returns_updates_and_syncs_name():
+    user_doc = {
+        "_id": "user1",
+        "email": "user@example.com",
+    }
+
+    updates, errors = build_profile_updates(
+        user_doc=user_doc,
+        first_name="  Tyler ",
+        last_name=" Brooks  ",
+        email=" tyler.brooks@rollcall.local ",
+        lookup_user_by_email=lambda e: None,
+    )
+
+    assert errors == {}
+    assert updates["first_name"] == "Tyler"
+    assert updates["last_name"] == "Brooks"
+    assert updates["email"] == "tyler.brooks@rollcall.local"
+    assert updates["name"] == "Tyler Brooks"

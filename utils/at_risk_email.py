@@ -15,6 +15,7 @@ from utils.db_schema_crud import (
     get_cadet_by_user_id,
     get_flight_by_commander,
     set_at_risk_email_sent,
+    get_user_by_id,
 )
 from utils.attendance_status import get_effective_attendance_status
 from utils.names import format_full_name
@@ -109,7 +110,14 @@ def build_rows(cadets: list[dict]) -> str:
     rows = ""
     for c in cadets:
         cadet = c["cadet"]
-        name = format_full_name(cadet)
+        user = None
+        user_id = cadet.get("user_id")
+        if user_id is not None:
+            try:
+                user = get_user_by_id(user_id)
+            except Exception:
+                user = None
+        name = format_full_name(user or cadet)
 
         flight = (
             get_flight_by_id(cadet["flight_id"]) if cadet.get("flight_id") else None

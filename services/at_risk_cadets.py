@@ -62,11 +62,22 @@ def get_df(flight_id=None) -> pd.DataFrame | str:
 
     rows: list[dict[str, str | int]] = []
     for i, cadet in enumerate(cadets):
+        cadet_doc = cadet.get("cadet") or {}
+        user = None
+        user_id = cadet_doc.get("user_id")
+        if user_id is not None:
+            try:
+                user = get_user_by_id(user_id)
+            except Exception:
+                user = None
+
+        first = str((user or cadet_doc).get("first_name", "") or "")
+        last = str((user or cadet_doc).get("last_name", "") or "")
         rows.append(
             {
                 "No.": i + 1,
-                "First Name": str(cadet["cadet"].get("first_name", "") or ""),
-                "Last Name": str(cadet["cadet"].get("last_name", "") or ""),
+                "First Name": first,
+                "Last Name": last,
                 "PT Absences": cadet["pt_absences"],
                 "LLAB Absences": cadet["llab_absences"],
             }

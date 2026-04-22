@@ -19,9 +19,15 @@ from utils.at_risk_email import (
 )
 
 
-def create_cadet(first_name="Test", last_name="Cadet", flight_id="flight1"):
+def create_cadet(
+    first_name="Test",
+    last_name="Cadet",
+    flight_id="flight1",
+    user_id="user_cadet10",
+):
     return {
         "_id": "cadet10",
+        "user_id": user_id,
         "first_name": first_name,
         "last_name": last_name,
         "flight_id": flight_id,
@@ -281,8 +287,19 @@ def test_filters_only_fc_flight_cadets():
 def test_build_rows_has_cadet_name():
     cadets = [make_at_risk()]
 
-    with patch(
-        "utils.at_risk_email.get_flight_by_id", return_value={"name": "Alpha Flight"}
+    with (
+        patch(
+            "utils.at_risk_email.get_flight_by_id",
+            return_value={"name": "Alpha Flight"},
+        ),
+        patch(
+            "utils.at_risk_email.get_user_by_id",
+            return_value={
+                "_id": "user_cadet10",
+                "first_name": "Test",
+                "last_name": "Cadet",
+            },
+        ),
     ):
         rows = build_rows(cadets)
         assert "Test Cadet" in rows
