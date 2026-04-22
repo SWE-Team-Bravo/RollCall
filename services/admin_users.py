@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
+from utils.st_helpers import confirm_destructive_action
 
 
 def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
@@ -217,12 +218,6 @@ def confirm_delete_user(confirmation_input: str) -> bool:
     return confirm_destructive_action(confirmation_input)
 
 
-<<<<<<< Updated upstream
-def confirm_destructive_action(confirmation_input: str) -> bool:
-    """Return True only when the exact DELETE keyword is entered."""
-    return (confirmation_input or "").strip() == "DELETE"
-=======
 def get_delete_success_message(item_type: str) -> str:
     """Return a consistent success message for delete-style actions."""
     return DELETE_SUCCESS_MESSAGES.get(item_type, "Deleted successfully.")
->>>>>>> Stashed changes
