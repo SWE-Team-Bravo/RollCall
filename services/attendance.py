@@ -1,6 +1,8 @@
 import secrets
 from typing import Any
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+
+from utils.datetime_utils import ensure_utc
 
 
 CHECKIN_WINDOW_MINUTES = 10
@@ -23,19 +25,13 @@ def is_already_checked_in(
     )
 
 
-def _ensure_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
-
 def is_within_checkin_window(event: dict[str, Any], now: datetime) -> bool:
     start = event.get("start_date")
     if not isinstance(start, datetime):
         return False
 
-    start = _ensure_utc(start)
-    now = _ensure_utc(now)
+    start = ensure_utc(start)
+    now = ensure_utc(now)
 
     checkin_open = start - timedelta(minutes=CHECKIN_WINDOW_MINUTES)
     return checkin_open <= now <= start

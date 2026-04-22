@@ -6,6 +6,7 @@ from typing import Any
 import streamlit as st
 
 from utils.auth import get_current_user, require_role
+from utils.datetime_utils import ensure_utc
 from utils.db_schema_crud import (
     get_all_cadets,
     get_attendance_by_event,
@@ -15,11 +16,7 @@ from utils.db_schema_crud import (
     get_user_by_id,
 )
 from services.events import closest_event_index
-from utils.flight_commander_view import (
-    _ensure_utc,
-    build_checkin_view,
-    get_active_events,
-)
+from utils.flight_commander_view import build_checkin_view, get_active_events
 
 
 def _cadet_display_name(cadet: dict[str, Any]) -> str:
@@ -106,8 +103,8 @@ def live_checkin_fragment() -> None:
         start = event.get("start_date")
         end = event.get("end_date")
         if isinstance(start, datetime) and isinstance(end, datetime):
-            start_utc = _ensure_utc(start)
-            end_utc = _ensure_utc(end)
+            start_utc = ensure_utc(start)
+            end_utc = ensure_utc(end)
             return (
                 f"{name} "
                 f"({start_utc.strftime('%Y-%m-%d %I:%M %p')} - "
@@ -150,8 +147,8 @@ def live_checkin_fragment() -> None:
 
     st.subheader(event_name)
     if isinstance(start, datetime) and isinstance(end, datetime):
-        start = _ensure_utc(start)
-        end = _ensure_utc(end)
+        start = ensure_utc(start)
+        end = ensure_utc(end)
         st.caption(
             f"{start.strftime('%Y-%m-%d %I:%M %p')} - "
             f"{end.strftime('%I:%M %p')} • Refreshes every 10 seconds"
