@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.attendance_merge import merge_attendance_records
+
 
 def build_commander_roster(
     flight_cadets: list[dict[str, Any]],
     records: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    # Records are expected to be pre-filtered by event in the calling page.
+    # If duplicates exist for a cadet (e.g., multiple submissions), merge
+    # deterministically before building the roster.
+    records = merge_attendance_records(records, key_fields=("cadet_id",))
     record_by_cadet: dict[Any, dict[str, Any]] = {
         r["cadet_id"]: r for r in records if "cadet_id" in r
     }
@@ -44,6 +50,8 @@ def compute_upserts(
 
         record = entry["record"]
         if record is not None:
+            if entry.get("current_status") == new_status:
+                continue
             upserts.append(
                 {
                     "action": "update",

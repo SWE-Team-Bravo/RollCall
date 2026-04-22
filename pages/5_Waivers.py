@@ -1,30 +1,38 @@
-import streamlit as st
+from datetime import date, datetime, timedelta
+
 import pandas as pd
+import streamlit as st
 
-
+from scripts.demo_admin import get_temp_cadet
+from services.admin_users import confirm_destructive_action
 from services.waivers import (
+    WAIVER_STATUS_BADGE,
+    apply_sickness_auto_approval,
     get_absent_records_without_waiver,
     get_all_waivers_for_cadet,
+    get_common_reasons,
+    resolve_cadre_only,
     resubmit_auto_denied_waiver,
     withdraw_waiver,
-    WAIVER_STATUS_BADGE,
 )
 from utils.auth import get_current_user, require_role
+from utils.auth_logic import user_has_any_role
 from utils.db_schema_crud import (
     create_waiver,
     get_approvals_by_waiver,
+    get_attendance_by_cadet,
     get_cadet_by_user_id,
     get_event_by_id,
     get_user_by_email,
     get_waiver_by_attendance_record,
     get_waiver_by_id,
-    get_attendance_by_cadet,
 )
-from datetime import date, datetime, timedelta
-from utils.auth_logic import user_has_any_role
-from scripts.demo_admin import get_temp_cadet
+from utils.st_helpers import require
 
 STATUS_BADGE = WAIVER_STATUS_BADGE
+
+
+require_role("cadet")
 
 
 def load_waiver_data(cadet_id) -> tuple[list[dict], dict, dict]:
@@ -229,17 +237,23 @@ def show_waivers(
     waiver_id = str(selected["_id"])
     if status == "pending":
         if st.session_state.confirm_withdraw_id == waiver_id:
-            st.warning("Are you sure you want to withdraw your waiver?")
+            st.warning("Type DELETE below to permanently withdraw this waiver.")
+            confirmation = st.text_input(
+                "Confirm withdrawal", key=f"confirm_input_{waiver_id}"
+            )
             c1, c2 = st.columns(2)
-            if c1.button("Yes", key=f"yes_{waiver_id}"):
-                success = withdraw_waiver(selected["_id"])
-                st.session_state.confirm_withdraw_id = None
-                if success:
-                    st.session_state.show_success = "Waiver withdrawn."
+            if c1.button("Confirm Withdraw", key=f"yes_{waiver_id}", type="primary"):
+                if not confirm_destructive_action(confirmation):
+                    st.error("Confirmation text does not match 'DELETE'.")
                 else:
-                    st.session_state.show_error = "Failed to withdraw waiver."
-                st.rerun()
-            if c2.button("No", key=f"no_{waiver_id}"):
+                    success = withdraw_waiver(selected["_id"])
+                    st.session_state.confirm_withdraw_id = None
+                    if success:
+                        st.session_state.show_success = "Waiver withdrawn."
+                    else:
+                        st.session_state.show_error = "Failed to withdraw waiver."
+                    st.rerun()
+            if c2.button("Cancel", key=f"no_{waiver_id}", type="secondary"):
                 st.session_state.confirm_withdraw_id = None
                 st.rerun()
         else:
@@ -282,13 +296,56 @@ def waiver_form(
                 default_index = i
                 break
 
+    common_reasons = get_common_reasons()
+
     with st.form("waiver_form", clear_on_submit=True):
         label = st.selectbox(
             "Select Absent Event",
             options=list(record_labels.keys()),
             index=default_index,
         )
-        reason = st.text_area("Reason for Waiver Request")
+
+        waiver_type = st.radio(
+            "Waiver type",
+            options=["non-medical", "medical", "sickness"],
+            format_func=lambda x: {
+                "non-medical": "Non-Medical",
+                "medical": "Medical",
+                "sickness": "Sickness",
+            }.get(x, x),
+            horizontal=True,
+        )
+
+        if waiver_type == "sickness":
+            st.info(
+                "Your first sickness waiver is automatically approved. Subsequent sickness waivers go to cadre for review."
+            )
+
+        if waiver_type == "medical":
+            st.info(
+                "Medical waivers are visible to cadre only (not flight commanders)."
+            )
+
+        selected_reason = st.selectbox("Reason", options=common_reasons)
+        extra_details = ""
+        if selected_reason == common_reasons[-1]:
+            extra_details = st.text_area("Describe your reason")
+        else:
+            extra_details = st.text_area("Additional details (optional)")
+
+        uploaded_file = st.file_uploader(
+            "Attach supporting document (optional)",
+            type=["pdf", "png", "jpg", "jpeg", "docx"],
+        )
+
+        force_cadre_only = resolve_cadre_only(
+            waiver_type, uploaded_file is not None, False
+        )
+        cadre_only = st.checkbox(
+            "Send to cadre staff only",
+            value=force_cadre_only,
+            disabled=force_cadre_only,
+        )
 
         col1, col2, spacer = st.columns([2, 2, 8])
         with col1:
@@ -297,11 +354,27 @@ def waiver_form(
             cancel = st.form_submit_button("Cancel", type="secondary")
 
     if submit:
-        if not reason.strip():
+        reason_text = (
+            extra_details.strip()
+            if selected_reason == common_reasons[-1]
+            else f"{selected_reason}. {extra_details}".strip(". ")
+        )
+        if not reason_text:
             st.error("Please provide a reason for your waiver request.")
         else:
             selected_record = record_labels[label]
             existing = get_waiver_by_attendance_record(selected_record["_id"])
+
+            attachments = []
+            if uploaded_file is not None:
+                attachments = [
+                    {
+                        "filename": uploaded_file.name,
+                        "content_type": uploaded_file.type
+                        or "application/octet-stream",
+                        "data": uploaded_file.read(),
+                    }
+                ]
 
             if (
                 existing
@@ -309,7 +382,7 @@ def waiver_form(
                 and bool(existing.get("auto_denied"))
             ):
                 became_pending, why = resubmit_auto_denied_waiver(
-                    existing, selected_record["_id"], reason
+                    existing, selected_record["_id"], reason_text
                 )
                 if not became_pending:
                     st.error(
@@ -324,9 +397,12 @@ def waiver_form(
             else:
                 result = create_waiver(
                     attendance_record_id=selected_record["_id"],
-                    reason=reason,
+                    reason=reason_text,
                     status="pending",
                     submitted_by_user_id=user_id,
+                    waiver_type=waiver_type,
+                    cadre_only=cadre_only,
+                    attachments=attachments,
                 )
 
                 if result:
@@ -335,6 +411,8 @@ def waiver_form(
                     if created_status.lower() == "denied":
                         st.session_state.show_error = "Waiver was auto-denied. See notes under your waiver status."
                     else:
+                        if waiver_type == "sickness":
+                            apply_sickness_auto_approval(result.inserted_id, user_id)
                         st.session_state.show_success = (
                             "Waiver request submitted successfully!"
                         )
@@ -349,7 +427,6 @@ def waiver_form(
         st.switch_page("pages/8_Cadet_Attendance.py")
 
 
-require_role("cadet")
 st.title("My Waivers")
 
 if "waiver_record_id" not in st.session_state:
@@ -378,11 +455,7 @@ if not email:
     st.error("Could not find an account with this email.")
     st.stop()
 
-user = get_user_by_email(email)
-if not user:
-    st.error("Could not find an account with this email.")
-    st.stop()
-assert user is not None
+user = require(get_user_by_email(email), "Could not find an account with this email.")
 
 # cadet = get_cadet_by_user_id(user["_id"])
 # if not cadet:

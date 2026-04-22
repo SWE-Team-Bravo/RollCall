@@ -1,3 +1,4 @@
+import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -23,11 +24,9 @@ def build_email(
     msg["Subject"] = f"Waiver Request {status.capitalize()} — {event_name}"
 
     if status == "approved":
-        body = (
-            f"Your waiver request for {event_name} on {event_date} has been approved."
-        )
+        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been approved."
     elif status == "denied":
-        body = f"Your waiver request for {event_name} on {event_date} has been denied."
+        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been denied."
 
     if comments:
         body += f"\n\nComments: {comments}"
@@ -61,4 +60,5 @@ def send_waiver_decision_email(
         update_waiver(waiver_id, {"email_sent": True})
         return True
     except Exception:
+        logging.exception("Failed to send waiver email to %s", to_email)
         return False

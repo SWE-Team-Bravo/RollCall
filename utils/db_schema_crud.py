@@ -52,6 +52,14 @@ def get_users_by_role(role: str) -> list[dict]:
     return list(col.find({"roles": role}))
 
 
+def get_users_by_ids(user_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("users")
+    if col is None:
+        return []
+    object_ids = [ObjectId(u_id) for u_id in user_ids]
+    return list(col.find({"_id": {"$in": object_ids}}))
+
+
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("users")
     if col is None:
@@ -114,6 +122,23 @@ def get_cadet_by_user_id(user_id: str | ObjectId) -> dict | None:
     if col is None:
         return None
     return col.find_one({"user_id": ObjectId(user_id)})
+
+
+def set_at_risk_email_sent(
+    cadet_id: str | ObjectId, pt_absences: int, llab_absences: int
+) -> UpdateResult | None:
+    col = get_collection("cadets")
+    if col is None:
+        return None
+    return col.update_one(
+        {"_id": ObjectId(cadet_id)},
+        {
+            "$set": {
+                "at_risk_email_last_pt": pt_absences,
+                "at_risk_email_last_llab": llab_absences,
+            }
+        },
+    )
 
 
 def update_cadet(cadet_id: str | ObjectId, updates: dict) -> UpdateResult | None:
@@ -279,19 +304,21 @@ def create_attendance_record(
     cadet_id: str | ObjectId,
     status: str,
     recorded_by_user_id: str | ObjectId,
+    recorded_by_roles: list[str] | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("attendance_records")
     if col is None:
         return None
-    return col.insert_one(
-        {
-            "event_id": ObjectId(event_id),
-            "cadet_id": ObjectId(cadet_id),
-            "status": status,
-            "recorded_by_user_id": ObjectId(recorded_by_user_id),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
+    doc = {
+        "event_id": ObjectId(event_id),
+        "cadet_id": ObjectId(cadet_id),
+        "status": status,
+        "recorded_by_user_id": ObjectId(recorded_by_user_id),
+        "created_at": datetime.now(timezone.utc),
+    }
+    if recorded_by_roles is not None:
+        doc["recorded_by_roles"] = list(recorded_by_roles)
+    return col.insert_one(doc)
 
 
 def get_attendance_record_by_id(record_id: str | ObjectId) -> dict | None:
@@ -308,11 +335,56 @@ def get_attendance_by_event(event_id: str | ObjectId) -> list[dict]:
     return list(col.find({"event_id": ObjectId(event_id)}))
 
 
+def get_attendance_by_events(events_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("attendance_records")
+    if col is None:
+        return []
+    object_ids = [ObjectId(e_id) for e_id in events_ids]
+    return list(col.find({"event_id": {"$in": object_ids}}))
+
+
 def get_attendance_by_cadet(cadet_id: str | ObjectId) -> list[dict]:
     col = get_collection("attendance_records")
     if col is None:
         return []
     return list(col.find({"cadet_id": ObjectId(cadet_id)}))
+
+
+def upsert_attendance_record(
+    event_id: str | ObjectId,
+    cadet_id: str | ObjectId,
+    status: str,
+    recorded_by_user_id: str | ObjectId,
+    recorded_by_roles: list[str] | None = None,
+) -> UpdateResult | None:
+    """Insert or update a single attendance record atomically.
+
+    Safe to call concurrently — uses MongoDB upsert so the last writer wins
+    on status without ever creating duplicate (event_id, cadet_id) pairs.
+    """
+    col = get_collection("attendance_records")
+    if col is None:
+        return None
+    set_doc = {
+        "status": status,
+        "recorded_by_user_id": ObjectId(recorded_by_user_id),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if recorded_by_roles is not None:
+        set_doc["recorded_by_roles"] = list(recorded_by_roles)
+    return col.update_one(
+        {
+            "event_id": ObjectId(event_id),
+            "cadet_id": ObjectId(cadet_id),
+        },
+        {
+            "$set": set_doc,
+            "$setOnInsert": {
+                "created_at": datetime.now(timezone.utc),
+            },
+        },
+        upsert=True,
+    )
 
 
 def update_attendance_record(
@@ -339,19 +411,24 @@ def create_waiver(
     reason: str,
     status: str,
     submitted_by_user_id: str | ObjectId,
+    waiver_type: str = "non-medical",
+    cadre_only: bool = False,
+    attachments: list | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("waivers")
     if col is None:
         return None
-    result = col.insert_one(
-        {
-            "attendance_record_id": ObjectId(attendance_record_id),
-            "reason": reason,
-            "status": status,
-            "submitted_by_user_id": ObjectId(submitted_by_user_id),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
+    doc: dict = {
+        "attendance_record_id": ObjectId(attendance_record_id),
+        "reason": reason,
+        "status": status,
+        "submitted_by_user_id": ObjectId(submitted_by_user_id),
+        "waiver_type": waiver_type,
+        "cadre_only": cadre_only,
+        "attachments": attachments or [],
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = col.insert_one(doc)
     is_valid, why = validate_waiver(ObjectId(attendance_record_id))
     if not is_valid:
         col.update_one(
@@ -403,6 +480,35 @@ def validate_waiver(attendance_record_id: str | ObjectId) -> tuple[bool, str]:
     return True, ""
 
 
+def get_sickness_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(
+        col.find(
+            {
+                "submitted_by_user_id": ObjectId(user_id),
+                "waiver_type": "sickness",
+                "status": {"$in": ["approved", "pending"]},
+            }
+        )
+    )
+
+
+def get_approved_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(
+        col.find(
+            {
+                "submitted_by_user_id": ObjectId(user_id),
+                "status": "approved",
+            }
+        )
+    )
+
+
 def get_waiver_by_id(waiver_id: str | ObjectId) -> dict | None:
     col = get_collection("waivers")
     if col is None:
@@ -427,8 +533,10 @@ def get_waivers_by_status(status: str) -> list[dict]:
 
 
 def get_waivers_by_attendance_records(record_ids: list[str | ObjectId]) -> list[dict]:
+    if not record_ids:
+        return []
     col = get_collection("waivers")
-    if col is None or not record_ids:
+    if col is None:
         return []
     object_ids = [ObjectId(r_id) for r_id in record_ids]
     return list(col.find({"attendance_record_id": {"$in": object_ids}}))
@@ -511,10 +619,49 @@ def delete_waiver_approval(approval_id: str | ObjectId) -> DeleteResult | None:
 # -- Flights
 
 
+def _validate_flight_association(
+    cadet_id: str | ObjectId,
+    target_flight_id: str | ObjectId | None = None,
+) -> None:
+    cadets_col = get_collection("cadets")
+    flights_col = get_collection("flights")
+    if cadets_col is None or flights_col is None:
+        return
+
+    cadet_object_id = ObjectId(cadet_id)
+    target_object_id = (
+        ObjectId(target_flight_id) if target_flight_id is not None else None
+    )
+
+    cadet = cadets_col.find_one({"_id": cadet_object_id})
+    if cadet and cadet.get("flight_id") and cadet["flight_id"] != target_object_id:
+        assigned_flight = flights_col.find_one({"_id": cadet["flight_id"]})
+        assigned_flight_name = (
+            assigned_flight.get("name") if assigned_flight else "another flight"
+        )
+        raise ValueError(
+            f"Cadet is already assigned to {assigned_flight_name}. Unassign them first."
+        )
+
+    commander_query = {"commander_cadet_id": cadet_object_id}
+    if target_object_id is not None:
+        commander_query["_id"] = {"$ne": target_object_id}
+
+    commanded_flight = flights_col.find_one(commander_query)
+    if commanded_flight:
+        commanded_flight_name = commanded_flight.get("name", "another flight")
+        raise ValueError(
+            f"Cadet is already commanding {commanded_flight_name}. Remove them as commander first."
+        )
+
+
 def create_flight(name: str, commander_cadet_id: str | ObjectId):
     col = get_collection("flights")
     if col is None:
         return None
+
+    _validate_flight_association(commander_cadet_id)
+
     return col.insert_one(
         {
             "name": name,
@@ -548,6 +695,10 @@ def update_flight(flight_id: str | ObjectId, updates: dict):
     col = get_collection("flights")
     if col is None:
         return None
+
+    if "commander_cadet_id" in updates:
+        _validate_flight_association(updates["commander_cadet_id"], flight_id)
+
     return col.update_one({"_id": ObjectId(flight_id)}, {"$set": updates})
 
 
@@ -640,9 +791,22 @@ def assign_cadet_to_flight(cadet_id: str | ObjectId, flight_id: str | ObjectId):
     if col is None:
         return None
 
+    _validate_flight_association(cadet_id, flight_id)
+
     return col.update_one(
         {"_id": ObjectId(cadet_id)},
         {"$set": {"flight_id": ObjectId(flight_id)}},
+    )
+
+
+def unassign_all_cadets_from_flight(flight_id: str | ObjectId):
+    col = get_collection("cadets")
+    if col is None:
+        return None
+
+    return col.update_many(
+        {"flight_id": ObjectId(flight_id)},
+        {"$unset": {"flight_id": ""}},
     )
 
 

@@ -1,6 +1,11 @@
 import streamlit as st
 from datetime import date
-from services.event_config import get_event_config, save_event_config
+from services.event_config import (
+    get_event_config,
+    save_event_config,
+    _DEFAULT_PT_THRESHOLD,
+    _DEFAULT_LLAB_THRESHOLD,
+)
 from services.events import get_all_events, create_event, delete_event
 from utils.auth import require_role, get_current_user
 
@@ -8,6 +13,8 @@ require_role("admin", "cadre")
 
 if "confirm_delete_event_id" not in st.session_state:
     st.session_state.confirm_delete_event_id = None
+if "create_event_success" not in st.session_state:
+    st.session_state.create_event_success = None
 
 st.title("Event Management")
 
@@ -58,8 +65,26 @@ with st.expander("Event Schedule Configuration", expanded=False):
         key="cfg_llab_days",
     )
 
+    st.divider()
+
+    st.markdown("Configure PT and LLAB absence thresholds.")
+    pt_threshold = st.number_input(
+        "PT Absence Threshold",
+        min_value=1,
+        max_value=20,
+        value=config.get("pt_threshold", _DEFAULT_PT_THRESHOLD),
+        step=1,
+    )
+    llab_threshold = st.number_input(
+        "LLAB Absence Threshold",
+        min_value=1,
+        max_value=20,
+        value=config.get("llab_threshold", _DEFAULT_LLAB_THRESHOLD),
+        step=1,
+    )
+
     if st.button("Save Schedule Configuration"):
-        if save_event_config(pt_days, llab_days):
+        if save_event_config(pt_days, llab_days, pt_threshold, llab_threshold):
             st.success("Schedule configuration saved!")
             config = get_event_config() or {}  # refresh so create form picks it up
             st.rerun()
@@ -103,10 +128,16 @@ if submitted:
         user = get_current_user()
         user_id = user.get("email", "unknown") if user else "unknown"
         if create_event(event_name.strip(), event_type, start_date, end_date, user_id):
-            st.success(f"Event '{event_name}' created successfully!")
+            st.session_state.create_event_success = (
+                f"Event '{event_name.strip()}' created successfully!"
+            )
             st.rerun()
         else:
             st.error("Database unavailable — could not create event.")
+
+if st.session_state.create_event_success:
+    st.success(st.session_state.create_event_success)
+    st.session_state.create_event_success = None
 
 st.divider()
 

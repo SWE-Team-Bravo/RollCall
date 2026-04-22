@@ -15,11 +15,13 @@ from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 from utils.export import to_excel
 
+from utils.st_helpers import require
+
 
 STATUS_BADGE = WAIVER_STATUS_BADGE
 
 
-require_role("admin", "cadre", "flight_commander")
+require_role("admin", "cadre", "waiver_reviewer")
 st.title("Waiver Review")
 st.caption("Review waiver requests and approve/deny with comments.")
 
@@ -31,20 +33,19 @@ if not approver_email:
     st.error("Missing current user email; cannot record approvals.")
     st.stop()
 
-approver_user = get_user_by_email(approver_email)
-if approver_user is None:
-    st.error("Could not resolve approver user in database.")
-    st.stop()
-assert approver_user is not None
+approver_user = require(
+    get_user_by_email(approver_email), "Could not resolve approver user in database."
+)
 approver_id = approver_user["_id"]
 
 status_filter = st.selectbox(
-    "Status", ["all", "pending", "approved", "denied"], index=0
+    "Status", ["All", "Pending", "Approved", "Denied"], index=0
 )
 flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
-waivers = get_waivers(status_filter)
+viewer_roles = list(current_user.get("roles") or [])
+waivers = get_waivers(status_filter.lower(), viewer_roles)
 
 if not waivers:
     st.info("No waivers found for the selected filters.")
@@ -66,6 +67,8 @@ for waiver in waivers:
     event_name = ctx["event_name"]
     event_date = ctx["event_date"]
     event_type = ctx["event_type"]
+    waiver_type = ctx["waiver_type"]
+    attachments = ctx["attachments"]
     waiver_status = (waiver.get("status") or "pending").lower()
 
     if flight_filter != "All flights" and flight_name != flight_filter:
@@ -80,6 +83,8 @@ for waiver in waivers:
         {
             "waiver_id": waiver_id,
             "waiver_status": waiver_status,
+            "waiver_type": waiver_type,
+            "attachments": attachments,
             "reason": waiver.get("reason", ""),
             "cadet_name": cadet_name,
             "cadet_email": cadet_email,
@@ -108,10 +113,25 @@ for w in rows:
             f"**Status:** {STATUS_BADGE.get(w['waiver_status'], w['waiver_status'])}"
         )
 
+        type_label = {
+            "medical": "Medical",
+            "non-medical": "Non-Medical",
+            "sickness": "Sickness",
+        }.get(w["waiver_type"], w["waiver_type"])
         st.write(
-            f"**Event:** {w['event_date']} — {w['event_name']} ({w['event_type']})"
+            f"**Event:** {w['event_date']} — {w['event_name']} ({w['event_type']})  |  **Type:** {type_label}"
         )
         st.write(f"**Cadet reason:** {w['reason']}")
+        for att in w.get("attachments") or []:
+            file_data = att.get("data")
+            if file_data:
+                st.download_button(
+                    label=f"Download: {att.get('filename', 'attachment')}",
+                    data=bytes(file_data),
+                    file_name=att.get("filename", "attachment"),
+                    mime=att.get("content_type", "application/octet-stream"),
+                    key=f"att_{w['waiver_id']}_{att.get('filename', '')}",
+                )
 
         if w["waiver_status"] == "pending":
             with st.form(f"waiver_decision_{w['waiver_id']}"):

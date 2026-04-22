@@ -7,24 +7,33 @@ import pandas as pd
 import streamlit as st
 
 from services.commander_attendance import build_commander_roster, compute_upserts
-from services.events import closest_event_index, get_all_events
+from services.events import closest_event_index, get_all_events, has_event_ended
 from utils.auth import get_current_user, require_role
+from utils.attendance_status import (
+    NO_RECORD_STATUS_LABEL,
+    get_attendance_status_cell_style,
+    get_attendance_status_label,
+)
 from utils.db_schema_crud import (
-    create_attendance_record,
     get_all_cadets,
     get_attendance_by_event,
     get_user_by_email,
     get_user_by_id,
-    update_attendance_record,
+    upsert_attendance_record,
 )
 
-STATUS_OPTIONS = ["Present", "Absent", "Excused"]
+STATUS_OPTIONS = [NO_RECORD_STATUS_LABEL, "Present", "Absent", "Excused"]
 STATUS_TO_DB = {"Present": "present", "Absent": "absent", "Excused": "excused"}
-DB_TO_STATUS = {"present": "Present", "absent": "Absent", "excused": "Excused"}
 
 require_role("admin", "cadre")
 st.title("Modify Attendance")
 st.caption("Manually set attendance for cadets. These entries override self-check-ins.")
+
+if "_success_msg" not in st.session_state:
+    st.session_state["_success_msg"] = None
+if st.session_state["_success_msg"]:
+    st.success(st.session_state["_success_msg"])
+    st.session_state["_success_msg"] = None
 
 current_user = get_current_user()
 assert current_user is not None
@@ -64,6 +73,8 @@ if selected_event is None:
     st.stop()
 
 event_id: str = selected_event["_id"]
+event_has_ended = has_event_ended(selected_event)
+default_status = "Absent" if event_has_ended else NO_RECORD_STATUS_LABEL
 
 all_cadets = get_all_cadets()
 if not all_cadets:
@@ -71,22 +82,35 @@ if not all_cadets:
     st.stop()
 
 for i, c in enumerate(all_cadets):
-    first = str(c.get("first_name", "") or "").strip()
-    last = str(c.get("last_name", "") or "").strip()
-    if not first and not last:
-        uid = c.get("user_id")
-        if uid is not None:
-            user_doc = get_user_by_id(uid)
-            if user_doc is not None:
-                c = dict(c)
-                c["first_name"] = user_doc.get("first_name", "")
-                c["last_name"] = user_doc.get("last_name", "")
-                all_cadets[i] = c
+    uid = c.get("user_id")
+    if uid is None:
+        continue
+
+    try:
+        user_doc = get_user_by_id(uid)
+    except Exception:
+        user_doc = None
+    if user_doc is None:
+        continue
+
+    user_first = str(user_doc.get("first_name", "") or "").strip()
+    user_last = str(user_doc.get("last_name", "") or "").strip()
+    if not user_first and not user_last:
+        continue
+
+    c = dict(c)
+    c["first_name"] = user_first or c.get("first_name", "")
+    c["last_name"] = user_last or c.get("last_name", "")
+    all_cadets[i] = c
 
 records = get_attendance_by_event(event_id)
 roster = build_commander_roster(all_cadets, records)
 
 cadet_ids = [str(entry["cadet"]["_id"]) for entry in roster]
+initial_statuses = [
+    get_attendance_status_label(entry["current_status"], default=default_status)
+    for entry in roster
+]
 
 df = pd.DataFrame(
     {
@@ -96,15 +120,26 @@ df = pd.DataFrame(
             or "Unknown"
             for e in roster
         ],
-        "Status": [DB_TO_STATUS.get(e["current_status"], "Present") for e in roster],
+        "Current Status": initial_statuses,
+        "Set Status": initial_statuses,
     }
 )
 
+styler = df.style
+if hasattr(styler, "map"):
+    styler = styler.map(get_attendance_status_cell_style, subset=["Current Status"])
+else:
+    styler = styler.applymap(
+        get_attendance_status_cell_style,
+        subset=["Current Status"],
+    )
+
 edited = st.data_editor(
-    df,
+    styler,
     column_config={
         "Cadet": st.column_config.TextColumn(disabled=True),
-        "Status": st.column_config.SelectboxColumn(
+        "Current Status": st.column_config.TextColumn(disabled=True),
+        "Set Status": st.column_config.SelectboxColumn(
             options=STATUS_OPTIONS, required=True
         ),
     },
@@ -114,20 +149,32 @@ edited = st.data_editor(
 
 st.divider()
 if st.button("Save All", type="primary"):
-    new_statuses = {
-        cadet_ids[idx]: STATUS_TO_DB[row["Status"]]
+    invalid_no_record_rows = [
+        roster[idx]["cadet"]
         for idx, (_, row) in enumerate(edited.iterrows())
+        if row["Set Status"] == NO_RECORD_STATUS_LABEL
+        and roster[idx]["record"] is not None
+    ]
+    if invalid_no_record_rows:
+        st.error(
+            "No Record can only be used for cadets who do not already have an attendance entry."
+        )
+        st.stop()
+
+    new_statuses = {
+        cadet_ids[idx]: STATUS_TO_DB[row["Set Status"]]
+        for idx, (_, row) in enumerate(edited.iterrows())
+        if row["Set Status"] != initial_statuses[idx]
+        and row["Set Status"] in STATUS_TO_DB
     }
     upserts = compute_upserts(roster, new_statuses)
     for op in upserts:
-        if op["action"] == "update":
-            update_attendance_record(op["record_id"], {"status": op["status"]})
-        else:
-            create_attendance_record(
-                event_id=event_id,
-                cadet_id=op["cadet_id"],
-                status=op["status"],
-                recorded_by_user_id=user["_id"],
-            )
-    st.success(f"Saved attendance for {len(upserts)} cadet(s).")
+        upsert_attendance_record(
+            event_id=event_id,
+            cadet_id=op["cadet_id"],
+            status=op["status"],
+            recorded_by_user_id=user["_id"],
+            recorded_by_roles=list(user.get("roles", [])),
+        )
+    st.session_state["_success_msg"] = f"Saved attendance for {len(upserts)} cadet(s)."
     st.rerun()

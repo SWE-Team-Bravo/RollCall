@@ -1,145 +1,122 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
-from utils.db import get_collection, get_db
 import pandas as pd
 
-
-def normalize_status(status: str | None) -> str:
-    """Normalize a raw attendance status string to P/A/E."""
-    if not status:
-        return "A"
-    s = status.strip().lower()
-    if s == "present":
-        return "P"
-    if s == "absent":
-        return "A"
-    if s in ("excused", "waived"):
-        return "E"
-    return "A"
+from utils.db_schema_crud import (
+    get_all_cadets,
+    get_attendance_by_events,
+    get_events_by_type,
+    get_users_by_ids,
+    get_waivers_by_attendance_records,
+)
+from utils.datetime_utils import ensure_utc
+from utils.names import format_full_name
 
 
-def event_sort_key(e: dict) -> Any:
-    sd = e.get("start_date")
-    return sd if isinstance(sd, datetime) else str(sd or "")
-
-
-def format_event_row_label(event: dict[str, Any]) -> str:
-    """Format an event document into a display label: 'YYYY-MM-DD — Event Name'."""
-    sd = event.get("start_date")
-    if isinstance(sd, datetime):
-        date_str = sd.strftime("%Y-%m-%d")
-    else:
-        date_str = str(sd)[:10] if sd else "Unknown date"
-    name = event.get("event_name") or event.get("name") or ""
-    return f"{date_str} — {name}" if name else date_str
-
-
-def build_attendance_grid(
-    cadet_docs: list[dict],
-    user_docs: list[dict],
-    event_docs: list[dict],
-    record_docs: list[dict],
-) -> tuple[list[str], list[str], list[list[str]]]:
-    """Build the attendance grid data for the dashboard.
-
-    Returns:
-        (event_row_labels, cadet_name_columns, grid_rows)
-        where grid_rows[i][j] is the P/A/E status for event i and cadet j.
-    """
-    name_by_user_id = {
-        u["_id"]: f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
-        or "Unknown"
-        for u in user_docs
-    }
-
-    cadet_name_by_id = {
-        c["_id"]: name_by_user_id.get(c.get("user_id"), "Unknown") for c in cadet_docs
-    }
-
-    cadet_pairs = sorted(cadet_name_by_id.items(), key=lambda x: x[1].lower())
-    cadet_ids_sorted = [cid for cid, _ in cadet_pairs]
-    cadet_names_sorted = [nm for _, nm in cadet_pairs]
-
-    event_docs_sorted = sorted(event_docs, key=event_sort_key, reverse=True)
-    event_ids_sorted = [e["_id"] for e in event_docs_sorted]
-    event_row_labels = [format_event_row_label(e) for e in event_docs_sorted]
-
-    status_by_pair: dict[tuple, str] = {}
-    for r in record_docs:
-        key = (r.get("event_id"), r.get("cadet_id"))
-        status_by_pair[key] = normalize_status(r.get("status"))
-
-    grid_rows: list[list[str]] = []
-    for ev_id in event_ids_sorted:
-        row = [status_by_pair.get((ev_id, cid), "A") for cid in cadet_ids_sorted]
-        grid_rows.append(row)
-
-    return event_row_labels, cadet_names_sorted, grid_rows
-
-
-def get_data() -> tuple[list[dict], list[dict], list[dict], list[dict]] | None:
-    db = get_db()
-    if db is None:
+def get_semester_data() -> dict | None:
+    cadets = get_all_cadets()
+    if not cadets:
         return None
 
-    users_col = get_collection("users")
-    cadets_col = get_collection("cadets")
-    events_col = get_collection("events")
-    attendance_col = get_collection("attendance_records")
+    user_ids = [c["user_id"] for c in cadets]
+    users = get_users_by_ids(user_ids)
 
-    if any(x is None for x in (users_col, cadets_col, events_col, attendance_col)):
+    year = datetime.now(timezone.utc).year
+    start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    end = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+    all_events = get_events_by_type("pt") + get_events_by_type("lab")
+    events = [
+        e
+        for e in all_events
+        if isinstance(e.get("start_date"), datetime)
+        and start <= ensure_utc(e["start_date"]) <= end
+    ]
+    if not events:
         return None
 
-    assert users_col is not None
-    assert cadets_col is not None
-    assert events_col is not None
-    assert attendance_col is not None
+    records = get_attendance_by_events([e["_id"] for e in events])
 
-    cadet_docs = list(cadets_col.find({}, {"_id": 1, "user_id": 1}))
-    if not cadet_docs:
-        cadet_docs = []
+    waivers = [
+        w
+        for w in get_waivers_by_attendance_records([r["_id"] for r in records])
+        if w.get("status") == "approved"
+    ]
 
-    user_ids = [c["user_id"] for c in cadet_docs if "user_id" in c]
-    user_docs = list(
-        users_col.find(
-            {"_id": {"$in": user_ids}}, {"_id": 1, "first_name": 1, "last_name": 1}
-        )
-    )
-
-    event_docs = list(events_col.find({}, {"_id": 1, "start_date": 1, "event_name": 1}))
-    if not event_docs:
-        event_docs = []
-
-    event_ids = [e["_id"] for e in event_docs]
-    record_docs = list(
-        attendance_col.find(
-            {"event_id": {"$in": event_ids}},
-            {"_id": 0, "event_id": 1, "cadet_id": 1, "status": 1},
-        )
-    )
-    return cadet_docs, user_docs, event_docs, record_docs
+    return {
+        "cadets": cadets,
+        "users": users,
+        "events": events,
+        "records": records,
+        "waivers": waivers,
+    }
 
 
-def get_df() -> pd.DataFrame | str:
-    data = get_data()
-
+def get_semester_df() -> pd.DataFrame | str:
+    data = get_semester_data()
     if data is None:
-        return "Database is unavailable."
-    cadet_docs, user_docs, event_docs, record_docs = data
+        return "No data found."
 
-    if cadet_docs == []:
-        return "No cadets found yet."
-    if event_docs == []:
-        return "No events found yet."
+    cadets = data["cadets"]
+    users = data["users"]
+    events = data["events"]
+    records = data["records"]
+    waivers = data["waivers"]
 
-    event_row_labels, cadet_names, grid_rows = build_attendance_grid(
-        cadet_docs, user_docs, event_docs, record_docs
+    name_by_user_id = {u["_id"]: format_full_name(u, "Unknown") for u in users}
+    name_by_cadet = {
+        c["_id"]: name_by_user_id.get(c["user_id"], "Unknown") for c in cadets
+    }
+
+    status_map: dict[tuple, str] = {
+        (r["event_id"], r["cadet_id"]): (r.get("status") or "absent").lower()
+        for r in records
+    }
+    pair_to_record: dict[tuple, Any] = {
+        (r["event_id"], r["cadet_id"]): r["_id"] for r in records
+    }
+    waived_record_ids = {w["attendance_record_id"] for w in waivers}
+
+    cadets_sorted = sorted(
+        cadets, key=lambda c: name_by_cadet.get(c["_id"], "").lower()
     )
 
-    df = pd.DataFrame(
-        grid_rows,
-        index=pd.Index(event_row_labels),
-        columns=pd.Index(cadet_names),
-    )
+    rows = []
+    for c in cadets_sorted:
+        cid = c["_id"]
+        row: dict[str, Any] = {"Cadet": name_by_cadet.get(cid, "Unknown")}
+        pt_absences = llab_absences = approved_waivers = 0
 
-    return df
+        for e in events:
+            eid = e["_id"]
+            sd = e.get("start_date")
+            col_label = f"{sd.strftime('%m/%d') if isinstance(sd, datetime) else ''} {e.get('event_type', '').upper()}".strip()
+
+            rid = pair_to_record.get((eid, cid))
+            if rid in waived_record_ids:
+                val = "Waived"
+            else:
+                raw = status_map.get((eid, cid), "absent")
+                val = {
+                    "present": "Present",
+                    "absent": "Absent",
+                    "excused": "Excused",
+                }.get(raw, "Absent")
+
+            row[col_label] = val
+
+            if val == "Absent":
+                if e.get("event_type") == "pt":
+                    pt_absences += 1
+                elif e.get("event_type") == "lab":
+                    llab_absences += 1
+
+            if rid in waived_record_ids:
+                approved_waivers += 1
+
+        row["PT Absences"] = pt_absences
+        row["LLAB Absences"] = llab_absences
+        row["Approved Waivers"] = approved_waivers
+        rows.append(row)
+
+    return pd.DataFrame(rows)

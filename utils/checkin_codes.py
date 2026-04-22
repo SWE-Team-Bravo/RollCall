@@ -6,17 +6,11 @@ from datetime import datetime, timedelta, timezone
 from pymongo import DESCENDING
 
 from utils.db import get_collection
+from utils.datetime_utils import ensure_utc
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _ensure_utc(dt: datetime) -> datetime:
-    """Coerce naive datetimes (commonly returned by PyMongo) to UTC-aware."""
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 def _sha256_hex(value: str) -> str:
@@ -39,7 +33,7 @@ def issue_checkin_code(
     if col is None:
         return None
 
-    now = _ensure_utc(now or _utcnow())
+    now = ensure_utc(now or _utcnow())
     expires_at = now + timedelta(minutes=int(ttl_minutes))
 
     doc = {
@@ -75,7 +69,7 @@ def validate_checkin_code(
     if col is None:
         return "invalid_code"
 
-    now = _ensure_utc(now or _utcnow())
+    now = ensure_utc(now or _utcnow())
     attempted_hash = _sha256_hex(str(code))
 
     # Determine the most recently issued code for this kind.
@@ -97,7 +91,7 @@ def validate_checkin_code(
 
     expires_at = current.get("expires_at")
     if isinstance(expires_at, datetime):
-        expires_at = _ensure_utc(expires_at)
+        expires_at = ensure_utc(expires_at)
         if now > expires_at:
             return "expired_code"
 

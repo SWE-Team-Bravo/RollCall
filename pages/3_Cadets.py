@@ -7,6 +7,9 @@ from utils.auth import require_role
 from utils.db_schema_crud import (
     update_cadet,
     delete_cadet,
+    update_user,
+    get_user_by_id,
+    get_user_by_email,
 )
 
 from services.cadets import (
@@ -17,6 +20,8 @@ from services.cadets import (
     import_cadets_from_roster,
     parse_roster_xlsx,
 )
+
+from services.account_settings import build_profile_updates
 
 from utils.export import to_excel
 
@@ -78,13 +83,23 @@ def edit_cadet(cadet):
     rank_index = RANK_OPTIONS.index(current_rank) if current_rank in RANK_OPTIONS else 0
     cadet_id = str(cadet["_id"])
 
+    user_doc = None
+    try:
+        user_id = cadet.get("user_id")
+        if user_id is not None:
+            user_doc = get_user_by_id(user_id)
+    except Exception:
+        user_doc = None
+
+    source = user_doc or cadet
+
     new_first = st.text_input(
-        "First Name", cadet.get("first_name", ""), key=f"first_{cadet_id}"
+        "First Name", source.get("first_name", ""), key=f"first_{cadet_id}"
     )
     new_last = st.text_input(
-        "Last Name", cadet.get("last_name", ""), key=f"last_{cadet_id}"
+        "Last Name", source.get("last_name", ""), key=f"last_{cadet_id}"
     )
-    new_email = st.text_input("Email", cadet.get("email", ""), key=f"email_{cadet_id}")
+    new_email = st.text_input("Email", source.get("email", ""), key=f"email_{cadet_id}")
     new_rank = st.selectbox(
         "Rank", RANK_OPTIONS, index=rank_index, key=f"rank_{cadet_id}"
     )
@@ -93,15 +108,45 @@ def edit_cadet(cadet):
     if col1.button("Save", key=f"save_{cadet_id}"):
         check, msg = validate_cadet_input(new_first, new_last, new_email)
         if check:
-            update_cadet(
-                cadet_id,
-                {
-                    "first_name": new_first,
-                    "last_name": new_last,
-                    "email": new_email,
-                    "rank": new_rank,
-                },
-            )
+            if user_doc is not None:
+                user_updates, errors = build_profile_updates(
+                    user_doc=user_doc,
+                    first_name=new_first,
+                    last_name=new_last,
+                    email=new_email,
+                    lookup_user_by_email=get_user_by_email,
+                )
+                if errors:
+                    for field, message in errors.items():
+                        st.error(f"{field.replace('_', ' ').capitalize()}: {message}")
+                    return
+
+                update_user(user_doc["_id"], user_updates)
+
+                # Transitional: keep cadet fields in sync for any pages that still
+                # read from the cadets collection.
+                update_cadet(
+                    cadet_id,
+                    {
+                        "first_name": user_updates["first_name"],
+                        "last_name": user_updates["last_name"],
+                        "email": user_updates["email"],
+                        "rank": new_rank,
+                    },
+                )
+            else:
+                # Fallback: if the linked user record can't be loaded, edit the cadet
+                # doc directly (legacy behavior).
+                update_cadet(
+                    cadet_id,
+                    {
+                        "first_name": new_first,
+                        "last_name": new_last,
+                        "email": new_email,
+                        "rank": new_rank,
+                    },
+                )
+
             st.session_state.editing_id = None
             st.rerun()
         else:
@@ -161,12 +206,22 @@ def show_cadets():
     for i, cadet in enumerate(cadets):
         cid = str(cadet.get("_id"))
         cadet_by_id[cid] = cadet
+
+        user_doc = None
+        try:
+            user_id = cadet.get("user_id")
+            if user_id is not None:
+                user_doc = get_user_by_id(user_id)
+        except Exception:
+            user_doc = None
+
+        source = user_doc or cadet
         rows.append(
             {
                 "No.": i + 1,
-                "First Name": str(cadet.get("first_name", "") or ""),
-                "Last Name": str(cadet.get("last_name", "") or ""),
-                "Email": str(cadet.get("email", "") or ""),
+                "First Name": str(source.get("first_name", "") or ""),
+                "Last Name": str(source.get("last_name", "") or ""),
+                "Email": str(source.get("email", "") or ""),
                 "Rank": str(cadet.get("rank", "") or ""),
             }
         )
@@ -181,9 +236,18 @@ def show_cadets():
 
     def _cadet_label(cadet_id: str) -> str:
         c = cadet_by_id.get(cadet_id, {})
-        first = str(c.get("first_name", "") or "").strip()
-        last = str(c.get("last_name", "") or "").strip()
-        email = str(c.get("email", "") or "").strip()
+        user_doc = None
+        try:
+            user_id = c.get("user_id")
+            if user_id is not None:
+                user_doc = get_user_by_id(user_id)
+        except Exception:
+            user_doc = None
+
+        source = user_doc or c
+        first = str(source.get("first_name", "") or "").strip()
+        last = str(source.get("last_name", "") or "").strip()
+        email = str(source.get("email", "") or "").strip()
         name = f"{first} {last}".strip() or "Unknown"
         return f"{name} ({email})".strip()
 

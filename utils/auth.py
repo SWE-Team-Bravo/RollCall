@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import jwt
@@ -12,6 +13,7 @@ from utils.auth_logic import (
     user_has_any_role,
 )
 from utils.db import get_collection
+from utils.names import format_full_name
 
 _COOKIE_NAME = "rollcall_auth"
 
@@ -47,7 +49,7 @@ def _get_or_create_authenticator() -> stauth.Authenticate:
         try:
             authenticator.credentials = credentials
         except Exception:
-            pass
+            logging.exception("Failed to update authenticator credentials")
 
     return authenticator
 
@@ -84,9 +86,7 @@ def restore_session() -> None:
         return
 
     st.session_state["_raw_users"] = raw
-    st.session_state["name"] = (
-        f"{raw_user.get('first_name', '')} {raw_user.get('last_name', '')}".strip()
-    )
+    st.session_state["name"] = format_full_name(raw_user)
     st.session_state["username"] = username
     st.session_state["authentication_status"] = True
     st.session_state["email"] = raw_user.get("email")

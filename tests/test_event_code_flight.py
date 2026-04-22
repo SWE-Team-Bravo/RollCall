@@ -6,7 +6,7 @@ from bson import ObjectId
 
 import services.event_codes as event_codes_svc
 import utils.db_schema_crud as crud
-from services.event_codes import build_expires_at, is_expiry_valid
+from services.event_codes import build_expires_at, is_expiry_valid, latest_allowed_expiry
 
 
 class _FakeInsertResult:
@@ -300,6 +300,28 @@ def test_is_expiry_valid_past_returns_false():
 
 def test_is_expiry_valid_now_returns_false():
     assert is_expiry_valid(datetime.now(timezone.utc)) is False
+
+
+def test_is_expiry_valid_rejects_expiry_after_event_start():
+    event_start = datetime.now(timezone.utc) + timedelta(minutes=10)
+    expires_at = event_start + timedelta(seconds=1)
+    assert is_expiry_valid(expires_at, event_start) is False
+
+
+def test_is_expiry_valid_allows_expiry_at_event_start():
+    event_start = datetime.now(timezone.utc) + timedelta(minutes=10)
+    assert is_expiry_valid(event_start, event_start) is True
+
+
+def test_latest_allowed_expiry_returns_none_without_start():
+    assert latest_allowed_expiry(None) is None
+
+
+def test_latest_allowed_expiry_normalizes_naive_datetime():
+    naive_start = datetime(2026, 4, 21, 12, 0, 0)
+    result = latest_allowed_expiry(naive_start)
+    assert result is not None
+    assert result.tzinfo == timezone.utc
 
 
 def test_validate_code_returns_doc_for_valid_code(monkeypatch):

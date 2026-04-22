@@ -1,9 +1,13 @@
+import logging
+
 import streamlit as st
 from utils.auth import get_current_user, restore_session
+from utils.theme import apply_theme_overrides
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
-st.logo("static/logo.svg", size="large")
+st.sidebar.image("static/logo.svg", width="stretch")
 
+apply_theme_overrides()
 
 restore_session()
 
@@ -24,7 +28,11 @@ else:
     flight_mgmt = st.Page("pages/4_Flight_Management.py", title="Flight Management")
     waivers = st.Page("pages/5_Waivers.py", title="My Waivers")
     waiver_review = st.Page("pages/6_Waiver_Review.py", title="Waiver Review")
-    event_sched = st.Page("pages/6_Event_Management_CRUD.py", title="Event Management")
+    event_sched = st.Page(
+        "pages/6_Event_Management_CRUD.py",
+        title="Event Management",
+        url_path="Event_Management",
+    )
     fc_live_view = st.Page(
         "pages/7_Flight_Commander_Live_View.py", title="Live Check-In View"
     )
@@ -67,8 +75,8 @@ else:
             dashboard,
             cadets,
             flight_mgmt,
-            waiver_review,
             event_sched,
+            waiver_review,
             modify_attendance,
             at_risk_report,
             event_code_admin,
@@ -80,12 +88,13 @@ else:
             dashboard,
             fc_live_view,
             attendance,
-            waiver_review,
             at_risk_report,
             event_code_admin,
         ]
     elif "cadet" in st.session_state.view_role:
         pages = [attendance, waivers, cadet_attendance]
+        if "waiver_reviewer" in st.session_state.view_role:
+            pages.append(waiver_review)
     else:
         pages = []
 
@@ -103,7 +112,7 @@ else:
                 try:
                     auth.cookie_controller.delete_cookie()
                 except Exception:
-                    pass
+                    logging.exception("Failed to delete auth cookie during logout")
             for key in [
                 "authentication_status",
                 "username",

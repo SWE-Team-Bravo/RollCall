@@ -8,12 +8,20 @@ import streamlit as st
 
 from bson import ObjectId
 
+from services.dashboard import get_semester_df
 from services.events import closest_event_index
 from utils.auth import get_current_user, require_role
+from utils.attendance_status import (
+    get_attendance_status_cell_style,
+    get_attendance_status_label,
+)
 from utils.db import get_collection, get_db
+from utils.export import to_excel
 
-_DEFAULT_DAYS = 30
-_MAX_ROWS = 2000
+
+require_role("admin", "cadre", "flight_commander")
+
+
 _MAX_EVENTS = 200
 
 
@@ -23,14 +31,7 @@ def _utc_datetime(d: date, end_of_day: bool) -> datetime:
 
 
 def _status_bucket(raw: str | None) -> str:
-    s = (raw or "").strip().lower()
-    if s == "present":
-        return "Present"
-    if s == "absent":
-        return "Absent"
-    if s in {"excused", "waived"}:
-        return "Excused"
-    return "Absent"
+    return get_attendance_status_label(raw, default="Absent")
 
 
 def _format_name(user_doc: dict[str, Any] | None) -> str:
@@ -50,20 +51,6 @@ def _event_label(event_doc: dict[str, Any]) -> str:
     left = f"{ev_date} — {ev_name}".strip(" —")
     return f"{left} ({ev_type})".strip()
 
-
-def _status_cell_style(val: Any) -> str:
-    """Return CSS style for a Status cell."""
-    s = str(val or "")
-    if s == "Present":
-        return "background-color: #7FE08A; color: #0b2e13; font-weight: 700;"
-    if s == "Absent":
-        return "background-color: #E07F7F; color: #2b0b0b; font-weight: 700;"
-    if s == "Excused":
-        return "background-color: #E0D27F; color: #2b240b; font-weight: 700;"
-    return ""
-
-
-require_role("admin", "cadre", "flight_commander")
 
 st.title("Dashboard")
 st.caption("Filter and review attendance records.")
@@ -114,10 +101,33 @@ if is_flight_commander_only and current_user:
                 flight_filter_id = flight_id
                 flight_filter_locked = True
 
-st.subheader("Filters")
+if roles & {"admin", "cadre"}:
+    st.subheader("Export Full Semester Data")
+    semester_df = get_semester_df()
 
+    if isinstance(semester_df, str):
+        st.warning(semester_df)
+
+    if isinstance(semester_df, pd.DataFrame):
+        col1, col2, spacer = st.columns([1.5, 2, 10])
+        col1.download_button(
+            "Export CSV",
+            semester_df.to_csv().encode("utf-8"),
+            "attendance.csv",
+            "text/csv",
+            key="semester_data_csv",
+        )
+        col2.download_button(
+            "Export Excel",
+            to_excel(semester_df),
+            "attendance.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="semester_data_excel",
+        )
+
+st.subheader("Filters")
 today = datetime.now(timezone.utc).date()
-default_start = today.fromordinal(today.toordinal() - _DEFAULT_DAYS)
+default_start = today.replace(month=1, day=1)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -177,18 +187,18 @@ if event_type_choice == "PT":
 elif event_type_choice == "LLAB":
     event_query["event_type"] = "lab"
 
+total_event_count = events_col.count_documents({})
+
 event_docs = list(
     events_col.find(
         event_query,
         {"_id": 1, "start_date": 1, "event_name": 1, "event_type": 1},
     )
     .sort("start_date", -1)
-    .limit(_MAX_EVENTS + 1)
+    .limit(_MAX_EVENTS)
 )
 
-too_many_events = len(event_docs) > _MAX_EVENTS
-if too_many_events:
-    event_docs = event_docs[:_MAX_EVENTS]
+too_many_events = total_event_count > _MAX_EVENTS
 
 if not event_docs:
     st.info("No events found for the selected filters.")
@@ -228,12 +238,12 @@ else:
 
         # --- Event summary (one row per event)
 
+        st.subheader("Event Summary")
+        st.caption(f"Showing {len(event_docs)}/{total_event_count} events")
         if too_many_events:
             st.warning(
-                f"Showing newest {_MAX_EVENTS} events. Narrow the date range to see older events."
+                f"Showing newest {_MAX_EVENTS} of {total_event_count} events. Narrow the date range to see older events."
             )
-
-        st.subheader("Event Summary")
 
         # Aggregate counts by event_id and status. Prefer doing this server-side.
         status_counts: dict[ObjectId, dict[str, int]] = {
@@ -269,8 +279,9 @@ else:
                     grp.get("count") or 0
                 )
         except Exception:
-            # Fallback: if aggregation is unavailable for some reason, do nothing.
-            pass
+            st.warning(
+                "Could not load attendance summary. Some counts may be incomplete."
+            )
 
         for eid, counts in status_counts.items():
             total_counts[eid] = sum(counts.values())
@@ -349,9 +360,30 @@ else:
                     cadet_df = pd.DataFrame(cadet_rows)
                     styler = cadet_df.style
                     if hasattr(styler, "map"):
-                        styler = styler.map(_status_cell_style, subset=["Status"])
+                        styler = styler.map(
+                            get_attendance_status_cell_style,
+                            subset=["Status"],
+                        )
                     else:
-                        styler = styler.applymap(_status_cell_style, subset=["Status"])
+                        styler = styler.applymap(
+                            get_attendance_status_cell_style,
+                            subset=["Status"],
+                        )
+
+                    col1, col2, spacer = st.columns([1.5, 2, 10])
+                    if isinstance(cadet_df, pd.DataFrame):
+                        col1.download_button(
+                            "Export CSV",
+                            cadet_df.to_csv().encode("utf-8"),
+                            "attendance.csv",
+                            "text/csv",
+                        )
+                        col2.download_button(
+                            "Export Excel",
+                            to_excel(cadet_df),
+                            "attendance.xlsx",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
 
                     leg1, leg2, leg3 = st.columns(3)
                     with leg1:
@@ -362,5 +394,3 @@ else:
                         st.warning("Excused")
 
                     st.dataframe(styler, width="stretch", hide_index=True)
-
-            st.divider()

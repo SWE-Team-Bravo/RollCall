@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 
+from utils.datetime_utils import ensure_utc
 from utils.db_schema_crud import (
     create_event_code,
     deactivate_event_code,
@@ -26,9 +27,23 @@ def build_expires_at(exp_date: date, exp_time: time, tz_name: str) -> datetime:
     return local_dt.astimezone(timezone.utc)
 
 
-def is_expiry_valid(expires_at: datetime) -> bool:
-    """Return True if expires_at is strictly in the future (UTC)."""
-    return expires_at > datetime.now(timezone.utc)
+def latest_allowed_expiry(event_start: datetime | None) -> datetime | None:
+    """Codes must expire by the event start, when the check-in window closes."""
+    if event_start is None:
+        return None
+    return ensure_utc(event_start)
+
+
+def is_expiry_valid(
+    expires_at: datetime, latest_expires_at: datetime | None = None
+) -> bool:
+    """Return True if expires_at is in the future and not beyond the event start."""
+    expires_at = ensure_utc(expires_at)
+    if expires_at <= datetime.now(timezone.utc):
+        return False
+    if latest_expires_at is None:
+        return True
+    return expires_at <= ensure_utc(latest_expires_at)
 
 
 def create_code(
@@ -68,6 +83,7 @@ def expire_code(code_id: str | ObjectId) -> bool:
 
 
 def validate_code(code: str) -> dict | None:
+    code = code.replace(" ", "")
     return find_active_event_code_by_value(code)
 
 

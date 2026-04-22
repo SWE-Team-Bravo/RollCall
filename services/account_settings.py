@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 from utils.password import hash_password, verify_password
 
@@ -47,3 +47,64 @@ def build_password_change_updates(
         return {}, errors
 
     return {"password_hash": hash_password(raw_new)}, {}
+
+
+def build_profile_updates(
+    *,
+    user_doc: Dict[str, Any],
+    first_name: str,
+    last_name: str,
+    email: str,
+    lookup_user_by_email: Callable[[str], Dict[str, Any] | None],
+) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    """Validate a profile update request and build an update payload.
+
+    Validation:
+    - first/last name must be non-empty after stripping
+    - email must be non-empty and look valid
+    - email must be unique (case-insensitive), excluding the current user
+
+    Returns (updates, errors).
+    On success: errors is empty and updates contains first_name/last_name/email/name.
+    """
+
+    errors: Dict[str, str] = {}
+
+    first = (first_name or "").strip()
+    last = (last_name or "").strip()
+    raw_email = (email or "").strip()
+
+    if not first:
+        errors["first_name"] = "First name is required."
+    if not last:
+        errors["last_name"] = "Last name is required."
+
+    if not raw_email:
+        errors["email"] = "Email is required."
+    elif "@" not in raw_email or "." not in raw_email.split("@", 1)[-1]:
+        errors["email"] = "Email looks invalid."
+
+    if errors:
+        return {}, errors
+
+    existing_email = str(user_doc.get("email", "") or "").strip()
+    if raw_email.lower() != existing_email.lower():
+        found = lookup_user_by_email(raw_email)
+        if found is not None:
+            found_id = found.get("_id")
+            current_id = user_doc.get("_id")
+            if (
+                found_id is None
+                or current_id is None
+                or str(found_id) != str(current_id)
+            ):
+                return {}, {"email": "A user with this email already exists."}
+
+    updates: Dict[str, Any] = {
+        "first_name": first,
+        "last_name": last,
+        "name": f"{first} {last}".strip(),
+        "email": raw_email,
+    }
+
+    return updates, {}

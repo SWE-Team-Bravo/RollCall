@@ -5,12 +5,18 @@ from zoneinfo import ZoneInfo, available_timezones
 
 import streamlit as st
 
+from services.attendance import CHECKIN_WINDOW_MINUTES
+from services.event_code_display import (
+    build_code_panel_html,
+    build_fullscreen_code_html,
+)
 from services.event_codes import (
     build_expires_at,
     create_code,
     expire_code,
     get_active_code,
     is_expiry_valid,
+    latest_allowed_expiry,
 )
 from services.events import closest_event_index, get_all_events
 from utils.auth import get_current_user, require_role
@@ -34,7 +40,7 @@ assert user is not None
 all_events = get_all_events()
 
 if not all_events:
-    st.warning("No events found. Create events in Event Management first.")
+    st.info("No events found. Create events in Event Management first.")
     st.stop()
 
 _PREFERRED = [
@@ -65,6 +71,22 @@ with col_event:
 with col_tz:
     tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=0)
 
+selected_event_start = selected_event.get("start_date")
+max_expires_at = (
+    latest_allowed_expiry(selected_event_start)
+    if isinstance(selected_event_start, datetime)
+    else None
+)
+if max_expires_at is not None:
+    local_event_start = max_expires_at.astimezone(ZoneInfo(tz_name))
+    st.caption(
+        "Codes must expire no later than the event start time "
+        f"({CHECKIN_WINDOW_MINUTES}-minute check-in window)."
+    )
+    st.caption(
+        f"Selected event starts at {local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')}"
+    )
+
 col_date, col_time = st.columns(2)
 
 with col_date:
@@ -76,8 +98,17 @@ with col_time:
 expires_at = build_expires_at(exp_date, exp_time, tz_name)
 
 if st.button("Generate New Code", type="primary", width="stretch"):
-    if not is_expiry_valid(expires_at):
-        st.error("Expiration must be in the future.")
+    if not is_expiry_valid(expires_at, max_expires_at):
+        if expires_at <= datetime.now(timezone.utc):
+            st.error("Expiration must be in the future.")
+        elif max_expires_at is not None:
+            local_limit = max_expires_at.astimezone(ZoneInfo(tz_name))
+            st.error(
+                "Expiration must be no later than the event start time: "
+                f"{local_limit.strftime('%Y-%m-%d %I:%M %p %Z')}."
+            )
+        else:
+            st.error("Invalid expiration time.")
     else:
         result = create_code(
             event_id=selected_event["_id"],
@@ -97,7 +128,12 @@ st.divider()
 _selected_event_id = selected_event["_id"]
 
 
-@st.fragment(run_every=30)
+@st.dialog("Event Code — Fullscreen", width="large")
+def _fullscreen_dialog(code_str: str) -> None:
+    st.markdown(build_fullscreen_code_html(code_str), unsafe_allow_html=True)
+
+
+@st.fragment(run_every=1)
 def _active_code_panel(event_id: str, tz: str) -> None:
     active_code = get_active_code(event_id)
 
@@ -110,36 +146,10 @@ def _active_code_panel(event_id: str, tz: str) -> None:
     code_str = str(active_code.get("code", ""))
     code_expires_at = active_code.get("expires_at")
 
-    st.markdown(
-        f"""
-        <div style="
-            text-align: center;
-            padding: 2.5rem 1rem;
-            background: #0e1117;
-            border: 2px solid #2d2d3a;
-            border-radius: 1rem;
-            margin: 1rem 0;
-        ">
-            <p style="
-                color: #888;
-                font-size: 1rem;
-                margin: 0 0 0.5rem 0;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
-            ">Active Code</p>
-            <p style="
-                font-size: 7rem;
-                font-weight: 900;
-                letter-spacing: 0.35em;
-                color: #ffffff;
-                margin: 0;
-                font-family: monospace;
-                line-height: 1;
-            ">{code_str}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(build_code_panel_html(code_str), unsafe_allow_html=True)
+
+    if st.button("⛶ Fullscreen", key="fullscreen_btn"):
+        _fullscreen_dialog(code_str)
 
     if isinstance(code_expires_at, datetime):
         if code_expires_at.tzinfo is None:

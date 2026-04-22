@@ -4,6 +4,7 @@ from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
     get_cadet_by_user_id,
     get_user_by_email,
+    set_at_risk_email_sent,
 )
 from services.cadet_attendance import (
     load_attendance_db,
@@ -12,10 +13,13 @@ from services.cadet_attendance import (
     count_absences,
     filter_rows,
     get_cadet_flight_label,
+    get_attendance_rate,
 )
 from services.waivers import WAIVER_STATUS_BADGE
 from utils.at_risk_email import PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD
 from utils.auth_logic import user_has_any_role
+from utils.at_risk_email import send_to_student
+from utils.st_helpers import require
 from scripts.demo_admin import get_temp_cadet
 
 STATUS_BADGE = {
@@ -28,7 +32,10 @@ STATUS_BADGE = {
 WAIVER_BADGE = WAIVER_STATUS_BADGE
 
 
-def show_risk_banner(pt_absences: int, llab_absences: int):
+require_role("cadet")
+
+
+def show_risk_banner(cadet_id: str, email: str, pt_absences: int, llab_absences: int):
     at_risk = False
     if pt_absences == PT_ABSENCE_THRESHOLD - 1:
         st.error(
@@ -54,7 +61,10 @@ def show_risk_banner(pt_absences: int, llab_absences: int):
             f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
         )
         at_risk = True
-    if not at_risk:
+    if at_risk:
+        send_to_student(str(cadet_id), email, pt_absences, llab_absences)
+    else:
+        set_at_risk_email_sent(cadet_id, -1, -1)
         pt_caution = PT_ABSENCE_THRESHOLD - 2
         llab_caution = LLAB_ABSENCE_THRESHOLD - 2
         if (pt_caution > 0 and pt_absences == pt_caution) or (
@@ -70,14 +80,15 @@ def show_risk_banner(pt_absences: int, llab_absences: int):
 def show_absence_summary(rows: list[dict]):
     pt_absences = count_absences(rows, "pt")
     llab_absences = count_absences(rows, "lab")
-    total_records = len(rows)
-    present_count = sum(1 for r in rows if r["status"] == "present")
-    attendance_rate = round(present_count / total_records * 100) if total_records else 0
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Attendance Rate", f"{attendance_rate}%")
-    col2.metric("Total Events", total_records)
+    attendance_rate_pt = get_attendance_rate(rows, "PT")
+    attendance_rate_llab = get_attendance_rate(rows, "LAB")
 
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Total Events", len(rows))
+
+    col2.metric("PT Attendance Rate", f"{attendance_rate_pt}%")
     pt_remaining = PT_ABSENCE_THRESHOLD - pt_absences
     col3.metric(
         "PT Absences",
@@ -86,14 +97,16 @@ def show_absence_summary(rows: list[dict]):
         delta_color="normal" if pt_remaining > 0 else "inverse",
     )
 
+    col4.metric("LLAB Attendance Rate", f"{attendance_rate_llab}%")
     llab_remaining = LLAB_ABSENCE_THRESHOLD - llab_absences
-    col4.metric(
+    col5.metric(
         "LLAB Absences",
         f"{llab_absences} / {LLAB_ABSENCE_THRESHOLD}",
         delta=f"{llab_remaining} remaining" if llab_remaining > 0 else "At limit",
         delta_color="normal" if llab_remaining > 0 else "inverse",
     )
-    show_risk_banner(pt_absences, llab_absences)
+    assert cadet is not None
+    show_risk_banner(str(cadet["_id"]), email, pt_absences, llab_absences)
     st.divider()
 
 
@@ -194,8 +207,6 @@ def show_header(cadet: dict, current_user: dict):
     st.divider()
 
 
-require_role("cadet")
-
 st.title("My Attendance")
 current_user = get_current_user()
 assert current_user is not None
@@ -205,11 +216,7 @@ if not email:
     st.error("Could not find an account with this email.")
     st.stop()
 
-user = get_user_by_email(email)
-if not user:
-    st.error("Could not find an account with this email.")
-    st.stop()
-assert user is not None
+user = require(get_user_by_email(email), "Could not find an account with this email.")
 
 role = get_current_user()
 cadet = get_cadet_by_user_id(user["_id"])
