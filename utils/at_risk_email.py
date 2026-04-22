@@ -18,13 +18,13 @@ from utils.db_schema_crud import (
 )
 from utils.attendance_status import get_effective_attendance_status
 from utils.names import format_full_name
+from services.event_config import get_absence_thresholds
 
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
 SENDER_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 
-PT_ABSENCE_THRESHOLD = 9
-LLAB_ABSENCE_THRESHOLD = 2
+PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD = get_absence_thresholds()
 
 
 def get_at_risk_cadets() -> list[dict]:

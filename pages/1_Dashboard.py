@@ -8,6 +8,7 @@ import streamlit as st
 
 from bson import ObjectId
 
+from services.dashboard import get_semester_df
 from services.events import closest_event_index
 from utils.auth import get_current_user, require_role
 from utils.attendance_status import (
@@ -17,7 +18,10 @@ from utils.attendance_status import (
 from utils.db import get_collection, get_db
 from utils.export import to_excel
 
-_MAX_ROWS = 2000
+
+require_role("admin", "cadre", "flight_commander")
+
+
 _MAX_EVENTS = 200
 
 
@@ -46,7 +50,7 @@ def _event_label(event_doc: dict[str, Any]) -> str:
     ev_type = str(event_doc.get("event_type", "") or "").upper()
     left = f"{ev_date} — {ev_name}".strip(" —")
     return f"{left} ({ev_type})".strip()
-require_role("admin", "cadre", "flight_commander")
+
 
 st.title("Dashboard")
 st.caption("Filter and review attendance records.")
@@ -97,8 +101,31 @@ if is_flight_commander_only and current_user:
                 flight_filter_id = flight_id
                 flight_filter_locked = True
 
-st.subheader("Filters")
+if roles & {"admin", "cadre"}:
+    st.subheader("Export Full Semester Data")
+    semester_df = get_semester_df()
 
+    if isinstance(semester_df, str):
+        st.warning(semester_df)
+
+    if isinstance(semester_df, pd.DataFrame):
+        col1, col2, spacer = st.columns([1.5, 2, 10])
+        col1.download_button(
+            "Export CSV",
+            semester_df.to_csv().encode("utf-8"),
+            "attendance.csv",
+            "text/csv",
+            key="semester_data_csv",
+        )
+        col2.download_button(
+            "Export Excel",
+            to_excel(semester_df),
+            "attendance.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="semester_data_excel",
+        )
+
+st.subheader("Filters")
 today = datetime.now(timezone.utc).date()
 default_start = today.replace(month=1, day=1)
 
@@ -367,5 +394,3 @@ else:
                         st.warning("Excused")
 
                     st.dataframe(styler, width="stretch", hide_index=True)
-
-            st.divider()

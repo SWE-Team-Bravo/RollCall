@@ -39,13 +39,13 @@ approver_user = require(
 approver_id = approver_user["_id"]
 
 status_filter = st.selectbox(
-    "Status", ["all", "pending", "approved", "denied"], index=0
+    "Status", ["All", "Pending", "Approved", "Denied"], index=0
 )
 flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
 viewer_roles = list(current_user.get("roles") or [])
-waivers = get_waivers(status_filter, viewer_roles)
+waivers = get_waivers(status_filter.lower(), viewer_roles)
 
 if not waivers:
     st.info("No waivers found for the selected filters.")

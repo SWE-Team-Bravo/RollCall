@@ -52,6 +52,14 @@ def get_users_by_role(role: str) -> list[dict]:
     return list(col.find({"roles": role}))
 
 
+def get_users_by_ids(user_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("users")
+    if col is None:
+        return []
+    object_ids = [ObjectId(u_id) for u_id in user_ids]
+    return list(col.find({"_id": {"$in": object_ids}}))
+
+
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("users")
     if col is None:
@@ -325,6 +333,14 @@ def get_attendance_by_event(event_id: str | ObjectId) -> list[dict]:
     if col is None:
         return []
     return list(col.find({"event_id": ObjectId(event_id)}))
+
+
+def get_attendance_by_events(events_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("attendance_records")
+    if col is None:
+        return []
+    object_ids = [ObjectId(e_id) for e_id in events_ids]
+    return list(col.find({"event_id": {"$in": object_ids}}))
 
 
 def get_attendance_by_cadet(cadet_id: str | ObjectId) -> list[dict]:
@@ -613,14 +629,12 @@ def _validate_flight_association(
         return
 
     cadet_object_id = ObjectId(cadet_id)
-    target_object_id = ObjectId(target_flight_id) if target_flight_id is not None else None
+    target_object_id = (
+        ObjectId(target_flight_id) if target_flight_id is not None else None
+    )
 
     cadet = cadets_col.find_one({"_id": cadet_object_id})
-    if (
-        cadet
-        and cadet.get("flight_id")
-        and cadet["flight_id"] != target_object_id
-    ):
+    if cadet and cadet.get("flight_id") and cadet["flight_id"] != target_object_id:
         assigned_flight = flights_col.find_one({"_id": cadet["flight_id"]})
         assigned_flight_name = (
             assigned_flight.get("name") if assigned_flight else "another flight"

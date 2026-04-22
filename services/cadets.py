@@ -11,6 +11,7 @@ from utils.db_schema_crud import (
     get_cadet_by_id,
     get_user_by_email,
     get_user_by_id,
+    get_all_cadets,
 )
 from utils.names import format_full_name
 
@@ -26,13 +27,6 @@ CLASS_TO_RANK = {
     "AS800": "700/800/900 (super senior)",
     "AS900": "700/800/900 (super senior)",
 }
-
-
-def get_all_cadets() -> list[dict]:
-    col = get_collection("cadets")
-    if col is None:
-        return []
-    return list(col.find())
 
 
 def get_cadets_by_flight(flight_id) -> list[dict]:

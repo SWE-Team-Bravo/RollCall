@@ -122,3 +122,20 @@ def get_cadet_flight_label(cadet: dict, flights: list[dict]) -> str:
         if flight["_id"] == cadet["flight_id"]:
             return flight.get("name", "—")
     return "—"
+
+
+def get_attendance_rate(rows: list[dict], event_type: str) -> int:
+    attended_llab = sum(
+        1
+        for r in rows
+        if (
+            r["status"] in ("present", "excused", "waived")
+            and r["event_type"] == event_type
+        )
+    )
+    llab_records = sum(1 for r in rows if r["event_type"] == event_type)
+    attendance_rate_llab = (
+        round(attended_llab / llab_records * 100) if llab_records else 0
+    )
+
+    return attendance_rate_llab

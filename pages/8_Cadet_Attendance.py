@@ -13,6 +13,7 @@ from services.cadet_attendance import (
     count_absences,
     filter_rows,
     get_cadet_flight_label,
+    get_attendance_rate,
 )
 from services.waivers import WAIVER_STATUS_BADGE
 from utils.at_risk_email import PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD
@@ -79,18 +80,15 @@ def show_risk_banner(cadet_id: str, email: str, pt_absences: int, llab_absences:
 def show_absence_summary(rows: list[dict]):
     pt_absences = count_absences(rows, "pt")
     llab_absences = count_absences(rows, "lab")
-    total_records = len(rows)
-    attended_count = sum(
-        1 for r in rows if r["status"] in ("present", "excused", "waived")
-    )
-    attendance_rate = (
-        round(attended_count / total_records * 100) if total_records else 0
-    )
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Attendance Rate", f"{attendance_rate}%")
-    col2.metric("Total Events", total_records)
+    attendance_rate_pt = get_attendance_rate(rows, "PT")
+    attendance_rate_llab = get_attendance_rate(rows, "LAB")
 
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Total Events", len(rows))
+
+    col2.metric("PT Attendance Rate", f"{attendance_rate_pt}%")
     pt_remaining = PT_ABSENCE_THRESHOLD - pt_absences
     col3.metric(
         "PT Absences",
@@ -99,8 +97,9 @@ def show_absence_summary(rows: list[dict]):
         delta_color="normal" if pt_remaining > 0 else "inverse",
     )
 
+    col4.metric("LLAB Attendance Rate", f"{attendance_rate_llab}%")
     llab_remaining = LLAB_ABSENCE_THRESHOLD - llab_absences
-    col4.metric(
+    col5.metric(
         "LLAB Absences",
         f"{llab_absences} / {LLAB_ABSENCE_THRESHOLD}",
         delta=f"{llab_remaining} remaining" if llab_remaining > 0 else "At limit",
