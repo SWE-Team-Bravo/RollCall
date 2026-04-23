@@ -117,6 +117,14 @@ def get_all_cadets() -> list[dict]:
     return list(col.find())
 
 
+def get_cadets_by_ids(cadet_ids: list[str | ObjectId]) -> list[dict]:
+    col = get_collection("cadets")
+    if col is None or not cadet_ids:
+        return []
+    object_ids = [ObjectId(cadet_id) for cadet_id in cadet_ids]
+    return list(col.find({"_id": {"$in": object_ids}}))
+
+
 def get_cadet_by_user_id(user_id: str | ObjectId) -> dict | None:
     col = get_collection("cadets")
     if col is None:
@@ -348,6 +356,21 @@ def get_attendance_by_cadet(cadet_id: str | ObjectId) -> list[dict]:
     if col is None:
         return []
     return list(col.find({"cadet_id": ObjectId(cadet_id)}))
+
+
+def get_attendance_record_by_event_cadet(
+    event_id: str | ObjectId,
+    cadet_id: str | ObjectId,
+) -> dict | None:
+    col = get_collection("attendance_records")
+    if col is None:
+        return None
+    return col.find_one(
+        {
+            "event_id": ObjectId(event_id),
+            "cadet_id": ObjectId(cadet_id),
+        }
+    )
 
 
 def upsert_attendance_record(

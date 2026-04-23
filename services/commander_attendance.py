@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.attendance_merge import merge_attendance_records
+from utils.names import format_full_name
 
 
 def build_commander_roster(
@@ -30,11 +31,35 @@ def build_commander_roster(
 
     roster.sort(
         key=lambda e: (
+            str(e["cadet"].get("name", "") or "").lower(),
             str(e["cadet"].get("last_name", "") or "").lower(),
             str(e["cadet"].get("first_name", "") or "").lower(),
         )
     )
     return roster
+
+
+def hydrate_cadet_names(
+    cadets: list[dict[str, Any]],
+    users_by_id: dict[Any, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    hydrated: list[dict[str, Any]] = []
+    for cadet in cadets:
+        user_doc = users_by_id.get(cadet.get("user_id"))
+        if user_doc is None:
+            hydrated.append(cadet)
+            continue
+
+        full_name = format_full_name(user_doc)
+        if not full_name:
+            hydrated.append(cadet)
+            continue
+
+        hydrated_cadet = dict(cadet)
+        hydrated_cadet["name"] = full_name
+        hydrated.append(hydrated_cadet)
+
+    return hydrated
 
 
 def compute_upserts(

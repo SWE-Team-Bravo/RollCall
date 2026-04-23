@@ -74,3 +74,37 @@ def test_log_checkin_attempt_converts_string_ids_to_object_ids(monkeypatch):
     assert doc["cadet_id"] == cadet_id
     assert doc["event_id"] == event_id
     assert doc["user_id"] == user_id
+
+
+def test_log_attendance_modification_writes_expected_fields(monkeypatch):
+    fake = _FakeCollection()
+    monkeypatch.setattr(audit_log, "get_collection", lambda name: fake)
+
+    event_id = ObjectId()
+    cadet_id = ObjectId()
+    user_id = ObjectId()
+    now = datetime(2026, 4, 22, 15, 30, 0, tzinfo=timezone.utc)
+
+    audit_log.log_attendance_modification(
+        event_id=event_id,
+        cadet_id=cadet_id,
+        user_id=user_id,
+        outcome="undo",
+        old_status="present",
+        new_status=None,
+        now=now,
+        metadata={"reverts_audit_id": str(ObjectId())},
+    )
+
+    assert len(fake.inserted) == 1
+    doc = fake.inserted[0]
+
+    assert doc["created_at"] == now
+    assert doc["event_id"] == event_id
+    assert doc["cadet_id"] == cadet_id
+    assert doc["user_id"] == user_id
+    assert doc["outcome"] == "undo"
+    assert doc["source"] == "attendance_modification"
+    assert doc["metadata"]["old_status"] == "present"
+    assert doc["metadata"]["new_status"] is None
+    assert "reverts_audit_id" in doc["metadata"]
