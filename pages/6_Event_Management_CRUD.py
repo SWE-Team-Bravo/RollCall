@@ -6,7 +6,7 @@ from services.event_config import (
     _DEFAULT_PT_THRESHOLD,
     _DEFAULT_LLAB_THRESHOLD,
 )
-from services.events import get_all_events, create_event, delete_event
+from services.events import create_event, delete_event, get_all_events, get_timezone_options
 from utils.auth import require_role, get_current_user
 
 require_role("admin", "cadre")
@@ -101,11 +101,17 @@ st.divider()
 
 st.subheader("Create New Event")
 
+TZ_OPTIONS = get_timezone_options()
+
 with st.form("create_event_form"):
     event_name = st.text_input("Event Name", placeholder="e.g. Week 3 PT")
 
     start_date = st.date_input("Start Date", value=date.today())
     end_date = st.date_input("End Date", value=date.today())
+    tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=0)
+    st.caption(
+        "Dates are stored as 12:00 AM through 11:59 PM in the selected timezone."
+    )
 
     # Auto-populate type from schedule config based on start date
     auto_type = infer_event_type(start_date, config)
@@ -129,7 +135,14 @@ if submitted:
     else:
         user = get_current_user()
         user_id = user.get("email", "unknown") if user else "unknown"
-        if create_event(event_name.strip(), event_type, start_date, end_date, user_id):
+        if create_event(
+            event_name.strip(),
+            event_type,
+            start_date,
+            end_date,
+            user_id,
+            tz_name,
+        ):
             st.session_state.create_event_success = (
                 f"Event '{event_name.strip()}' created successfully!"
             )
@@ -151,6 +164,7 @@ st.divider()
 # =============================================================================
 
 st.subheader("Existing Events")
+st.caption("Start Date and End Date in the table below are shown in UTC.")
 
 events = get_all_events()
 

@@ -27,17 +27,17 @@ def build_expires_at(exp_date: date, exp_time: time, tz_name: str) -> datetime:
     return local_dt.astimezone(timezone.utc)
 
 
-def latest_allowed_expiry(event_start: datetime | None) -> datetime | None:
-    """Codes must expire by the event start, when the check-in window closes."""
-    if event_start is None:
+def latest_allowed_expiry(event_end: datetime | None) -> datetime | None:
+    """Codes must expire by the event end time."""
+    if event_end is None:
         return None
-    return ensure_utc(event_start)
+    return ensure_utc(event_end)
 
 
 def is_expiry_valid(
     expires_at: datetime, latest_expires_at: datetime | None = None
 ) -> bool:
-    """Return True if expires_at is in the future and not beyond the event start."""
+    """Return True if expires_at is in the future and not beyond the event end."""
     expires_at = ensure_utc(expires_at)
     if expires_at <= datetime.now(timezone.utc):
         return False
