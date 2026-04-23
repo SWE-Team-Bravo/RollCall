@@ -1,9 +1,8 @@
 import streamlit as st
 from services.admin_users import confirm_destructive_action
-
 from utils.auth import require_role
-from services.admin_users import confirm_destructive_action
 from services.cadets import build_cadet_display_map
+
 from services.flight_management import (
     assign_selected_cadets_to_flight,
     get_assignment_table,
@@ -34,6 +33,8 @@ if "confirm_delete_flight_id" not in st.session_state:
     st.session_state.confirm_delete_flight_id = None
 if "create_flight_success" not in st.session_state:
     st.session_state.create_flight_success = None
+if "delete_flight_success" not in st.session_state:
+    st.session_state.delete_flight_success = None
 if "flight_feedback" not in st.session_state:
     st.session_state.flight_feedback = None
 if "expanded_flight_ids" not in st.session_state:
@@ -89,6 +90,7 @@ def clear_flight_table_state(flight_id: str) -> None:
     ):
         st.session_state.pop(key, None)
 
+
 # ----------------------------
 # Create Flight Section
 # ----------------------------
@@ -119,6 +121,9 @@ with st.expander("Create New Flight", expanded=False):
 if st.session_state.create_flight_success:
     st.success(st.session_state.create_flight_success)
     st.session_state.create_flight_success = None
+if st.session_state.delete_flight_success:
+    st.success(st.session_state.delete_flight_success)
+    st.session_state.delete_flight_success = None
 
 st.divider()
 
@@ -143,9 +148,7 @@ else:
         members_table, member_cadet_ids = get_flight_member_table(cadet_rows, flight)
         cadet_count = len(get_selectable_member_ids(member_cadet_ids))
 
-        expander_label = (
-            f"{flight['name']}  ·  Commander: {commander_name}  ·  {cadet_count} cadet(s)"
-        )
+        expander_label = f"{flight['name']}  ·  Commander: {commander_name}  ·  {cadet_count} cadet(s)"
         force_expanded = (
             flight_id in st.session_state.expanded_flight_ids
             or st.session_state.confirm_delete_flight_id == flight_id
@@ -214,7 +217,9 @@ else:
                             "Cadet": st.column_config.TextColumn(disabled=True),
                             "Rank": st.column_config.TextColumn(disabled=True),
                             "Email": st.column_config.TextColumn(disabled=True),
-                            "Current Flight": st.column_config.TextColumn(disabled=True),
+                            "Current Flight": st.column_config.TextColumn(
+                                disabled=True
+                            ),
                         },
                         hide_index=True,
                         width="stretch",
@@ -294,7 +299,9 @@ else:
                             "Role": st.column_config.TextColumn(disabled=True),
                             "Rank": st.column_config.TextColumn(disabled=True),
                             "Email": st.column_config.TextColumn(disabled=True),
-                            "Current Flight": st.column_config.TextColumn(disabled=True),
+                            "Current Flight": st.column_config.TextColumn(
+                                disabled=True
+                            ),
                         },
                         hide_index=True,
                         width="stretch",
@@ -304,7 +311,9 @@ else:
                         member_cadet_ids,
                         "Unassign",
                     )
-                    unassign_members_clicked = st.form_submit_button("Unassign Selected")
+                    unassign_members_clicked = st.form_submit_button(
+                        "Unassign Selected"
+                    )
                 if unassign_members_clicked:
                     keep_flight_expanded(flight_id)
                     st.session_state[member_selection_key] = selected_member_ids
@@ -342,6 +351,10 @@ else:
                         unassign_all_cadets_from_flight(flight["_id"])
                         delete_flight(flight["_id"])
                         st.session_state.confirm_delete_flight_id = None
+                        st.session_state.delete_flight_success = (
+                            "Flight deleted successfully."
+                        )
+
                         forget_flight_expanded(flight_id)
                         st.rerun()
                 if c2.button("Cancel", key=f"cancel_del_{flight_id}"):

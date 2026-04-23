@@ -69,13 +69,6 @@ def add_cadet():
                     st.error("User not found!")
             else:
                 st.error(msg)
-    else:
-        if st.session_state.success_time:
-            if time.time() - st.session_state.success_time < 3:
-                st.success(st.session_state.success_msg)
-            else:
-                st.session_state.success_time = None
-                st.session_state.success_msg = None
 
 
 def edit_cadet(cadet):
