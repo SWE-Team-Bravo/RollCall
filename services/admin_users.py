@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
-from utils.st_helpers import confirm_destructive_action
 
 
 def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
@@ -60,11 +59,6 @@ def list_users_for_admin(users: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 ALLOWED_ROLES = {"admin", "cadre", "flight_commander", "cadet"}
-DELETE_SUCCESS_MESSAGES = {
-    "flight": "Flight deleted successfully.",
-    "user": "User deleted successfully.",
-    "waiver": "Waiver withdrawn successfully.",
-}
 
 
 def validate_new_user_data(
@@ -218,6 +212,6 @@ def confirm_delete_user(confirmation_input: str) -> bool:
     return confirm_destructive_action(confirmation_input)
 
 
-def get_delete_success_message(item_type: str) -> str:
-    """Return a consistent success message for delete-style actions."""
-    return DELETE_SUCCESS_MESSAGES.get(item_type, "Deleted successfully.")
+def confirm_destructive_action(confirmation_input: str) -> bool:
+    """Return True only when the exact DELETE keyword is entered."""
+    return (confirmation_input or "").strip() == "DELETE"

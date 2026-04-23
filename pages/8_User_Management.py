@@ -13,7 +13,6 @@ from services.admin_users import (
     validate_new_user_data,
     build_update_user_payload,
     confirm_delete_user,
-    get_delete_success_message,
     ALLOWED_ROLES,
 )
 
@@ -140,9 +139,7 @@ def _render_delete_confirmation(
         else:
             result = delete_user(existing_user["_id"])
             if result is not None:
-                st.session_state["admin_users_success"] = get_delete_success_message(
-                    "user"
-                )
+                st.session_state["admin_users_success"] = "User deleted successfully."
             else:
                 st.error("Failed to delete user (database unavailable).")
 

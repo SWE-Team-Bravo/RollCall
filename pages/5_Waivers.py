@@ -1,17 +1,11 @@
 from datetime import date, datetime, timedelta
 
 import pandas as pd
-<<<<<<< Updated upstream
 import streamlit as st
-=======
-from services.admin_users import get_delete_success_message
-from utils.st_helpers import confirm_destructive_action, require
-
-
->>>>>>> Stashed changes
 
 from scripts.demo_admin import get_temp_cadet
 from services.admin_users import confirm_destructive_action
+
 from services.waivers import (
     WAIVER_STATUS_BADGE,
     apply_sickness_auto_approval,
@@ -256,9 +250,7 @@ def show_waivers(
                     success = withdraw_waiver(selected["_id"])
                     st.session_state.confirm_withdraw_id = None
                     if success:
-                        st.session_state.show_success = get_delete_success_message(
-                            "waiver"
-                        )
+                        st.session_state.show_success = "Waiver withdrawn successfully."
                     else:
                         st.session_state.show_error = "Failed to withdraw waiver."
                     st.rerun()
