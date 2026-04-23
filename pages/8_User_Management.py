@@ -8,6 +8,8 @@ import pandas as pd
 from utils.auth import require_role
 from utils.db import get_collection
 from utils.db_schema_crud import create_user, update_user, delete_user
+from utils.password_reset import build_password_updates
+from utils.password_reset_email import send_temporary_password_email
 from services.admin_users import (
     list_users_for_admin,
     validate_new_user_data,
@@ -236,6 +238,10 @@ else:
         st.session_state["admin_users_editing"] = None
     if "admin_users_confirm_delete" not in st.session_state:
         st.session_state["admin_users_confirm_delete"] = None
+    if "admin_users_reset_pw" not in st.session_state:
+        st.session_state["admin_users_reset_pw"] = None
+    if "admin_users_last_temp_pw" not in st.session_state:
+        st.session_state["admin_users_last_temp_pw"] = None
     if "admin_users_selected" not in st.session_state:
         st.session_state["admin_users_selected"] = (
             summaries[0]["id"] if summaries else None
@@ -311,20 +317,30 @@ else:
         )
         st.session_state.admin_users_selected = selected_id
 
-        b1, b2, _ = st.columns([2, 2, 10])
+        b1, b2, b3, _ = st.columns([2, 2, 3, 7])
         with b1:
             if st.button("Edit", key="admin_users_edit_selected"):
                 st.session_state["admin_users_editing"] = selected_id
                 st.session_state["admin_users_confirm_delete"] = None
+                st.session_state["admin_users_reset_pw"] = None
                 st.rerun()
         with b2:
             if st.button("Delete", key="admin_users_delete_selected"):
                 st.session_state["admin_users_confirm_delete"] = selected_id
                 st.session_state["admin_users_editing"] = None
+                st.session_state["admin_users_reset_pw"] = None
+                st.rerun()
+        with b3:
+            if st.button("Reset Password", key="admin_users_reset_selected"):
+                st.session_state["admin_users_reset_pw"] = selected_id
+                st.session_state["admin_users_editing"] = None
+                st.session_state["admin_users_confirm_delete"] = None
+                st.session_state["admin_users_last_temp_pw"] = None
                 st.rerun()
 
     editing_id = st.session_state.get("admin_users_editing")
     confirm_id = st.session_state.get("admin_users_confirm_delete")
+    reset_id = st.session_state.get("admin_users_reset_pw")
 
     if editing_id and editing_id in summary_by_id:
         st.divider()
@@ -333,3 +349,64 @@ else:
     if confirm_id and confirm_id in summary_by_id:
         st.divider()
         _render_delete_confirmation(summary_by_id[confirm_id], raw_users)
+
+    if reset_id and reset_id in summary_by_id:
+        st.divider()
+        summary = summary_by_id[reset_id]
+        st.subheader("Reset Password")
+        st.warning(
+            f"This will reset the password for {summary.get('email', '')}.",
+        )
+
+        email_user = st.checkbox(
+            "Email the temporary password to the user",
+            value=True,
+            key=f"reset_pw_email_{reset_id}",
+        )
+
+        c1, c2, c3 = st.columns([2, 2, 8])
+        with c1:
+            if st.button(
+                "Confirm Reset", type="primary", key=f"reset_pw_confirm_{reset_id}"
+            ):
+                existing_user = next(
+                    (u for u in raw_users if str(u.get("_id")) == reset_id), None
+                )
+                if existing_user is None:
+                    st.error("User no longer exists.")
+                else:
+                    updates, temp_pw = build_password_updates()
+                    result = update_user(existing_user["_id"], updates)
+                    if result is None:
+                        st.error("Failed to reset password (database unavailable).")
+                    else:
+                        st.session_state["admin_users_last_temp_pw"] = temp_pw
+                        st.success("Password reset successfully.")
+
+                        if email_user:
+                            to_email = str(existing_user.get("email", "") or "").strip()
+                            if not to_email:
+                                st.warning(
+                                    "User has no email address on file; cannot send email."
+                                )
+                            else:
+                                sent = send_temporary_password_email(
+                                    to_email=to_email, temporary_password=temp_pw
+                                )
+                                if sent:
+                                    st.success("Temporary password emailed to user.")
+                                else:
+                                    st.warning(
+                                        "Email not sent. If you expect email to work, set EMAIL_ADDRESS and EMAIL_APP_PASSWORD and restart Streamlit."
+                                    )
+
+        with c2:
+            if st.button("Cancel", key=f"reset_pw_cancel_{reset_id}"):
+                st.session_state["admin_users_reset_pw"] = None
+                st.session_state["admin_users_last_temp_pw"] = None
+                st.rerun()
+
+        last_pw = st.session_state.get("admin_users_last_temp_pw")
+        if last_pw:
+            st.info("Temporary password (shown once):")
+            st.code(last_pw)
