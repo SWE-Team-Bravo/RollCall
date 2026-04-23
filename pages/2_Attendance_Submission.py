@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from services.attendance import is_already_checked_in, is_within_checkin_window
+from services.event_config import get_checkin_window_minutes
 from services.cadet_attendance import get_cadet_flight_label, load_cadet_flights
 from services.event_codes import validate_code
 from utils.auth import get_current_user, require_auth
@@ -76,9 +77,12 @@ if len(code_clean) == 6:
     else:
         event = get_event_by_id(event_code["event_id"])
         if event:
-            if not is_within_checkin_window(event, datetime.now(timezone.utc)):
+            window = get_checkin_window_minutes()
+            if not is_within_checkin_window(
+                event, datetime.now(timezone.utc), window_minutes=window
+            ):
                 st.error(
-                    "Check-in is only available during the 10-minute window before the event starts."
+                    f"Check-in is only available during the {window}-minute window before the event starts."
                 )
                 event_code = None
             else:

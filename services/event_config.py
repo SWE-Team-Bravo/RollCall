@@ -61,6 +61,17 @@ def save_event_config(
     return True
 
 
+_DEFAULT_CHECKIN_WINDOW_MINUTES = 10
+
+
+def get_checkin_window_minutes() -> int:
+    """Return the check-in window duration in minutes, falling back to the default."""
+    config = get_event_config()
+    if config is None:
+        return _DEFAULT_CHECKIN_WINDOW_MINUTES
+    return config.get("checkin_window_minutes", _DEFAULT_CHECKIN_WINDOW_MINUTES)
+
+
 def get_absence_thresholds() -> tuple[int, int]:
     config = get_event_config()
     if config is None:

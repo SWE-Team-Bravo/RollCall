@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
+from utils.validators import is_valid_email
+
 
 def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
     # Return a normalized summary for admin user listing.
@@ -85,7 +87,7 @@ def validate_new_user_data(
     raw_email = (email or "").strip()
     if not raw_email:
         errors["email"] = "Email is required."
-    elif "@" not in raw_email or "." not in raw_email.split("@", 1)[-1]:
+    elif not is_valid_email(raw_email):
         errors["email"] = "Email looks invalid."
     elif raw_email.lower() in {e.lower() for e in existing_emails}:
         errors["email"] = "A user with this email already exists."
@@ -148,7 +150,7 @@ def build_update_user_payload(
 
     if not raw_email:
         errors["email"] = "Email is required."
-    elif "@" not in raw_email or "." not in raw_email.split("@", 1)[-1]:
+    elif not is_valid_email(raw_email):
         errors["email"] = "Email looks invalid."
     elif raw_email.lower() in {e.lower() for e in other_emails}:
         errors["email"] = "A user with this email already exists."

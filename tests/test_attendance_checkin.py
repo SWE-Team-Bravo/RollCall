@@ -1,4 +1,5 @@
 from services.attendance import is_already_checked_in, is_within_checkin_window
+from services.event_config import get_checkin_window_minutes
 from datetime import datetime, timedelta, timezone
 
 
@@ -93,3 +94,19 @@ def test_returns_false_if_start_date_is_not_datetime():
 def test_no_timezone_info():
     event = {"start_date": datetime.now(timezone.utc) + timedelta(minutes=5)}
     assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
+
+
+def test_custom_window_allows_cadet_inside_larger_window():
+    now = datetime.now(timezone.utc)
+    event = {"start_date": now + timedelta(minutes=12)}
+    assert is_within_checkin_window(event, now, window_minutes=15) is True
+
+
+def test_custom_window_rejects_cadet_outside_smaller_window():
+    now = datetime.now(timezone.utc)
+    event = {"start_date": now + timedelta(minutes=12)}
+    assert is_within_checkin_window(event, now, window_minutes=10) is False
+
+
+def test_get_checkin_window_minutes_returns_10_with_no_db():
+    assert get_checkin_window_minutes() == 10

@@ -18,6 +18,7 @@ from services.attendance_modifications import (
 from services.commander_attendance import build_commander_roster, hydrate_cadet_names
 from services.events import closest_event_index, get_all_events, has_event_ended
 from utils.auth import get_current_user, require_role
+from utils.st_helpers import require
 from utils.attendance_status import (
     NO_RECORD_STATUS_LABEL,
     get_attendance_status_cell_style,
@@ -123,11 +124,7 @@ current_user = get_current_user()
 assert current_user is not None
 
 email = str(current_user.get("email", "")).strip()
-user = get_user_by_email(email)
-if user is None:
-    st.error("Could not find your account.")
-    st.stop()
-assert user is not None
+user = require(get_user_by_email(email), "Could not find your account.")
 
 all_events = get_all_events()
 if not all_events:
@@ -166,7 +163,7 @@ if not all_cadets:
     st.info("No cadets found.")
     st.stop()
 
-cadet_user_ids = [c.get("user_id") for c in all_cadets if c.get("user_id") is not None]
+cadet_user_ids = [c["user_id"] for c in all_cadets if c.get("user_id") is not None]
 user_by_id = {user["_id"]: user for user in get_users_by_ids(cadet_user_ids)}
 all_cadets = hydrate_cadet_names(all_cadets, user_by_id)
 
@@ -291,7 +288,9 @@ def _render_recent_changes() -> None:
             selection_mode="single-row",
         )
 
-        previous_selected_change_id = st.session_state.get("_attendance_selected_change_id")
+        previous_selected_change_id = st.session_state.get(
+            "_attendance_selected_change_id"
+        )
         st.session_state["_attendance_selected_change_id"] = get_selected_change_id(
             selection,
             history["items"],
@@ -383,7 +382,7 @@ def _render_recent_changes() -> None:
         if next_col.button(
             "Next",
             key="attendance_history_next",
-            disabled=history["page"] >= history['total_pages'],
+            disabled=history["page"] >= history["total_pages"],
             width="stretch",
         ):
             st.session_state["_attendance_history_page"] = history["page"] + 1

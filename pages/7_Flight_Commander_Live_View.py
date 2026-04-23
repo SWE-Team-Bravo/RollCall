@@ -8,6 +8,7 @@ import streamlit as st
 from services.attendance_modifications import apply_bulk_attendance_changes
 from services.commander_attendance import build_commander_roster, hydrate_cadet_names
 from utils.auth import get_current_user, require_role
+from utils.st_helpers import require
 from utils.attendance_status import NO_RECORD_STATUS_LABEL, get_attendance_status_label
 from utils.datetime_utils import ensure_utc
 from utils.db_schema_crud import (
@@ -75,13 +76,15 @@ def _show_feedback() -> None:
 
 def _load_flight_cadets(flight_id: Any) -> list[dict[str, Any]]:
     flight_cadets = [
-        cadet_doc for cadet_doc in get_all_cadets() if cadet_doc.get("flight_id") == flight_id
+        cadet_doc
+        for cadet_doc in get_all_cadets()
+        if cadet_doc.get("flight_id") == flight_id
     ]
     if not flight_cadets:
         return []
 
     user_ids = [
-        cadet_doc.get("user_id")
+        cadet_doc["user_id"]
         for cadet_doc in flight_cadets
         if cadet_doc.get("user_id") is not None
     ]
@@ -105,11 +108,9 @@ if not email:
     st.error("Could not determine the current user's email.")
     st.stop()
 
-user = get_user_by_email(email)
-if user is None:
-    st.error("Could not find the current user in the database.")
-    st.stop()
-assert user is not None
+user = require(
+    get_user_by_email(email), "Could not find the current user in the database."
+)
 
 cadet = get_cadet_by_user_id(user["_id"])
 if cadet is None:
