@@ -247,5 +247,3 @@ def test_confirm_delete_user_requires_exact_keyword():
     assert confirm_delete_user("Delete") is False
     assert confirm_delete_user("del") is False
     assert confirm_delete_user("DELETE EVERYTHING") is False
-
-
