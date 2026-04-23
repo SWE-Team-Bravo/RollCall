@@ -5,8 +5,10 @@ import pandas as pd
 
 from services.waiver_review import (
     get_flight_options,
+    get_paginated_waiver_review_rows,
     get_waiver_context,
     get_waiver_export_df,
+    get_waiver_review_rows,
     get_waivers,
     submit_decision,
 )
@@ -98,6 +100,88 @@ def test_get_waivers_empty():
     with patch("services.waiver_review.get_all_waivers", return_value=[]):
         result = get_waivers("all")
         assert result == []
+
+
+def test_get_waiver_review_rows_filters_fallback_data():
+    waivers = [WAIVER, {**WAIVER, "_id": "w2", "status": "approved"}]
+    with (
+        patch("services.waiver_review.get_collection", return_value=None),
+        patch("services.waiver_review.get_waivers", return_value=waivers),
+        patch(
+            "services.waiver_review.get_waiver_context",
+            side_effect=[
+                {
+                    "cadet_name": "Tyler Brooks",
+                    "cadet_email": "tyler@rollcall.local",
+                    "flight_name": "Alpha Flight",
+                    "event_name": "PT Session",
+                    "event_date": "2026-03-01",
+                    "event_type": "pt",
+                    "waiver_type": "medical",
+                    "attachments": [],
+                    "cadre_only": False,
+                },
+                {
+                    "cadet_name": "Morgan Lake",
+                    "cadet_email": "morgan@rollcall.local",
+                    "flight_name": "Bravo Flight",
+                    "event_name": "LLAB",
+                    "event_date": "2026-03-02",
+                    "event_type": "lab",
+                    "waiver_type": "non-medical",
+                    "attachments": [],
+                    "cadre_only": False,
+                },
+            ],
+        ),
+    ):
+        result = get_waiver_review_rows(
+            status_filter="all",
+            flight_filter="Alpha Flight",
+            cadet_search="tyler",
+            viewer_roles=["cadre"],
+        )
+
+    assert len(result) == 1
+    assert result[0]["waiver_id"] == "w1"
+    assert result[0]["flight_name"] == "Alpha Flight"
+
+
+def test_get_paginated_waiver_review_rows_paginates_fallback_rows():
+    rows = [
+        {
+            "waiver_id": f"w{index}",
+            "waiver_status": "pending",
+            "waiver_type": "medical",
+            "attachments": [],
+            "reason": "Reason",
+            "cadet_name": f"Cadet {index}",
+            "cadet_email": f"cadet{index}@rollcall.local",
+            "flight_name": "Alpha Flight",
+            "event_name": "PT",
+            "event_date": "2026-03-01",
+            "event_type": "pt",
+            "cadre_only": False,
+        }
+        for index in range(30)
+    ]
+    with (
+        patch("services.waiver_review.get_collection", return_value=None),
+        patch("services.waiver_review.get_waiver_review_rows", return_value=rows),
+    ):
+        result = get_paginated_waiver_review_rows(
+            status_filter="all",
+            flight_filter="All flights",
+            cadet_search="",
+            viewer_roles=["cadre"],
+            page=2,
+            page_size=25,
+        )
+
+    assert result["page"] == 2
+    assert result["total_count"] == 30
+    assert result["total_pages"] == 2
+    assert len(result["items"]) == 5
 
 
 # ------------------------- test get_waiver_context -----------------------------------------

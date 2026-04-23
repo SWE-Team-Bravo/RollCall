@@ -24,6 +24,12 @@ from services.cadets import (
 from services.account_settings import build_profile_updates
 
 from utils.export import to_excel
+from utils.pagination import (
+    init_pagination_state,
+    paginate_list,
+    render_pagination_controls,
+    sync_pagination_state,
+)
 
 
 require_role("admin", "cadre")
@@ -196,9 +202,11 @@ def show_cadets():
 
     rows: list[dict[str, str | int]] = []
     cadet_by_id: dict[str, dict] = {}
+    cadet_ids: list[str] = []
     for i, cadet in enumerate(cadets):
         cid = str(cadet.get("_id"))
         cadet_by_id[cid] = cadet
+        cadet_ids.append(cid)
 
         user_doc = None
         try:
@@ -219,11 +227,27 @@ def show_cadets():
             }
         )
 
-    df = pd.DataFrame(
+    cadet_page, cadet_page_size = init_pagination_state(
+        "cadet_management",
+        reset_token=str(len(cadets)),
+    )
+    paginated_rows = paginate_list(
         rows,
+        page=cadet_page,
+        page_size=cadet_page_size,
+    )
+    sync_pagination_state("cadet_management", paginated_rows)
+    page_rows = list(paginated_rows["items"])
+    page_ids = cadet_ids[
+        paginated_rows["skip"] : paginated_rows["skip"] + paginated_rows["page_size"]
+    ]
+
+    df = pd.DataFrame(
+        page_rows,
         columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank"]),
     )
     st.dataframe(df, hide_index=True, width="stretch")
+    render_pagination_controls("cadet_management", paginated_rows)
 
     st.divider()
 
@@ -244,17 +268,16 @@ def show_cadets():
         name = f"{first} {last}".strip() or "Unknown"
         return f"{name} ({email})".strip()
 
-    cadet_ids = list(cadet_by_id.keys())
-    if not cadet_ids:
+    if not page_ids:
         return
 
     # Keep selection stable across reruns.
-    if st.session_state.selected_cadet_id not in cadet_by_id:
-        st.session_state.selected_cadet_id = cadet_ids[0]
+    if st.session_state.selected_cadet_id not in page_ids:
+        st.session_state.selected_cadet_id = page_ids[0]
 
     selected_id = st.selectbox(
         "Select cadet",
-        options=cadet_ids,
+        options=page_ids,
         format_func=_cadet_label,
         key="selected_cadet_id",
     )

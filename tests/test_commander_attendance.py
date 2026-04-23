@@ -1,4 +1,10 @@
-from services.commander_attendance import build_commander_roster, compute_upserts
+import services.commander_attendance as commander_attendance
+from services.commander_attendance import (
+    build_commander_roster,
+    compute_upserts,
+    get_paginated_commander_roster,
+    get_roster_entries_for_cadet_ids,
+)
 
 
 # ── build_commander_roster ────────────────────────────────────────────────────
@@ -167,3 +173,77 @@ def test_upsert_all_three_statuses():
 
 def test_upsert_empty_roster_returns_empty():
     assert compute_upserts([], {}) == []
+
+
+def test_get_paginated_commander_roster_hydrates_only_current_page(monkeypatch):
+    monkeypatch.setattr(
+        commander_attendance,
+        "_paged_cadet_docs",
+        lambda page, page_size: {
+            "items": [
+                {"_id": "c2", "user_id": "u2", "first_name": "Bob", "last_name": "B"},
+                {"_id": "c3", "user_id": "u3", "first_name": "Cara", "last_name": "C"},
+            ],
+            "page": 2,
+            "page_size": 25,
+            "total_count": 3,
+            "total_pages": 2,
+            "skip": 25,
+        },
+    )
+    monkeypatch.setattr(
+        commander_attendance,
+        "get_users_by_ids",
+        lambda ids: [
+            {"_id": "u2", "first_name": "Bob", "last_name": "Baker"},
+            {"_id": "u3", "first_name": "Cara", "last_name": "Cole"},
+        ],
+    )
+    monkeypatch.setattr(
+        commander_attendance,
+        "get_attendance_by_event_for_cadets",
+        lambda event_id, cadet_ids: [
+            {"cadet_id": "c2", "_id": "r2", "status": "present"},
+        ],
+    )
+
+    roster = get_paginated_commander_roster("evt1", page=2, page_size=25)
+
+    assert roster["page"] == 2
+    assert roster["total_count"] == 3
+    assert [entry["cadet"]["_id"] for entry in roster["items"]] == ["c2", "c3"]
+    assert roster["items"][0]["cadet"]["name"] == "Bob Baker"
+    assert roster["items"][0]["current_status"] == "present"
+    assert roster["items"][1]["current_status"] is None
+
+
+def test_get_roster_entries_for_cadet_ids_loads_only_requested_cadets(monkeypatch):
+    monkeypatch.setattr(
+        commander_attendance,
+        "get_cadets_by_ids",
+        lambda cadet_ids: [
+            {"_id": "c1", "user_id": "u1", "first_name": "Amy", "last_name": "A"},
+            {"_id": "c3", "user_id": "u3", "first_name": "Cara", "last_name": "C"},
+        ],
+    )
+    monkeypatch.setattr(
+        commander_attendance,
+        "get_users_by_ids",
+        lambda ids: [
+            {"_id": "u1", "first_name": "Amy", "last_name": "Avery"},
+            {"_id": "u3", "first_name": "Cara", "last_name": "Cole"},
+        ],
+    )
+    monkeypatch.setattr(
+        commander_attendance,
+        "get_attendance_by_event_for_cadets",
+        lambda event_id, cadet_ids: [
+            {"cadet_id": "c3", "_id": "r3", "status": "absent"},
+        ],
+    )
+
+    roster = get_roster_entries_for_cadet_ids("evt1", ["c1", "c3"])
+
+    assert [entry["cadet"]["_id"] for entry in roster] == ["c1", "c3"]
+    assert roster[0]["current_status"] is None
+    assert roster[1]["current_status"] == "absent"
