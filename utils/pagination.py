@@ -127,6 +127,9 @@ def render_pagination_controls(
     def _reset_to_first_page() -> None:
         st.session_state[page_key] = 1
 
+    def _go_to_page(next_page: int) -> None:
+        st.session_state[page_key] = min(max(int(next_page), 1), total_pages)
+
     summary_col, page_col, page_size_col, prev_col, next_col = st.columns([3, 1, 1, 1, 1])
     summary_col.caption(f"Page {page_value} of {total_pages} • {total_count} total")
     page_col.selectbox(
@@ -143,24 +146,20 @@ def render_pagination_controls(
         on_change=_reset_to_first_page,
     )
 
-    rerun_kwargs = {}
-    if rerun_scope is not None:
-        rerun_kwargs["scope"] = rerun_scope
-
-    if prev_col.button(
+    prev_col.button(
         "Previous",
         key=f"{prefix}_prev",
         disabled=page_value <= 1,
         width="stretch",
-    ):
-        st.session_state[page_key] = page_value - 1
-        st.rerun(**rerun_kwargs)
+        on_click=_go_to_page,
+        args=(page_value - 1,),
+    )
 
-    if next_col.button(
+    next_col.button(
         "Next",
         key=f"{prefix}_next",
         disabled=page_value >= total_pages,
         width="stretch",
-    ):
-        st.session_state[page_key] = page_value + 1
-        st.rerun(**rerun_kwargs)
+        on_click=_go_to_page,
+        args=(page_value + 1,),
+    )
