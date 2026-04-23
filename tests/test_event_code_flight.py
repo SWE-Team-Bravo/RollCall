@@ -302,24 +302,24 @@ def test_is_expiry_valid_now_returns_false():
     assert is_expiry_valid(datetime.now(timezone.utc)) is False
 
 
-def test_is_expiry_valid_rejects_expiry_after_event_start():
-    event_start = datetime.now(timezone.utc) + timedelta(minutes=10)
-    expires_at = event_start + timedelta(seconds=1)
-    assert is_expiry_valid(expires_at, event_start) is False
+def test_is_expiry_valid_rejects_expiry_after_event_end():
+    event_end = datetime.now(timezone.utc) + timedelta(minutes=10)
+    expires_at = event_end + timedelta(seconds=1)
+    assert is_expiry_valid(expires_at, event_end) is False
 
 
-def test_is_expiry_valid_allows_expiry_at_event_start():
-    event_start = datetime.now(timezone.utc) + timedelta(minutes=10)
-    assert is_expiry_valid(event_start, event_start) is True
+def test_is_expiry_valid_allows_expiry_at_event_end():
+    event_end = datetime.now(timezone.utc) + timedelta(minutes=10)
+    assert is_expiry_valid(event_end, event_end) is True
 
 
-def test_latest_allowed_expiry_returns_none_without_start():
+def test_latest_allowed_expiry_returns_none_without_end():
     assert latest_allowed_expiry(None) is None
 
 
 def test_latest_allowed_expiry_normalizes_naive_datetime():
-    naive_start = datetime(2026, 4, 21, 12, 0, 0)
-    result = latest_allowed_expiry(naive_start)
+    naive_end = datetime(2026, 4, 21, 12, 0, 0)
+    result = latest_allowed_expiry(naive_end)
     assert result is not None
     assert result.tzinfo == timezone.utc
 

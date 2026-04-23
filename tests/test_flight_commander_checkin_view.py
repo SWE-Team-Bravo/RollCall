@@ -312,6 +312,48 @@ def test_status_case_insensitive():
     assert result["checked_in"][0]["_id"] == "cadet1"
 
 
+def test_flight_commander_override_wins_in_live_view_when_duplicates_exist():
+    now = datetime.now(timezone.utc)
+
+    events = [
+        {
+            "_id": "event1",
+            "start_date": now - timedelta(minutes=10),
+            "end_date": now + timedelta(minutes=10),
+        }
+    ]
+
+    cadets = [{"_id": "cadet1"}]
+
+    attendance_records = [
+        {
+            "event_id": "event1",
+            "cadet_id": "cadet1",
+            "status": "present",
+            "created_at": now,
+            "recorded_by_roles": ["cadet"],
+        },
+        {
+            "event_id": "event1",
+            "cadet_id": "cadet1",
+            "status": "absent",
+            "created_at": now - timedelta(minutes=1),
+            "recorded_by_roles": ["flight_commander"],
+        },
+    ]
+
+    result = build_checkin_view(
+        flight_cadets=cadets,
+        events=events,
+        attendance_records=attendance_records,
+        now=now,
+    )
+
+    assert result is not None
+    assert result["checked_in"] == []
+    assert [c["_id"] for c in result["missing"]] == ["cadet1"]
+
+
 def test_get_active_events_returns_only_active_events():
     now = datetime.now(timezone.utc)
 

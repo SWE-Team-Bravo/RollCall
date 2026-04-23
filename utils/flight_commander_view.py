@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from services.attendance_merge import merge_attendance_records
 from utils.datetime_utils import ensure_utc
 
 def _is_active_event(event: dict[str, Any], now: datetime) -> bool:
@@ -72,11 +73,20 @@ def build_checkin_view(
     if active_event_id is None:
         return None
 
-    checked_in_ids = {
-        record["cadet_id"]
+    relevant_records = [
+        record
         for record in attendance_records
         if record.get("event_id") == active_event_id
-        and _checked_in_status(record.get("status"))
+    ]
+    relevant_records = merge_attendance_records(
+        relevant_records,
+        key_fields=("cadet_id",),
+    )
+
+    checked_in_ids = {
+        record["cadet_id"]
+        for record in relevant_records
+        if _checked_in_status(record.get("status"))
     }
 
     checked_in: list[dict[str, Any]] = []
