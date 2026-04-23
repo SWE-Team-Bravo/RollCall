@@ -83,8 +83,9 @@ def _audit_docs(query: dict[str, Any]) -> list[dict[str, Any]]:
 
     docs = list(cursor)
     docs.sort(
-        key=lambda doc: doc.get("created_at")
-        or datetime.min.replace(tzinfo=timezone.utc),
+        key=lambda doc: (
+            doc.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+        ),
         reverse=True,
     )
     return docs
@@ -126,7 +127,9 @@ def _pair_history_docs(event_id: ObjectId, cadet_id: ObjectId) -> list[dict[str,
     )
 
 
-def _latest_pair_history_doc(event_id: ObjectId, cadet_id: ObjectId) -> dict[str, Any] | None:
+def _latest_pair_history_doc(
+    event_id: ObjectId, cadet_id: ObjectId
+) -> dict[str, Any] | None:
     docs = _paged_audit_docs(
         {
             "source": _AUDIT_SOURCE,
@@ -162,13 +165,15 @@ def _hydrate_changes(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not docs:
         return []
 
-    cadet_ids = [doc.get("cadet_id") for doc in docs if doc.get("cadet_id") is not None]
-    actor_ids = [doc.get("user_id") for doc in docs if doc.get("user_id") is not None]
+    cadet_ids = [doc["cadet_id"] for doc in docs if doc.get("cadet_id") is not None]
+    actor_ids = [doc["user_id"] for doc in docs if doc.get("user_id") is not None]
 
     cadets = get_cadets_by_ids(cadet_ids)
     cadet_by_id = {cadet["_id"]: cadet for cadet in cadets}
 
-    cadet_user_ids = [cadet.get("user_id") for cadet in cadets if cadet.get("user_id")]
+    cadet_user_ids = [
+        cadet["user_id"] for cadet in cadets if cadet.get("user_id") is not None
+    ]
     users = get_users_by_ids(cadet_user_ids + actor_ids)
     user_by_id = {user["_id"]: user for user in users}
 
@@ -273,8 +278,12 @@ def apply_bulk_attendance_changes(
             metadata={
                 "batch_id": batch_id,
                 "record_operation": _record_operation(before_record, after_record),
-                "old_record_id": str(before_record.get("_id", "")) if before_record else None,
-                "new_record_id": str(after_record.get("_id", "")) if after_record else None,
+                "old_record_id": str(before_record.get("_id", ""))
+                if before_record
+                else None,
+                "new_record_id": str(after_record.get("_id", ""))
+                if after_record
+                else None,
                 "recorded_by_roles": list(recorded_by_roles or []),
             },
         )
@@ -321,13 +330,17 @@ def _selected_action_state(
         selected_doc["event_id"],
         selected_doc["cadet_id"],
     )
-    current_status = _normalize_status(current_record.get("status") if current_record else None)
+    current_status = _normalize_status(
+        current_record.get("status") if current_record else None
+    )
 
     state = {
         "can_undo": False,
         "can_redo": False,
         "undo_target_label": _status_label(restore_status),
-        "redo_target_label": _status_label(_normalize_status(selected_metadata.get("old_status"))),
+        "redo_target_label": _status_label(
+            _normalize_status(selected_metadata.get("old_status"))
+        ),
         "action_block_reason": "",
     }
 
@@ -338,7 +351,9 @@ def _selected_action_state(
         return state
 
     if current_status != latest_status:
-        state["action_block_reason"] = "Attendance changed after this audit entry was created."
+        state["action_block_reason"] = (
+            "Attendance changed after this audit entry was created."
+        )
         return state
 
     outcome = str(selected_doc.get("outcome", "")).strip().lower()
@@ -375,7 +390,9 @@ def build_recent_changes_table(items: list[dict[str, Any]]):
                 "Available": (
                     "Undo"
                     if item["can_undo"]
-                    else "Redo" if item["can_redo"] else "Unavailable"
+                    else "Redo"
+                    if item["can_redo"]
+                    else "Unavailable"
                 ),
             }
             for item in items
@@ -447,7 +464,9 @@ def _apply_change_from_audit(
         change_doc["event_id"],
         change_doc["cadet_id"],
     )
-    current_status = _normalize_status(current_record.get("status") if current_record else None)
+    current_status = _normalize_status(
+        current_record.get("status") if current_record else None
+    )
     expected_current_status = _normalize_status(metadata.get("new_status"))
     target_status = _normalize_status(metadata.get("old_status"))
 
@@ -480,7 +499,9 @@ def _apply_change_from_audit(
         metadata={
             relation_field: str(change_doc["_id"]),
             "record_operation": _record_operation(before_record, after_record),
-            "old_record_id": str(before_record.get("_id", "")) if before_record else None,
+            "old_record_id": str(before_record.get("_id", ""))
+            if before_record
+            else None,
             "new_record_id": str(after_record.get("_id", "")) if after_record else None,
             "recorded_by_roles": list(recorded_by_roles or []),
         },

@@ -25,7 +25,11 @@ def is_already_checked_in(
     )
 
 
-def is_within_checkin_window(event: dict[str, Any], now: datetime) -> bool:
+def is_within_checkin_window(
+    event: dict[str, Any],
+    now: datetime,
+    window_minutes: int = CHECKIN_WINDOW_MINUTES,
+) -> bool:
     start = event.get("start_date")
     if not isinstance(start, datetime):
         return False
@@ -33,5 +37,5 @@ def is_within_checkin_window(event: dict[str, Any], now: datetime) -> bool:
     start = ensure_utc(start)
     now = ensure_utc(now)
 
-    checkin_open = start - timedelta(minutes=CHECKIN_WINDOW_MINUTES)
+    checkin_open = start - timedelta(minutes=window_minutes)
     return checkin_open <= now <= start

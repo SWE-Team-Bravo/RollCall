@@ -88,7 +88,7 @@ def closest_event_index(events: list[dict]) -> int:
             if isinstance(start, datetime):
                 return abs((start.date() - today).days)
             return abs((date.fromisoformat(str(start)[:10]) - today).days)
-        except (ValueError, TypeError):
+        except ValueError:
             return 999_999
 
     return min(range(len(events)), key=lambda i: _distance(events[i]))
@@ -130,6 +130,8 @@ def create_event(
     tz_name: str = "UTC",
 ) -> bool:
     """Insert a new event. Returns True on success."""
+    if start_date > end_date:
+        return False
     db = get_db()
     if db is None:
         return False
