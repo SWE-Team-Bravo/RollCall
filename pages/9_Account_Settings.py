@@ -10,6 +10,7 @@ from services.account_settings import (
 from utils.auth import require_auth, get_current_user
 from utils.db_schema_crud import get_user_by_email, update_user
 from utils.password import verify_password
+from utils.waiver_email import send_test_email
 
 require_auth()
 
@@ -19,6 +20,16 @@ user = get_current_user()
 if user is None:
     st.error("Could not determine the currently logged-in user.")
     st.stop()
+
+assert user is not None
+
+if "admin" in (user.get("roles") or []):
+    if st.button("Send Test Email"):
+        ok, error = send_test_email(user["email"])
+        if ok:
+            st.success("Test email sent successfully.")
+        else:
+            st.error(f"Failed: {error}")
 
 user = cast(dict[str, Any], user)
 email_value = user.get("email")

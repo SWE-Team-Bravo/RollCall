@@ -1,10 +1,12 @@
 from unittest.mock import patch, MagicMock
 from services.event_config import (
+    _DEFAULT_EMAIL_ENABLED,
     get_event_config,
     save_event_config,
     get_absence_thresholds,
     get_checkin_window_minutes,
     get_waiver_reminder,
+    is_email_enabled,
     _DEFAULT_PT_THRESHOLD,
     _DEFAULT_LLAB_THRESHOLD,
     _DEFAULT_CHECKIN_WINDOW_MINUTES,
@@ -70,14 +72,14 @@ def test_get_event_config_default_doc_has_all_keys():
 
 def test_save_event_config_returns_false_when_db_none():
     with patch("services.event_config.get_db", return_value=None):
-        result = save_event_config([], [], 9, 2, 10, 3)
+        result = save_event_config([], [], 9, 2, 10, 3, True)
     assert result is False
 
 
 def test_save_event_config_calls_update_one():
     mock_db = MagicMock()
     with patch("services.event_config.get_db", return_value=mock_db):
-        result = save_event_config(["Monday"], ["Friday"], 5, 1, 15, 7)
+        result = save_event_config(["Monday"], ["Friday"], 5, 1, 15, 7, True)
     assert result is True
     mock_db.event_config.update_one.assert_called_once()
     call_args = mock_db.event_config.update_one.call_args[0][1]["$set"]
@@ -88,12 +90,13 @@ def test_save_event_config_calls_update_one():
 def test_save_event_config_persists_all_fields():
     mock_db = MagicMock()
     with patch("services.event_config.get_db", return_value=mock_db):
-        save_event_config(["Monday"], ["Friday"], 5, 1, 15, 7)
+        save_event_config(["Monday"], ["Friday"], 5, 1, 15, 7, False)
     args = mock_db.event_config.update_one.call_args[0][1]["$set"]
     assert args["pt_days"] == ["Monday"]
     assert args["llab_days"] == ["Friday"]
     assert args["llab_threshold"] == 1
     assert args["checkin_window"] == 15
+    assert args["email_enabled"] is False
 
 
 # --------------------- test get_absence_thresholds --------------------
@@ -162,3 +165,30 @@ def test_waiver_reminder_default_when_none():
 def test_waiver_reminder_default_when_key_missing():
     with patch("services.event_config.get_event_config", return_value={}):
         assert get_waiver_reminder() == _DEFAULT_WAIVER_REMINDER_DAYS
+
+
+# --------------------- test is_email_enabled --------------------
+
+
+def test_email_enabled_from_config():
+    with patch(
+        "services.event_config.get_event_config", return_value={"email_enabled": True}
+    ):
+        assert is_email_enabled() is True
+
+
+def test_email_disabled_from_config():
+    with patch(
+        "services.event_config.get_event_config", return_value={"email_enabled": False}
+    ):
+        assert is_email_enabled() is False
+
+
+def test_email_enabled_default_when_none():
+    with patch("services.event_config.get_event_config", return_value=None):
+        assert is_email_enabled() is _DEFAULT_EMAIL_ENABLED
+
+
+def test_email_enabled_default_when_key_missing():
+    with patch("services.event_config.get_event_config", return_value={}):
+        assert is_email_enabled() is _DEFAULT_EMAIL_ENABLED

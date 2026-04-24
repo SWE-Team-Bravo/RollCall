@@ -6,6 +6,7 @@ _DEFAULT_PT_THRESHOLD = 9
 _DEFAULT_LLAB_THRESHOLD = 2
 _DEFAULT_CHECKIN_WINDOW_MINUTES = 10
 _DEFAULT_WAIVER_REMINDER_DAYS = 3
+_DEFAULT_EMAIL_ENABLED = True
 
 
 def get_event_config() -> dict | None:
@@ -19,6 +20,7 @@ def get_event_config() -> dict | None:
             "llab_threshold": _DEFAULT_LLAB_THRESHOLD,
             "checkin_window": _DEFAULT_CHECKIN_WINDOW_MINUTES,
             "waiver_reminder_days": _DEFAULT_WAIVER_REMINDER_DAYS,
+            "email_enabled": _DEFAULT_EMAIL_ENABLED,
         }
 
     config = db.event_config.find_one({})
@@ -31,6 +33,7 @@ def get_event_config() -> dict | None:
                 "llab_threshold": _DEFAULT_LLAB_THRESHOLD,
                 "checkin_window": _DEFAULT_CHECKIN_WINDOW_MINUTES,
                 "waiver_reminder_days": _DEFAULT_WAIVER_REMINDER_DAYS,
+                "email_enabled": _DEFAULT_EMAIL_ENABLED,
             }
         )
         config = db.event_config.find_one({})
@@ -42,6 +45,7 @@ def get_event_config() -> dict | None:
         "llab_threshold": _DEFAULT_LLAB_THRESHOLD,
         "checkin_window": _DEFAULT_CHECKIN_WINDOW_MINUTES,
         "waiver_reminder_days": _DEFAULT_WAIVER_REMINDER_DAYS,
+        "email_enabled": _DEFAULT_EMAIL_ENABLED,
     }
 
 
@@ -52,9 +56,10 @@ def save_event_config(
     llab_threshold: int,
     checkin_window: int,
     waiver_reminder_days: int,
+    email_enabled: bool,
 ) -> bool:
-    """Persist updated PT/LLAB day and threshold selections, check-in window minutes, and waiver reminder days.
-    Returns True on success."""
+    """Persist updated PT/LLAB day and threshold selections, check-in window minutes,
+    waiver reminder days, email toggle switch. Returns True on success."""
     db = get_db()
     if db is None:
         return False
@@ -68,6 +73,7 @@ def save_event_config(
                 "llab_threshold": llab_threshold,
                 "checkin_window": checkin_window,
                 "waiver_reminder_days": waiver_reminder_days,
+                "email_enabled": email_enabled,
             }
         },
     )
@@ -97,3 +103,10 @@ def get_waiver_reminder() -> int:
     if config is None:
         return _DEFAULT_WAIVER_REMINDER_DAYS
     return config.get("waiver_reminder_days", _DEFAULT_WAIVER_REMINDER_DAYS)
+
+
+def is_email_enabled() -> bool:
+    config = get_event_config()
+    if config is None:
+        return _DEFAULT_EMAIL_ENABLED
+    return config.get("email_enabled", _DEFAULT_EMAIL_ENABLED)

@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from email.message import Message
-from unittest.mock import patch
+import smtplib
+from unittest.mock import patch, MagicMock
 
-from utils.waiver_email import build_email, build_reminder_email, get_cadre_emails
+from utils.waiver_email import (
+    build_email,
+    build_reminder_email,
+    get_cadre_emails,
+    send_test_email,
+    send_waiver_decision_email,
+    send_waiver_reminder_email,
+)
 
 
 # ------------------ test build_email ---------------------
@@ -210,3 +218,102 @@ def test_reminder_body_signature():
     assert isinstance(part, Message)
     body = part.get_payload()
     assert "RollCall" in body
+
+
+# --------------- test send_test_email -------------------
+
+
+def test_returns_false_when_no_credentials():
+    with patch("utils.waiver_email.SENDER_EMAIL", None):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is False
+    assert "credentials" in error.lower()
+
+
+def test_returns_false_when_no_password():
+    with (
+        patch("utils.waiver_email.SENDER_EMAIL", "sender@rollcall.local"),
+        patch("utils.waiver_email.SENDER_PASSWORD", None),
+    ):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is False
+
+
+def test_returns_true_on_success():
+    mock_server = MagicMock()
+    with (
+        patch("utils.waiver_email.SENDER_EMAIL", "sender@rollcall.local"),
+        patch("utils.waiver_email.SENDER_PASSWORD", "pass"),
+        patch(
+            "utils.waiver_email.smtplib.SMTP_SSL",
+            return_value=MagicMock(
+                __enter__=lambda s, *a: mock_server,
+                __exit__=MagicMock(return_value=False),
+            ),
+        ),
+    ):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is True
+    assert error == ""
+
+
+def test_returns_false_on_auth_error():
+    with (
+        patch("utils.waiver_email.SENDER_EMAIL", "sender@rollcall.local"),
+        patch("utils.waiver_email.SENDER_PASSWORD", "wrongpass"),
+        patch(
+            "utils.waiver_email.smtplib.SMTP_SSL",
+            side_effect=smtplib.SMTPAuthenticationError(535, b"auth failed"),
+        ),
+    ):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is False
+    assert "authentication" in error.lower()
+
+
+def test_returns_false_on_smtp_error():
+    with (
+        patch("utils.waiver_email.SENDER_EMAIL", "sender@rollcall.local"),
+        patch("utils.waiver_email.SENDER_PASSWORD", "pass"),
+        patch(
+            "utils.waiver_email.smtplib.SMTP_SSL",
+            side_effect=smtplib.SMTPException("connection failed"),
+        ),
+    ):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is False
+    assert "SMTP" in error
+
+
+def test_returns_false_on_unexpected_error():
+    with (
+        patch("utils.waiver_email.SENDER_EMAIL", "sender@rollcall.local"),
+        patch("utils.waiver_email.SENDER_PASSWORD", "pass"),
+        patch(
+            "utils.waiver_email.smtplib.SMTP_SSL", side_effect=Exception("unexpected")
+        ),
+    ):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is False
+    assert "unexpected" in error.lower()
+
+
+def test_send_decision_email_returns_false_when_email_disabled():
+    with patch("utils.waiver_email.is_email_enabled", return_value=False):
+        result = send_waiver_decision_email(
+            "w1", "cadet@rollcall.local", "PT", "2026-03-01", "approved"
+        )
+    assert result is False
+
+
+def test_send_reminder_email_returns_false_when_email_disabled():
+    with patch("utils.waiver_email.is_email_enabled", return_value=False):
+        result = send_waiver_reminder_email("w1", "Tyler Brooks", "PT", "2026-03-01", 3)
+    assert result is False
+
+
+def test_send_test_email_returns_false_when_email_disabled():
+    with patch("utils.waiver_email.is_email_enabled", return_value=False):
+        ok, error = send_test_email("admin@rollcall.local")
+    assert ok is False
+    assert "disabled" in error.lower()

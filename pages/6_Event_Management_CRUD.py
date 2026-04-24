@@ -112,6 +112,14 @@ with st.expander("Event Schedule Configuration", expanded=False):
         step=1,
     )
 
+    st.divider()
+
+    email_enabled = st.toggle(
+        "Enable Email Notifications",
+        value=config.get("email_enabled", True),
+        key="cfg_email_enabled",
+    )
+
     if st.button("Save Schedule Configuration"):
         if save_event_config(
             pt_days,
@@ -120,6 +128,7 @@ with st.expander("Event Schedule Configuration", expanded=False):
             llab_threshold,
             checkin_window,
             waiver_reminder_days,
+            email_enabled,
         ):
             st.success("Schedule configuration saved!")
             config = get_event_config() or {}  # refresh so create form picks it up

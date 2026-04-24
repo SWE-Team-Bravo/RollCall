@@ -10,6 +10,7 @@ from utils.db_schema_crud import (
     get_waiver_by_id,
     get_users_by_role,
 )
+from services.event_config import is_email_enabled
 
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
@@ -37,6 +38,8 @@ def build_email(
         body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been approved."
     elif status == "denied":
         body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been denied."
+    else:
+        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been updated."
 
     if comments:
         body += f"\n\nComments: {comments}"
@@ -78,6 +81,8 @@ def send_waiver_decision_email(
     status: str,
     comments: str = "",
 ) -> bool:
+    if not is_email_enabled():
+        return False
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
@@ -105,6 +110,8 @@ def send_waiver_reminder_email(
     event_date: str,
     days_pending: int,
 ) -> bool:
+    if not is_email_enabled():
+        return False
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
@@ -119,7 +126,6 @@ def send_waiver_reminder_email(
                 msg = build_reminder_email(
                     email, waiver_id, cadet_name, event_name, event_date, days_pending
                 )
-                msg["To"] = email
                 server.sendmail(SENDER_EMAIL, email, msg.as_string())
 
         update_waiver(waiver_id, {"last_reminder_sent_at": datetime.now(timezone.utc)})
@@ -127,3 +133,37 @@ def send_waiver_reminder_email(
     except Exception:
         logging.exception("Failed to send waiver reminder for waiver %s", waiver_id)
         return False
+
+
+def send_test_email(to_email: str) -> tuple[bool, str]:
+    if not is_email_enabled():
+        return False, "Email is disabled."
+    if not SENDER_EMAIL or not SENDER_PASSWORD:
+        return False, "Email credentials not configured."
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = to_email
+        msg["Subject"] = "RollCall — Test Email"
+        msg.attach(
+            MIMEText(
+                "This is a test email from RollCall. SMTP is configured correctly.",
+                "plain",
+            )
+        )
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+
+        return True, ""
+    except smtplib.SMTPAuthenticationError:
+        return (
+            False,
+            "Authentication failed — check EMAIL_ADDRESS and EMAIL_APP_PASSWORD.",
+        )
+    except smtplib.SMTPException as e:
+        return False, f"SMTP error: {e}"
+    except Exception as e:
+        return False, f"Unexpected error: {e}"

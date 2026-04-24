@@ -19,7 +19,7 @@ from utils.db_schema_crud import (
 )
 from utils.attendance_status import get_effective_attendance_status
 from utils.names import format_full_name
-from services.event_config import get_absence_thresholds
+from services.event_config import get_absence_thresholds, is_email_enabled
 
 
 SENDER_EMAIL = os.getenv("EMAIL_ADDRESS")
@@ -29,6 +29,7 @@ PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD = get_absence_thresholds()
 
 
 def get_at_risk_cadets() -> list[dict]:
+    pt_threshold, llab_threshold = get_absence_thresholds()
     pt_events_ids = {e["_id"] for e in get_events_by_type("pt")}
     llab_events_ids = {e["_id"] for e in get_events_by_type("lab")}
 
@@ -73,10 +74,7 @@ def get_at_risk_cadets() -> list[dict]:
             and r.get("event_id") in llab_events_ids
         )
 
-        if (
-            pt_absences >= PT_ABSENCE_THRESHOLD - 1
-            or llab_absences >= LLAB_ABSENCE_THRESHOLD - 1
-        ):
+        if pt_absences >= pt_threshold - 1 or llab_absences >= llab_threshold - 1:
             at_risk.append(
                 {
                     "cadet": cadet,
@@ -155,6 +153,7 @@ def build_email(
     cadets: list[dict],
     recipient_name: str = "",
 ) -> MIMEMultipart:
+    pt_threshold, llab_threshold = get_absence_thresholds()
     msg = MIMEMultipart("alternative")
     msg["From"] = SENDER_EMAIL or ""
     msg["To"] = to_email
@@ -167,7 +166,7 @@ def build_email(
     <html><body>
         <p>{greeting}</p>
         <p>The following cadets are one absence away from or have reached the absence thresholds
-        (PT: {PT_ABSENCE_THRESHOLD}, LLAB: {LLAB_ABSENCE_THRESHOLD}):</p>
+        (PT: {pt_threshold}, LLAB: {llab_threshold}):</p>
         {table}
         <br>
         <p>RollCall</p>
@@ -181,6 +180,7 @@ def build_email_for_student(
     pt_absences: int,
     llab_absences: int,
 ) -> MIMEMultipart:
+    pt_threshold, llab_threshold = get_absence_thresholds()
     msg = MIMEMultipart("alternative")
     msg["From"] = SENDER_EMAIL or ""
     msg["To"] = to_email
@@ -188,25 +188,25 @@ def build_email_for_student(
 
     body = "Hi,\n\n"
 
-    if pt_absences == PT_ABSENCE_THRESHOLD - 1:
+    if pt_absences == pt_threshold - 1:
         body += (
             f"You're one absence away from reaching the absence threshold for "
-            f"PT. Absences: {pt_absences}/{PT_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+            f"PT. Absences: {pt_absences}/{pt_threshold}. Contact your cadre immediately."
         )
-    elif pt_absences > PT_ABSENCE_THRESHOLD - 1:
+    elif pt_absences > pt_threshold - 1:
         body += (
             f"You have reached the absence threshold for "
-            f"PT. Absences: {pt_absences}/{PT_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+            f"PT. Absences: {pt_absences}/{pt_threshold}. Contact your cadre immediately."
         )
-    if llab_absences == LLAB_ABSENCE_THRESHOLD - 1:
+    if llab_absences == llab_threshold - 1:
         body += (
             f"You're one absence away from reaching the absence threshold for "
-            f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+            f"LLAB. Absences: {llab_absences}/{llab_threshold}. Contact your cadre immediately."
         )
-    elif llab_absences > LLAB_ABSENCE_THRESHOLD - 1:
+    elif llab_absences > llab_threshold - 1:
         body += (
             f"You have reached the absence threshold for "
-            f"LLAB. Absences: {llab_absences}/{LLAB_ABSENCE_THRESHOLD}. Contact your cadre immediately."
+            f"LLAB. Absences: {llab_absences}/{llab_threshold}. Contact your cadre immediately."
         )
 
     body += "\n\nRollCall"
@@ -215,6 +215,8 @@ def build_email_for_student(
 
 
 def send_email(to_email: str, msg: MIMEMultipart) -> bool:
+    if not is_email_enabled():
+        return False
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
@@ -234,13 +236,14 @@ def send_to_student(
     pt_absences: int,
     llab_absences: int,
 ) -> bool:
+    if not is_email_enabled():
+        return False
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
-    if (
-        pt_absences < PT_ABSENCE_THRESHOLD - 1
-        and llab_absences < LLAB_ABSENCE_THRESHOLD - 1
-    ):
+    pt_threshold, llab_threshold = get_absence_thresholds()
+
+    if pt_absences < pt_threshold - 1 and llab_absences < llab_threshold - 1:
         return False
 
     cadet = get_cadet_by_id(cadet_id)
@@ -262,7 +265,9 @@ def send_to_student(
         return False
 
 
-def send_to_cadre(at_risk: list[dict], sent, failed) -> tuple[int, int]:
+def send_to_cadre(at_risk: list[dict], sent: int, failed: int) -> tuple[int, int]:
+    if not is_email_enabled():
+        return sent, failed
     for cadre in get_users_by_role("cadre"):
         email = cadre.get("email")
         if not email:
@@ -275,7 +280,11 @@ def send_to_cadre(at_risk: list[dict], sent, failed) -> tuple[int, int]:
     return sent, failed
 
 
-def send_to_flight_commander(at_risk: list[dict], sent, failed) -> tuple[int, int]:
+def send_to_flight_commander(
+    at_risk: list[dict], sent: int, failed: int
+) -> tuple[int, int]:
+    if not is_email_enabled():
+        return sent, failed
     for fc in get_users_by_role("flight_commander"):
         email, flight_cadets = get_fc_flight_cadets(fc, at_risk)
         if not email or not flight_cadets:
@@ -289,6 +298,8 @@ def send_to_flight_commander(at_risk: list[dict], sent, failed) -> tuple[int, in
 
 
 def send_at_risk_emails() -> tuple[int, int]:
+    if not is_email_enabled():
+        return 0, 0
     at_risk = get_at_risk_cadets()
     if not at_risk:
         return 0, 0
