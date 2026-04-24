@@ -207,7 +207,10 @@ else:
             if search_norm not in hay:
                 continue
         is_disabled = bool(s.get("disabled", False))
-        if show_disabled_only and not is_disabled:
+        if show_disabled_only:
+            if not is_disabled:
+                continue
+        elif is_disabled:
             continue
         filtered.append(s)
 
