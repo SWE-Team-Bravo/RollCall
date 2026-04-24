@@ -135,6 +135,7 @@ def edit_cadet(cadet):
                     },
                 )
 
+            st.session_state.selected_cadet_id = cadet_id
             st.session_state.editing_id = None
             st.rerun()
         else:
@@ -155,6 +156,7 @@ def remove_cadet(cadet):
     if col1.button("Yes", key=f"confirm_{cadet_id}"):
         result = delete_cadet(cadet_id)
         if result and result.deleted_count > 0:
+            st.session_state.pop("selected_cadet_id", None)
             st.session_state.confirm_delete_id = None
             st.session_state.success_msg = "Cadet deleted successfully!"
             st.session_state.success_time = time.time()

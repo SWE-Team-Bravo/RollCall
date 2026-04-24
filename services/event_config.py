@@ -4,6 +4,8 @@ _DEFAULT_PT_DAYS = ["Monday", "Tuesday", "Thursday"]
 _DEFAULT_LLAB_DAYS = ["Friday"]
 _DEFAULT_PT_THRESHOLD = 9
 _DEFAULT_LLAB_THRESHOLD = 2
+_DEFAULT_CHECKIN_WINDOW_MINUTES = 10
+_DEFAULT_WAIVER_REMINDER_DAYS = 3
 
 
 def get_event_config() -> dict | None:
@@ -15,6 +17,8 @@ def get_event_config() -> dict | None:
             "llab_days": _DEFAULT_LLAB_DAYS,
             "pt_threshold": _DEFAULT_PT_THRESHOLD,
             "llab_threshold": _DEFAULT_LLAB_THRESHOLD,
+            "checkin_window": _DEFAULT_CHECKIN_WINDOW_MINUTES,
+            "waiver_reminder_days": _DEFAULT_WAIVER_REMINDER_DAYS,
         }
 
     config = db.event_config.find_one({})
@@ -25,6 +29,8 @@ def get_event_config() -> dict | None:
                 "llab_days": _DEFAULT_LLAB_DAYS,
                 "pt_threshold": _DEFAULT_PT_THRESHOLD,
                 "llab_threshold": _DEFAULT_LLAB_THRESHOLD,
+                "checkin_window": _DEFAULT_CHECKIN_WINDOW_MINUTES,
+                "waiver_reminder_days": _DEFAULT_WAIVER_REMINDER_DAYS,
             }
         )
         config = db.event_config.find_one({})
@@ -34,6 +40,8 @@ def get_event_config() -> dict | None:
         "llab_days": _DEFAULT_LLAB_DAYS,
         "pt_threshold": _DEFAULT_PT_THRESHOLD,
         "llab_threshold": _DEFAULT_LLAB_THRESHOLD,
+        "checkin_window": _DEFAULT_CHECKIN_WINDOW_MINUTES,
+        "waiver_reminder_days": _DEFAULT_WAIVER_REMINDER_DAYS,
     }
 
 
@@ -42,8 +50,11 @@ def save_event_config(
     llab_days: list[str],
     pt_threshold: int,
     llab_threshold: int,
+    checkin_window: int,
+    waiver_reminder_days: int,
 ) -> bool:
-    """Persist updated PT/LLAB day and threshold selections. Returns True on success."""
+    """Persist updated PT/LLAB day and threshold selections, check-in window minutes, and waiver reminder days.
+    Returns True on success."""
     db = get_db()
     if db is None:
         return False
@@ -55,13 +66,12 @@ def save_event_config(
                 "llab_days": llab_days,
                 "pt_threshold": pt_threshold,
                 "llab_threshold": llab_threshold,
+                "checkin_window": checkin_window,
+                "waiver_reminder_days": waiver_reminder_days,
             }
         },
     )
     return True
-
-
-_DEFAULT_CHECKIN_WINDOW_MINUTES = 10
 
 
 def get_checkin_window_minutes() -> int:
@@ -69,14 +79,21 @@ def get_checkin_window_minutes() -> int:
     config = get_event_config()
     if config is None:
         return _DEFAULT_CHECKIN_WINDOW_MINUTES
-    return config.get("checkin_window_minutes", _DEFAULT_CHECKIN_WINDOW_MINUTES)
+    return config.get("checkin_window", _DEFAULT_CHECKIN_WINDOW_MINUTES)
 
 
 def get_absence_thresholds() -> tuple[int, int]:
     config = get_event_config()
     if config is None:
-        return (9, 2)
+        return (_DEFAULT_PT_THRESHOLD, _DEFAULT_LLAB_THRESHOLD)
     return (
-        config.get("pt_absence_threshold", 9),
-        config.get("llab_absence_threshold", 2),
+        config.get("pt_threshold", _DEFAULT_PT_THRESHOLD),
+        config.get("llab_threshold", _DEFAULT_LLAB_THRESHOLD),
     )
+
+
+def get_waiver_reminder() -> int:
+    config = get_event_config()
+    if config is None:
+        return _DEFAULT_WAIVER_REMINDER_DAYS
+    return config.get("waiver_reminder_days", _DEFAULT_WAIVER_REMINDER_DAYS)
