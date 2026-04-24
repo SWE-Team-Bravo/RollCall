@@ -3,6 +3,7 @@ import logging
 import streamlit as st
 from utils.auth import get_current_user, restore_session
 from utils.theme import apply_theme_overrides
+from scheduler import start_scheduler
 
 st.set_page_config(page_title="RollCall", page_icon="🪖", layout="wide")
 st.sidebar.image("static/logo.svg", width="stretch")
@@ -10,6 +11,8 @@ st.sidebar.image("static/logo.svg", width="stretch")
 apply_theme_overrides()
 
 restore_session()
+
+start_scheduler()
 
 user = get_current_user()
 

@@ -1,3 +1,7 @@
+from unittest.mock import patch
+
+import pytest
+
 from services.attendance import is_already_checked_in, is_within_checkin_window
 from services.event_config import get_checkin_window_minutes
 from datetime import datetime, timedelta, timezone
@@ -56,6 +60,12 @@ def test_returns_false_when_same_cadet_checked_into_different_event_only():
 # ------------------ test is_within_checkin_window -------------------------
 
 
+@pytest.fixture(autouse=True)
+def mock_checkin_window():
+    with patch("services.attendance.CHECKIN_WINDOW_MINUTES", 10):
+        yield
+
+
 def test_returns_true_within_window():
     event = create_event(5)
     assert is_within_checkin_window(event, datetime.now(timezone.utc)) is True
@@ -109,4 +119,5 @@ def test_custom_window_rejects_cadet_outside_smaller_window():
 
 
 def test_get_checkin_window_minutes_returns_10_with_no_db():
-    assert get_checkin_window_minutes() == 10
+    with patch("services.event_config.get_db", return_value=None):
+        assert get_checkin_window_minutes() == 10

@@ -5,8 +5,16 @@ from services.event_config import (
     save_event_config,
     _DEFAULT_PT_THRESHOLD,
     _DEFAULT_LLAB_THRESHOLD,
+    _DEFAULT_WAIVER_REMINDER_DAYS,
+    _DEFAULT_CHECKIN_WINDOW_MINUTES,
 )
-from services.events import create_event, delete_event, get_all_events, get_timezone_options, update_event
+from services.events import (
+    create_event,
+    delete_event,
+    get_all_events,
+    get_timezone_options,
+    update_event,
+)
 from utils.auth import require_role, get_current_user
 
 require_role("admin", "cadre")
@@ -89,8 +97,44 @@ with st.expander("Event Schedule Configuration", expanded=False):
         step=1,
     )
 
+    st.divider()
+
+    checkin_window = st.number_input(
+        "Check-in window (in minutes)",
+        min_value=5,
+        max_value=30,
+        value=config.get("checkin_window", _DEFAULT_CHECKIN_WINDOW_MINUTES),
+        step=5,
+    )
+
+    st.divider()
+
+    waiver_reminder_days = st.number_input(
+        "Waiver Review Reminder Days (for Cadre)",
+        min_value=1,
+        max_value=20,
+        value=config.get("waiver_reminder_days", _DEFAULT_WAIVER_REMINDER_DAYS),
+        step=1,
+    )
+
+    st.divider()
+
+    email_enabled = st.toggle(
+        "Enable Email Notifications",
+        value=config.get("email_enabled", True),
+        key="cfg_email_enabled",
+    )
+
     if st.button("Save Schedule Configuration"):
-        if save_event_config(pt_days, llab_days, pt_threshold, llab_threshold):
+        if save_event_config(
+            pt_days,
+            llab_days,
+            pt_threshold,
+            llab_threshold,
+            checkin_window,
+            waiver_reminder_days,
+            email_enabled,
+        ):
             st.success("Schedule configuration saved!")
             config = get_event_config() or {}
             st.rerun()

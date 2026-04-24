@@ -669,3 +669,36 @@ def test_send_to_student_returns_false_on_exception():
     ):
         result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
         assert result is False
+
+
+def test_send_email_returns_false_when_email_disabled():
+    with patch("utils.at_risk_email.is_email_enabled", return_value=False):
+        result = send_email("test@rollcall.local", MagicMock())
+    assert result is False
+
+
+def test_send_to_cadre_returns_unchanged_counts_when_email_disabled():
+    with patch("utils.at_risk_email.is_email_enabled", return_value=False):
+        sent, failed = send_to_cadre([make_at_risk()], 0, 0)
+    assert sent == 0
+    assert failed == 0
+
+
+def test_send_to_flight_commander_returns_unchanged_counts_when_email_disabled():
+    with patch("utils.at_risk_email.is_email_enabled", return_value=False):
+        sent, failed = send_to_flight_commander([make_at_risk()], 0, 0)
+    assert sent == 0
+    assert failed == 0
+
+
+def test_send_at_risk_emails_returns_zeros_when_email_disabled():
+    with patch("utils.at_risk_email.is_email_enabled", return_value=False):
+        sent, failed = send_at_risk_emails()
+    assert sent == 0
+    assert failed == 0
+
+
+def test_send_to_student_returns_false_when_email_disabled():
+    with patch("utils.at_risk_email.is_email_enabled", return_value=False):
+        result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
+    assert result is False

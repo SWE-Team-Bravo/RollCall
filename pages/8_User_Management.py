@@ -109,6 +109,7 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
             result = update_user(existing_user["_id"], updates)
             if result is not None:
                 st.success("User updated successfully.")
+                st.session_state["admin_users_selected"] = user_id
                 st.session_state["admin_users_editing"] = None
                 st.rerun()
             else:
@@ -132,25 +133,29 @@ def _render_delete_confirmation(
     confirm_btn, cancel_btn = st.columns(2)
 
     if confirm_btn.button("Confirm Delete", key=f"confirm_btn_{summary['id']}"):
-        if not confirm_delete_user(confirmation):
-            st.error("Confirmation text does not match 'DELETE'.")
-            return
+        if confirm_btn.button("Confirm Delete", key=f"confirm_btn_{summary['id']}"):
+            if not confirm_delete_user(confirmation):
+                st.error("Confirmation text does not match 'DELETE'.")
+                return
 
-        # Fetch the latest user doc and delete it from the provided list
-        existing_user = next(
-            (u for u in users if str(u.get("_id")) == summary["id"]), None
-        )
-        if existing_user is None:
-            st.error("User no longer exists.")
-        else:
-            result = delete_user(existing_user["_id"])
-            if result is not None:
-                st.session_state["admin_users_success"] = "User deleted successfully."
+            # Fetch the latest user doc and delete it from the provided list
+            existing_user = next(
+                (u for u in users if str(u.get("_id")) == summary["id"]), None
+            )
+            if existing_user is None:
+                st.error("User no longer exists.")
             else:
-                st.error("Failed to delete user (database unavailable).")
+                result = delete_user(existing_user["_id"])
+                if result is not None:
+                    st.session_state["admin_users_success"] = (
+                        "User deleted successfully."
+                    )
+                    st.session_state.pop("admin_users_selected", None)
+                else:
+                    st.error("Failed to delete user (database unavailable).")
 
-        st.session_state["admin_users_confirm_delete"] = None
-        st.rerun()
+            st.session_state["admin_users_confirm_delete"] = None
+            st.rerun()
 
     if cancel_btn.button("Cancel", key=f"cancel_delete_{summary['id']}"):
         st.session_state["admin_users_confirm_delete"] = None
@@ -304,6 +309,7 @@ else:
             format_func=_label,
             key="admin_users_selected",
         )
+        st.session_state.admin_users_selected = selected_id
 
         b1, b2, _ = st.columns([2, 2, 10])
         with b1:
