@@ -1,4 +1,3 @@
-import re
 from bson import ObjectId
 import secrets
 
@@ -14,6 +13,22 @@ from utils.db_schema_crud import (
     get_all_cadets,
 )
 from utils.names import format_full_name
+from utils.validators import is_valid_email, is_valid_name
+
+RANK_OPTIONS = ("100", "150", "200", "250", "300", "400", "500", "700", "800", "900")
+
+RANK_TO_LEVEL = {
+    "100": "freshman",
+    "150": "freshman",
+    "200": "sophomore",
+    "250": "sophomore",
+    "300": "junior",
+    "400": "senior",
+    "500": "sophomore",
+    "700": "super senior",
+    "800": "super senior",
+    "900": "super senior",
+}
 
 CLASS_TO_RANK = {
     "AS100": "100/150 (freshman)",
@@ -70,21 +85,19 @@ def build_cadet_display_map() -> dict[str, str]:
 def validate_cadet_input(
     first_name: str, last_name: str, email: str
 ) -> tuple[bool, str]:
-    names_pattern = r"[A-Za-z'-]+(?: [A-Za-z'-]+)*"
-    email_pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
     if not first_name or not last_name or not email:
         return False, "Please fill all the fields!"
-    if not re.fullmatch(names_pattern, first_name):
+    if not is_valid_name(first_name):
         return (
             False,
             "Please enter a valid first name! First name can only contain letters, apostrophes, and hyphens.",
         )
-    if not re.fullmatch(names_pattern, last_name):
+    if not is_valid_name(last_name):
         return (
             False,
             "Please enter a valid last name! Last name can only contain letters, apostrophes, and hyphens.",
         )
-    if not re.fullmatch(email_pattern, email):
+    if not is_valid_email(email):
         return False, "Please enter a valid email!"
     return True, ""
 
@@ -93,7 +106,13 @@ def add_cadet_for_user(email: str, rank: str, first_name: str, last_name: str) -
     user = get_user_by_email(email)
     if user is None:
         return False
-    create_cadet(user["_id"], rank, first_name, last_name, email)
+    create_cadet(
+        user["_id"],
+        rank,
+        first_name,
+        last_name,
+        email,
+    )
     return True
 
 
@@ -101,16 +120,25 @@ def get_cadet_export_df() -> pd.DataFrame | str:
     cadets = get_all_cadets()
     if not cadets:
         return "No cadets found."
-    return pd.DataFrame(
-        [
+
+    rows = []
+    for cadet in cadets:
+        user_id = cadet.get("user_id")
+        user = get_user_by_id(user_id) if user_id is not None else None
+        source = user or cadet
+        rows.append(
             {
-                "First Name": c.get("first_name", ""),
-                "Last Name": c.get("last_name", ""),
-                "Email": c.get("email", ""),
-                "Rank": c.get("rank", ""),
+                "First Name": source.get("first_name", ""),
+                "Last Name": source.get("last_name", ""),
+                "Email": source.get("email", ""),
+                "Rank": cadet.get("rank", ""),
+                "Level": (RANK_TO_LEVEL.get(str(cadet.get("rank")), "")).capitalize(),
             }
-            for c in cadets
-        ]
+        )
+
+    return pd.DataFrame(
+        rows,
+        columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank", "Level"]),
     )
 
 
@@ -119,7 +147,6 @@ def parse_roster_xlsx(file) -> tuple[list[dict], list[str]]:
         df = pd.read_excel(file, sheet_name="Roster", header=2)
     except Exception as e:
         return [], [f"Failed to read Excel file: {e}"]
-    email_pattern = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
     cadets = []
     errors = []
     for _, row in df.iterrows():
@@ -137,7 +164,7 @@ def parse_roster_xlsx(file) -> tuple[list[dict], list[str]]:
             if kent_email and kent_email.lower() != "nan"
             else crosstown_email
         )
-        if not email or email.lower() == "nan" or not email_pattern.match(email):
+        if not email or email.lower() == "nan" or not is_valid_email(email):
             errors.append(f"{first_name} {last_name}: no valid email, skipping.")
             continue
         rank = CLASS_TO_RANK.get(class_level, "100/150 (freshman)")

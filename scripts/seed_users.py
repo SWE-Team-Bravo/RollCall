@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from utils.create_indexes import create_indexes
 from utils.db import get_db
+from services.cadets import RANK_TO_LEVEL
 
 
 def _hash(plain: str) -> str:
@@ -45,18 +46,18 @@ USERS = [
 ]
 
 CADET_RANKS = {
-    "fc1": 300,
-    "fc2": 300,
-    "cadet1": 200,
-    "cadet2": 200,
-    "cadet3": 100,
-    "cadet4": 100,
-    "cadet5": 200,
-    "cadet6": 300,
-    "cadet7": 100,
-    "cadet8": 400,
-    "cadet9": 200,
-    "cadet10": 100,
+    "fc1": "300",
+    "fc2": "300",
+    "cadet1": "200",
+    "cadet2": "200",
+    "cadet3": "100",
+    "cadet4": "100",
+    "cadet5": "200",
+    "cadet6": "300",
+    "cadet7": "100",
+    "cadet8": "400",
+    "cadet9": "200",
+    "cadet10": "100",
 }
 
 FLIGHTS = [
@@ -164,6 +165,7 @@ def populate():
             {
                 "user_id": user_id_by_username[username],
                 "rank": rank,
+                "level": RANK_TO_LEVEL[rank],
                 "first_name": first,
                 "last_name": last,
                 "email": email,

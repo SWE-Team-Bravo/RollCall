@@ -106,6 +106,19 @@ def create_indexes() -> None:
                 [("source", ASCENDING), ("created_at", ASCENDING)],
                 name="source_created_at",
             ),
+            IndexModel(
+                [("source", ASCENDING), ("event_id", ASCENDING), ("created_at", ASCENDING)],
+                name="source_event_created_at",
+            ),
+            IndexModel(
+                [
+                    ("source", ASCENDING),
+                    ("event_id", ASCENDING),
+                    ("cadet_id", ASCENDING),
+                    ("created_at", ASCENDING),
+                ],
+                name="source_event_cadet_created_at",
+            ),
         ]
     )
 

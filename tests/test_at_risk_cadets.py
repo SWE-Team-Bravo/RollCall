@@ -12,17 +12,32 @@ from services.at_risk_cadets import (
 )
 
 CADET_A = {
-    "cadet": {"_id": "1", "first_name": "Tyler", "last_name": "Brooks"},
+    "cadet": {
+        "_id": "1",
+        "user_id": "u1",
+        "first_name": "(stale)",
+        "last_name": "(stale)",
+    },
     "pt_absences": 9,
     "llab_absences": 0,
 }
 CADET_B = {
-    "cadet": {"_id": "2", "first_name": "Nicole", "last_name": "Kim"},
+    "cadet": {
+        "_id": "2",
+        "user_id": "u2",
+        "first_name": "(stale)",
+        "last_name": "(stale)",
+    },
     "pt_absences": 0,
     "llab_absences": 2,
 }
 CADET_C = {
-    "cadet": {"_id": "3", "first_name": "Ashley", "last_name": "Foster"},
+    "cadet": {
+        "_id": "3",
+        "user_id": "u3",
+        "first_name": "(stale)",
+        "last_name": "(stale)",
+    },
     "pt_absences": 5,
     "llab_absences": 1,
 }
@@ -59,7 +74,7 @@ def test_filter_cadets_single():
     with patch("services.at_risk_cadets.get_at_risk_cadets", return_value=[CADET_A]):
         result = filter_cadets()
         assert len(result) == 1
-        assert result[0]["cadet"]["first_name"] == "Tyler"
+        assert result[0]["pt_absences"] == 9
 
 
 # ----------------------- get_df ----------------------------------
@@ -110,7 +125,13 @@ def test_get_df_numbering_starts_at_one():
 
 
 def test_get_df_contains_cadet_name():
-    with patch("services.at_risk_cadets.get_at_risk_cadets", return_value=[CADET_A]):
+    with (
+        patch("services.at_risk_cadets.get_at_risk_cadets", return_value=[CADET_A]),
+        patch(
+            "services.at_risk_cadets.get_user_by_id",
+            return_value={"_id": "u1", "first_name": "Tyler", "last_name": "Brooks"},
+        ),
+    ):
         result = get_df()
         assert isinstance(result, pd.DataFrame)
         assert result["First Name"].iloc[0] == "Tyler"

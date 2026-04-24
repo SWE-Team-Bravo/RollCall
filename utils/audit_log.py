@@ -61,3 +61,40 @@ def log_checkin_attempt(
         doc["metadata"] = dict(metadata)
 
     return col.insert_one(doc)
+
+
+def log_attendance_modification(
+    *,
+    event_id: str | ObjectId,
+    cadet_id: str | ObjectId,
+    user_id: str | ObjectId,
+    outcome: str,
+    old_status: str | None,
+    new_status: str | None,
+    source: str = "attendance_modification",
+    now: datetime | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> InsertOneResult | None:
+    """Write an attendance modification audit entry."""
+
+    col = get_collection("audit_log")
+    if col is None:
+        return None
+
+    doc: dict[str, Any] = {
+        "created_at": now or _utcnow(),
+        "event_id": ObjectId(event_id),
+        "cadet_id": ObjectId(cadet_id),
+        "user_id": ObjectId(user_id),
+        "outcome": str(outcome),
+        "source": str(source),
+        "metadata": {
+            "old_status": old_status,
+            "new_status": new_status,
+        },
+    }
+
+    if metadata:
+        doc["metadata"].update(dict(metadata))
+
+    return col.insert_one(doc)

@@ -5,8 +5,16 @@ from services.event_config import (
     save_event_config,
     _DEFAULT_PT_THRESHOLD,
     _DEFAULT_LLAB_THRESHOLD,
+    _DEFAULT_WAIVER_REMINDER_DAYS,
+    _DEFAULT_CHECKIN_WINDOW_MINUTES,
 )
-from services.events import get_all_events, create_event, delete_event
+from services.events import (
+    create_event,
+    delete_event,
+    get_all_events,
+    get_timezone_options,
+    update_event,
+)
 from utils.auth import require_role, get_current_user
 
 require_role("admin", "cadre")
@@ -15,6 +23,12 @@ if "confirm_delete_event_id" not in st.session_state:
     st.session_state.confirm_delete_event_id = None
 if "create_event_success" not in st.session_state:
     st.session_state.create_event_success = None
+if "delete_event_success" not in st.session_state:
+    st.session_state.delete_event_success = None
+if "edit_event_id" not in st.session_state:
+    st.session_state.edit_event_id = None
+if "edit_event_success" not in st.session_state:
+    st.session_state.edit_event_success = None
 
 st.title("Event Management")
 
@@ -32,7 +46,7 @@ DAYS_OF_WEEK = [
 
 
 def infer_event_type(selected_date: date, config: dict) -> str:
-    """Return PT, LLAB, or empty string based on the saved schedule config."""
+    """Return pt or lab based on the saved schedule config."""
     day_name = selected_date.strftime("%A")
     if day_name in config.get("pt_days", []):
         return "pt"
@@ -83,10 +97,46 @@ with st.expander("Event Schedule Configuration", expanded=False):
         step=1,
     )
 
+    st.divider()
+
+    checkin_window = st.number_input(
+        "Check-in window (in minutes)",
+        min_value=5,
+        max_value=30,
+        value=config.get("checkin_window", _DEFAULT_CHECKIN_WINDOW_MINUTES),
+        step=5,
+    )
+
+    st.divider()
+
+    waiver_reminder_days = st.number_input(
+        "Waiver Review Reminder Days (for Cadre)",
+        min_value=1,
+        max_value=20,
+        value=config.get("waiver_reminder_days", _DEFAULT_WAIVER_REMINDER_DAYS),
+        step=1,
+    )
+
+    st.divider()
+
+    email_enabled = st.toggle(
+        "Enable Email Notifications",
+        value=config.get("email_enabled", True),
+        key="cfg_email_enabled",
+    )
+
     if st.button("Save Schedule Configuration"):
-        if save_event_config(pt_days, llab_days, pt_threshold, llab_threshold):
+        if save_event_config(
+            pt_days,
+            llab_days,
+            pt_threshold,
+            llab_threshold,
+            checkin_window,
+            waiver_reminder_days,
+            email_enabled,
+        ):
             st.success("Schedule configuration saved!")
-            config = get_event_config() or {}  # refresh so create form picks it up
+            config = get_event_config() or {}
             st.rerun()
         else:
             st.error("Database unavailable — could not save configuration.")
@@ -99,13 +149,18 @@ st.divider()
 
 st.subheader("Create New Event")
 
+TZ_OPTIONS = get_timezone_options()
+
 with st.form("create_event_form"):
     event_name = st.text_input("Event Name", placeholder="e.g. Week 3 PT")
 
     start_date = st.date_input("Start Date", value=date.today())
     end_date = st.date_input("End Date", value=date.today())
+    tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=0)
+    st.caption(
+        "Dates are stored as 12:00 AM through 11:59 PM in the selected timezone."
+    )
 
-    # Auto-populate type from schedule config based on start date
     auto_type = infer_event_type(start_date, config)
     type_options = ["pt", "lab"]
     default_index = type_options.index(auto_type) if auto_type in type_options else 0
@@ -127,7 +182,14 @@ if submitted:
     else:
         user = get_current_user()
         user_id = user.get("email", "unknown") if user else "unknown"
-        if create_event(event_name.strip(), event_type, start_date, end_date, user_id):
+        if create_event(
+            event_name.strip(),
+            event_type,
+            start_date,
+            end_date,
+            user_id,
+            tz_name,
+        ):
             st.session_state.create_event_success = (
                 f"Event '{event_name.strip()}' created successfully!"
             )
@@ -138,21 +200,27 @@ if submitted:
 if st.session_state.create_event_success:
     st.success(st.session_state.create_event_success)
     st.session_state.create_event_success = None
+if st.session_state.delete_event_success:
+    st.success(st.session_state.delete_event_success)
+    st.session_state.delete_event_success = None
+if st.session_state.edit_event_success:
+    st.success(st.session_state.edit_event_success)
+    st.session_state.edit_event_success = None
 
 st.divider()
 
 # =============================================================================
-# SECTION 3 — Existing Events (table view + delete)
+# SECTION 3 — Existing Events (table view + edit + delete)
 # =============================================================================
 
 st.subheader("Existing Events")
+st.caption("Start Date and End Date in the table below are shown in UTC.")
 
 events = get_all_events()
 
 if not events:
     st.info("No events found. Create one above.")
 else:
-    # Build display table
     import pandas as pd
 
     df = pd.DataFrame(
@@ -169,8 +237,81 @@ else:
 
     st.dataframe(df, width="stretch", hide_index=True)
 
-    # Delete section below the table
-    st.markdown("**Delete an Event**")
+    # ── Edit section ─────────────────────────────────────────────────────────
+    st.subheader("Edit an Event")
+    edit_labels = [
+        f"{e.get('start_date', '—')} — {e.get('event_name', '—')}" for e in events
+    ]
+    selected_edit_label = st.selectbox("Select event to edit", edit_labels, key="edit_selectbox")
+    selected_edit_event = events[edit_labels.index(selected_edit_label)]
+
+    if st.button("Edit Selected Event"):
+        st.session_state.edit_event_id = selected_edit_event["_id"]
+        st.rerun()
+
+    if st.session_state.edit_event_id == selected_edit_event["_id"]:
+        with st.form("edit_event_form"):
+            st.markdown(f"**Editing:** {selected_edit_event.get('event_name', '')}")
+
+            new_name = st.text_input(
+                "Event Name",
+                value=selected_edit_event.get("event_name", ""),
+            )
+
+            existing_start = selected_edit_event.get("start_date", "")
+            existing_end = selected_edit_event.get("end_date", "")
+            try:
+                parsed_start = date.fromisoformat(str(existing_start)[:10])
+            except ValueError:
+                parsed_start = date.today()
+            try:
+                parsed_end = date.fromisoformat(str(existing_end)[:10])
+            except ValueError:
+                parsed_end = date.today()
+
+            new_start = st.date_input("Start Date", value=parsed_start, key="edit_start")
+            new_end = st.date_input("End Date", value=parsed_end, key="edit_end")
+
+            existing_tz = selected_edit_event.get("timezone_name", "UTC")
+            tz_index = TZ_OPTIONS.index(existing_tz) if existing_tz in TZ_OPTIONS else 0
+            new_tz = st.selectbox("Timezone", TZ_OPTIONS, index=tz_index, key="edit_tz")
+
+            existing_type = selected_edit_event.get("event_type", "pt")
+            type_options = ["pt", "lab"]
+            type_index = type_options.index(existing_type) if existing_type in type_options else 0
+            new_type = st.selectbox("Event Type", type_options, index=type_index, key="edit_type")
+
+            c1, c2 = st.columns(2)
+            save = c1.form_submit_button("Save Changes", type="primary")
+            cancel = c2.form_submit_button("Cancel")
+
+        if save:
+            if not new_name.strip():
+                st.error("Event name cannot be empty.")
+            elif new_end < new_start:
+                st.error("End date cannot be before start date.")
+            else:
+                if update_event(
+                    selected_edit_event["_id"],
+                    new_name.strip(),
+                    new_type,
+                    new_start,
+                    new_end,
+                    new_tz,
+                ):
+                    st.session_state.edit_event_id = None
+                    st.session_state.edit_event_success = f"Event '{new_name.strip()}' updated successfully!"
+                    st.rerun()
+                else:
+                    st.error("Could not update event.")
+        if cancel:
+            st.session_state.edit_event_id = None
+            st.rerun()
+
+    st.divider()
+
+    # ── Delete section ────────────────────────────────────────────────────────
+    st.subheader("Delete an Event")
     event_labels = [
         f"{e.get('start_date', '—')} — {e.get('event_name', '—')}" for e in events
     ]
@@ -185,7 +326,7 @@ else:
         if c1.button("Yes, delete", type="primary"):
             if delete_event(selected_event["_id"]):
                 st.session_state.confirm_delete_event_id = None
-                st.success("Event deleted.")
+                st.session_state.delete_event_success = "Event deleted successfully."
                 st.rerun()
             else:
                 st.error("Could not delete event.")

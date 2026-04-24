@@ -8,11 +8,20 @@ import pandas as pd
 from utils.auth import require_role
 from utils.db import get_collection
 from utils.db_schema_crud import create_user, update_user
+from utils.db_schema_crud import create_user, update_user, delete_user
+from utils.password_reset import build_password_updates
+from utils.password_reset_email import send_temporary_password_email
 from services.admin_users import (
     list_users_for_admin,
     validate_new_user_data,
     build_update_user_payload,
     ALLOWED_ROLES,
+)
+from utils.pagination import (
+    init_pagination_state,
+    paginate_list,
+    render_pagination_controls,
+    sync_pagination_state,
 )
 
 
@@ -102,6 +111,7 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
             result = update_user(existing_user["_id"], updates)
             if result is not None:
                 st.success("User updated successfully.")
+                st.session_state["admin_users_selected"] = user_id
                 st.session_state["admin_users_editing"] = None
                 st.rerun()
             else:
@@ -114,6 +124,56 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
 
 st.title("User Management")
 st.caption("Create, edit, and disable user accounts and roles.")
+def _render_delete_confirmation(
+    summary: dict[str, str], users: list[dict[str, Any]]
+) -> None:
+    st.warning(
+        f"Type DELETE below to permanently delete user {summary['email']}.",
+    )
+    confirmation = st.text_input(
+        "Confirm delete",
+        key=f"confirm_input_{summary['id']}",
+    )
+    confirm_btn, cancel_btn = st.columns(2)
+
+    if confirm_btn.button("Confirm Delete", key=f"confirm_btn_{summary['id']}"):
+        if confirm_btn.button("Confirm Delete", key=f"confirm_btn_{summary['id']}"):
+            if not confirm_delete_user(confirmation):
+                st.error("Confirmation text does not match 'DELETE'.")
+                return
+
+            # Fetch the latest user doc and delete it from the provided list
+            existing_user = next(
+                (u for u in users if str(u.get("_id")) == summary["id"]), None
+            )
+            if existing_user is None:
+                st.error("User no longer exists.")
+            else:
+                result = delete_user(existing_user["_id"])
+                if result is not None:
+                    st.session_state["admin_users_success"] = (
+                        "User deleted successfully."
+                    )
+                    st.session_state.pop("admin_users_selected", None)
+                else:
+                    st.error("Failed to delete user (database unavailable).")
+
+            st.session_state["admin_users_confirm_delete"] = None
+            st.rerun()
+
+    if cancel_btn.button("Cancel", key=f"cancel_delete_{summary['id']}"):
+        st.session_state["admin_users_confirm_delete"] = None
+        st.rerun()
+
+
+st.title("User Management")
+st.caption("Create, edit, and delete user accounts and roles.")
+if "admin_users_success" not in st.session_state:
+    st.session_state["admin_users_success"] = None
+
+if st.session_state["admin_users_success"]:
+    st.success(st.session_state["admin_users_success"])
+    st.session_state["admin_users_success"] = None
 
 
 # ----------------------------
@@ -178,6 +238,12 @@ else:
 
     if "admin_users_editing" not in st.session_state:
         st.session_state["admin_users_editing"] = None
+    if "admin_users_confirm_delete" not in st.session_state:
+        st.session_state["admin_users_confirm_delete"] = None
+    if "admin_users_reset_pw" not in st.session_state:
+        st.session_state["admin_users_reset_pw"] = None
+    if "admin_users_last_temp_pw" not in st.session_state:
+        st.session_state["admin_users_last_temp_pw"] = None
     if "admin_users_selected" not in st.session_state:
         st.session_state["admin_users_selected"] = (
             summaries[0]["id"] if summaries else None
@@ -217,6 +283,18 @@ else:
     if not filtered:
         st.info("No users match your filters.")
     else:
+        users_page, users_page_size = init_pagination_state(
+            "admin_users",
+            reset_token=f"{role_filter}|{search_norm}",
+        )
+        paginated_filtered = paginate_list(
+            filtered,
+            page=users_page,
+            page_size=users_page_size,
+        )
+        sync_pagination_state("admin_users", paginated_filtered)
+        page_filtered = list(paginated_filtered["items"])
+
         df = pd.DataFrame(
             [
                 {
@@ -229,15 +307,16 @@ else:
                     "Role": s.get("role", "") or "-",
                     "Status": "Disabled" if s.get("disabled", False) else "Active",
                 }
-                for s in filtered
+                for s in page_filtered
             ],
             columns=pd.Index(["Name", "Email", "Role", "Status"]),
         )
         st.dataframe(df, hide_index=True, width="stretch")
+        render_pagination_controls("admin_users", paginated_filtered)
 
-        filtered_ids = [s["id"] for s in filtered]
-        if st.session_state.admin_users_selected not in filtered_ids:
-            st.session_state.admin_users_selected = filtered_ids[0]
+        page_filtered_ids = [s["id"] for s in page_filtered]
+        if st.session_state.admin_users_selected not in page_filtered_ids:
+            st.session_state.admin_users_selected = page_filtered_ids[0]
 
         def _label(user_id: str) -> str:
             s = summary_by_id.get(user_id, {})
@@ -247,15 +326,18 @@ else:
 
         selected_id = st.selectbox(
             "Select user",
-            options=filtered_ids,
+            options=page_filtered_ids,
             format_func=_label,
             key="admin_users_selected",
         )
+        st.session_state.admin_users_selected = selected_id
 
-        b1, b2, _ = st.columns([2, 2, 10])
+        b1, b2, b3, _ = st.columns([2, 2, 3, 7])
         with b1:
             if st.button("Edit", key="admin_users_edit_selected"):
                 st.session_state["admin_users_editing"] = selected_id
+                st.session_state["admin_users_confirm_delete"] = None
+                st.session_state["admin_users_reset_pw"] = None
                 st.rerun()
         with b2:
             target_summary = summary_by_id.get(selected_id, {})
@@ -278,9 +360,88 @@ else:
                     else:
                         st.error("Failed to update user status (database unavailable).")
                 st.session_state["admin_users_editing"] = None
+                st.session_state["admin_users_reset_pw"] = None
+                st.rerun()
+        with b3:
+            if st.button("Reset Password", key="admin_users_reset_selected"):
+                st.session_state["admin_users_reset_pw"] = selected_id
+                st.session_state["admin_users_editing"] = None
+                st.session_state["admin_users_confirm_delete"] = None
+                st.session_state["admin_users_last_temp_pw"] = None
                 st.rerun()
 
     editing_id = st.session_state.get("admin_users_editing")
     if editing_id and editing_id in summary_by_id:
         st.divider()
         _render_edit_row(summary_by_id[editing_id], raw_users)
+    confirm_id = st.session_state.get("admin_users_confirm_delete")
+    reset_id = st.session_state.get("admin_users_reset_pw")
+
+    if editing_id and editing_id in summary_by_id:
+        st.divider()
+        _render_edit_row(summary_by_id[editing_id], raw_users)
+
+    if confirm_id and confirm_id in summary_by_id:
+        st.divider()
+        _render_delete_confirmation(summary_by_id[confirm_id], raw_users)
+
+    if reset_id and reset_id in summary_by_id:
+        st.divider()
+        summary = summary_by_id[reset_id]
+        st.subheader("Reset Password")
+        st.warning(
+            f"This will reset the password for {summary.get('email', '')}.",
+        )
+
+        email_user = st.checkbox(
+            "Email the temporary password to the user",
+            value=True,
+            key=f"reset_pw_email_{reset_id}",
+        )
+
+        c1, c2, c3 = st.columns([2, 2, 8])
+        with c1:
+            if st.button(
+                "Confirm Reset", type="primary", key=f"reset_pw_confirm_{reset_id}"
+            ):
+                existing_user = next(
+                    (u for u in raw_users if str(u.get("_id")) == reset_id), None
+                )
+                if existing_user is None:
+                    st.error("User no longer exists.")
+                else:
+                    updates, temp_pw = build_password_updates()
+                    result = update_user(existing_user["_id"], updates)
+                    if result is None:
+                        st.error("Failed to reset password (database unavailable).")
+                    else:
+                        st.session_state["admin_users_last_temp_pw"] = temp_pw
+                        st.success("Password reset successfully.")
+
+                        if email_user:
+                            to_email = str(existing_user.get("email", "") or "").strip()
+                            if not to_email:
+                                st.warning(
+                                    "User has no email address on file; cannot send email."
+                                )
+                            else:
+                                sent = send_temporary_password_email(
+                                    to_email=to_email, temporary_password=temp_pw
+                                )
+                                if sent:
+                                    st.success("Temporary password emailed to user.")
+                                else:
+                                    st.warning(
+                                        "Email not sent. If you expect email to work, set EMAIL_ADDRESS and EMAIL_APP_PASSWORD and restart Streamlit."
+                                    )
+
+        with c2:
+            if st.button("Cancel", key=f"reset_pw_cancel_{reset_id}"):
+                st.session_state["admin_users_reset_pw"] = None
+                st.session_state["admin_users_last_temp_pw"] = None
+                st.rerun()
+
+        last_pw = st.session_state.get("admin_users_last_temp_pw")
+        if last_pw:
+            st.info("Temporary password (shown once):")
+            st.code(last_pw)

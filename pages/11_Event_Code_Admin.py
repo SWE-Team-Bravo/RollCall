@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
-from zoneinfo import ZoneInfo, available_timezones
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from services.attendance import CHECKIN_WINDOW_MINUTES
 from services.event_code_display import (
     build_code_panel_html,
     build_fullscreen_code_html,
@@ -18,7 +17,12 @@ from services.event_codes import (
     is_expiry_valid,
     latest_allowed_expiry,
 )
-from services.events import closest_event_index, get_all_events
+from services.events import (
+    closest_event_index,
+    get_all_events,
+    get_event_time_bounds,
+    get_timezone_options,
+)
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 
@@ -43,18 +47,7 @@ if not all_events:
     st.info("No events found. Create events in Event Management first.")
     st.stop()
 
-_PREFERRED = [
-    "America/New_York",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "America/Anchorage",
-    "Pacific/Honolulu",
-    "UTC",
-]
-TZ_OPTIONS = _PREFERRED + [
-    tz for tz in sorted(available_timezones()) if tz not in _PREFERRED
-]
+TZ_OPTIONS = get_timezone_options()
 
 col_event, col_tz = st.columns([2, 1])
 
@@ -71,21 +64,27 @@ with col_event:
 with col_tz:
     tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=0)
 
-selected_event_start = selected_event.get("start_date")
-max_expires_at = (
-    latest_allowed_expiry(selected_event_start)
-    if isinstance(selected_event_start, datetime)
-    else None
+selected_event_start, selected_event_end = get_event_time_bounds(
+    selected_event,
+    fallback_tz_name=tz_name,
 )
+max_expires_at = latest_allowed_expiry(selected_event_end)
 if max_expires_at is not None:
-    local_event_start = max_expires_at.astimezone(ZoneInfo(tz_name))
+    local_event_end = max_expires_at.astimezone(ZoneInfo(tz_name))
     st.caption(
-        "Codes must expire no later than the event start time "
-        f"({CHECKIN_WINDOW_MINUTES}-minute check-in window)."
+        "Codes must expire no later than the event end time."
     )
-    st.caption(
-        f"Selected event starts at {local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')}"
-    )
+    if selected_event_start is not None:
+        local_event_start = selected_event_start.astimezone(ZoneInfo(tz_name))
+        st.caption(
+            "Selected event runs "
+            f"{local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')} to "
+            f"{local_event_end.strftime('%Y-%m-%d %I:%M %p %Z')}"
+        )
+    else:
+        st.caption(
+            f"Selected event ends at {local_event_end.strftime('%Y-%m-%d %I:%M %p %Z')}"
+        )
 
 col_date, col_time = st.columns(2)
 
@@ -104,7 +103,7 @@ if st.button("Generate New Code", type="primary", width="stretch"):
         elif max_expires_at is not None:
             local_limit = max_expires_at.astimezone(ZoneInfo(tz_name))
             st.error(
-                "Expiration must be no later than the event start time: "
+                "Expiration must be no later than the event end time: "
                 f"{local_limit.strftime('%Y-%m-%d %I:%M %p %Z')}."
             )
         else:
