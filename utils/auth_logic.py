@@ -12,6 +12,10 @@ def build_credentials_from_docs(
     for doc in docs:
         email = doc["email"]
         raw["usernames"][email.lower()] = doc
+        if bool(doc.get("disabled", False)):
+            # Keep the user in raw lookup for admin views/history, but do not
+            # add credentials so disabled accounts cannot log in.
+            continue
         credentials["usernames"][email.lower()] = {
             "email": email,
             "name": f"{doc['first_name']} {doc['last_name']}".strip(),

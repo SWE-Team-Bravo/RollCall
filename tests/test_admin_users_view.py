@@ -196,6 +196,17 @@ def test_summarize_user_waiver_reviewer_false_when_absent():
     assert summary["waiver_reviewer"] is False
 
 
+def test_summarize_user_exposes_disabled_flag():
+    user_doc = {
+        "_id": "u3",
+        "email": "disabled@rollcall.local",
+        "roles": ["cadet"],
+        "disabled": True,
+    }
+    summary = summarize_user(user_doc)
+    assert summary["disabled"] is True
+
+
 def test_build_update_user_payload_adds_waiver_reviewer():
     existing_user = {
         "_id": "u1",

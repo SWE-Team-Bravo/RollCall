@@ -135,3 +135,15 @@ def test_no_overlap_returns_false():
 def test_user_with_multiple_roles_one_matches():
     user = {"roles": ["cadet", "admin"]}
     assert user_has_any_role(user, ("admin",)) is True
+
+
+def test_disabled_users_excluded_from_credentials():
+    active = _doc("active@example.com")
+    disabled = _doc("disabled@example.com")
+    disabled["disabled"] = True
+
+    credentials, raw = build_credentials_from_docs([active, disabled])
+
+    assert "active@example.com" in credentials["usernames"]
+    assert "disabled@example.com" not in credentials["usernames"]
+    assert "disabled@example.com" in raw["usernames"]

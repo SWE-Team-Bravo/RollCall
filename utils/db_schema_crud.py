@@ -26,6 +26,7 @@ def create_user(
             "email": email,
             "password_hash": hash_password(password),
             "roles": roles,
+            "disabled": False,
             "created_at": datetime.now(timezone.utc),
         }
     )
