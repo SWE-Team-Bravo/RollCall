@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from math import ceil
 from typing import Any
 from uuid import uuid4
 
@@ -26,6 +25,7 @@ from utils.db_schema_crud import (
 )
 from utils.datetime_utils import ensure_utc
 from utils.names import format_full_name
+from utils.pagination import build_pagination_metadata, paginate_list
 
 
 _AUDIT_SOURCE = "attendance_modification"
@@ -159,6 +159,26 @@ def _latest_visible_event_change_docs(event_id: str | ObjectId) -> list[dict[str
         seen_cadet_ids.add(cadet_id)
         visible_docs.append(doc)
     return visible_docs
+
+
+def _latest_visible_event_change_pipeline(event_id: str | ObjectId) -> list[dict[str, Any]]:
+    return [
+        {
+            "$match": {
+                "source": _AUDIT_SOURCE,
+                "event_id": ObjectId(event_id),
+            }
+        },
+        {"$sort": {"created_at": -1, "_id": -1}},
+        {
+            "$group": {
+                "_id": "$cadet_id",
+                "doc": {"$first": "$$ROOT"},
+            }
+        },
+        {"$replaceRoot": {"newRoot": "$doc"}},
+        {"$sort": {"created_at": -1, "_id": -1}},
+    ]
 
 
 def _hydrate_changes(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -297,25 +317,53 @@ def get_event_change_history(
     page: int = 1,
     page_size: int = 10,
 ) -> dict[str, Any]:
-    visible_docs = _latest_visible_event_change_docs(event_id)
-    total_count = len(visible_docs)
-    total_pages = max(1, ceil(total_count / page_size)) if page_size > 0 else 1
-    page = min(max(page, 1), total_pages)
-    start = (page - 1) * page_size
+    col = get_collection("audit_log")
+    docs: list[dict[str, Any]] = []
 
-    docs = visible_docs[start : start + page_size]
+    if col is not None and hasattr(col, "aggregate"):
+        base_pipeline = _latest_visible_event_change_pipeline(event_id)
+        count_docs = list(col.aggregate(base_pipeline + [{"$count": "total_count"}]))
+        total_count = int(count_docs[0]["total_count"]) if count_docs else 0
+        pagination = build_pagination_metadata(
+            page=page,
+            page_size=page_size,
+            total_count=total_count,
+        )
+        docs = list(
+            col.aggregate(
+                base_pipeline
+                + [
+                    {"$skip": pagination["skip"]},
+                    {"$limit": pagination["page_size"]},
+                ]
+            )
+        )
+    else:
+        paginated = paginate_list(
+            _latest_visible_event_change_docs(event_id),
+            page=page,
+            page_size=page_size,
+        )
+        pagination = {
+            key: paginated[key]
+            for key in ("page", "page_size", "total_count", "total_pages", "skip")
+        }
+        docs = list(paginated["items"])
+
     items = _hydrate_changes(docs)
     for doc, item in zip(docs, items):
-        latest_doc = _latest_pair_history_doc(doc["event_id"], doc["cadet_id"])
+        latest_doc = doc if col is not None and hasattr(col, "aggregate") else _latest_pair_history_doc(
+            doc["event_id"], doc["cadet_id"]
+        )
         if latest_doc is not None:
             item.update(_selected_action_state(doc, latest_doc))
 
     return {
         "items": items,
-        "page": page,
-        "page_size": page_size,
-        "total_count": total_count,
-        "total_pages": total_pages,
+        "page": pagination["page"],
+        "page_size": pagination["page_size"],
+        "total_count": pagination["total_count"],
+        "total_pages": pagination["total_pages"],
     }
 
 
