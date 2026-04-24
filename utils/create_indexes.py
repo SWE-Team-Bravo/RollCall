@@ -11,6 +11,7 @@ def create_indexes() -> None:
     db["users"].create_indexes(
         [
             IndexModel([("email", ASCENDING)], name="email_unique", unique=True),
+            IndexModel([("disabled", ASCENDING)], name="disabled"),
         ]
     )
 
@@ -24,6 +25,7 @@ def create_indexes() -> None:
     db["events"].create_indexes(
         [
             IndexModel([("event_type", ASCENDING)], name="event_type"),
+            IndexModel([("archived", ASCENDING)], name="archived"),
             IndexModel([("created_by_user_id", ASCENDING)], name="created_by_user_id"),
             IndexModel([("start_date", ASCENDING)], name="start_date"),
         ]
@@ -94,9 +96,18 @@ def create_indexes() -> None:
 
     db["audit_log"].create_indexes(
         [
+            IndexModel([("created_at", ASCENDING)], name="created_at"),
             IndexModel(
                 [("cadet_id", ASCENDING), ("created_at", ASCENDING)],
                 name="cadet_created_at",
+            ),
+            IndexModel(
+                [("actor_user_id", ASCENDING), ("created_at", ASCENDING)],
+                name="actor_user_created_at",
+            ),
+            IndexModel(
+                [("action", ASCENDING), ("created_at", ASCENDING)],
+                name="action_created_at",
             ),
             IndexModel(
                 [("outcome", ASCENDING), ("created_at", ASCENDING)],
@@ -105,6 +116,14 @@ def create_indexes() -> None:
             IndexModel(
                 [("source", ASCENDING), ("created_at", ASCENDING)],
                 name="source_created_at",
+            ),
+            IndexModel(
+                [
+                    ("target_collection", ASCENDING),
+                    ("target_id", ASCENDING),
+                    ("created_at", ASCENDING),
+                ],
+                name="target_collection_id_created_at",
             ),
             IndexModel(
                 [("source", ASCENDING), ("event_id", ASCENDING), ("created_at", ASCENDING)],

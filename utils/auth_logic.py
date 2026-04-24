@@ -10,6 +10,8 @@ def build_credentials_from_docs(
     raw: dict = {"usernames": {}}
     credentials: dict = {"usernames": {}}
     for doc in docs:
+        if doc.get("disabled") is True:
+            continue
         email = doc["email"]
         raw["usernames"][email.lower()] = doc
         if bool(doc.get("disabled", False)):
@@ -39,6 +41,7 @@ def extract_user_from_raw(email: str | None, raw: dict) -> dict | None:
         "first_name": str(user_info.get("first_name", "")),
         "last_name": str(user_info.get("last_name", "")),
         "roles": list(user_info.get("roles", [])),
+        "disabled": bool(user_info.get("disabled", False)),
     }
 
 

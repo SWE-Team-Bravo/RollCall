@@ -55,6 +55,10 @@ else:
     event_code_admin = st.Page(
         "pages/11_Event_Code_Admin.py", title="Event Code Generator"
     )
+    audit_log = st.Page(
+        "pages/12_Audit_Log.py",
+        title="Audit Log",
+    )
 
     if "view_role" not in st.session_state:
         st.session_state.view_role = roles
@@ -86,6 +90,7 @@ else:
         ]
         if "admin" in st.session_state.view_role:
             pages.append(user_management)
+            pages.append(audit_log)
     elif "flight_commander" in st.session_state.view_role:
         pages = [
             dashboard,

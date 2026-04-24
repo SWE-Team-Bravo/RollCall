@@ -15,9 +15,11 @@ from utils.db_schema_crud import (
     get_event_by_id,
     get_flight_by_id,
     get_user_by_id,
+    get_waiver_by_id,
     update_waiver,
 )
 
+from utils.audit_log import log_data_change
 from utils.names import format_full_name
 from utils.pagination import build_pagination_metadata, paginate_list
 from utils.waiver_email import send_waiver_decision_email
@@ -147,9 +149,19 @@ def _waiver_review_base_pipeline(
                         "$trim": {
                             "input": {
                                 "$concat": [
-                                    {"$ifNull": ["$cadet_user.first_name", "$cadet.first_name"]},
+                                    {
+                                        "$ifNull": [
+                                            "$cadet_user.first_name",
+                                            "$cadet.first_name",
+                                        ]
+                                    },
                                     " ",
-                                    {"$ifNull": ["$cadet_user.last_name", "$cadet.last_name"]},
+                                    {
+                                        "$ifNull": [
+                                            "$cadet_user.last_name",
+                                            "$cadet.last_name",
+                                        ]
+                                    },
                                 ]
                             }
                         }
@@ -170,8 +182,18 @@ def _waiver_review_base_pipeline(
             {
                 "$match": {
                     "$or": [
-                        {"cadet_name_search": {"$regex": search_regex, "$options": "i"}},
-                        {"cadet_email_search": {"$regex": search_regex, "$options": "i"}},
+                        {
+                            "cadet_name_search": {
+                                "$regex": search_regex,
+                                "$options": "i",
+                            }
+                        },
+                        {
+                            "cadet_email_search": {
+                                "$regex": search_regex,
+                                "$options": "i",
+                            }
+                        },
                     ]
                 }
             }
@@ -397,6 +419,15 @@ def submit_decision(
     event_date: str,
 ) -> tuple[bool, str]:
     new_status = "approved" if decision == "Approve" else "denied"
+
+    # Fetch before state for audit (best-effort)
+    try:
+        before_waiver = get_waiver_by_id(waiver_id)
+        before_status = before_waiver.get("status") if before_waiver else None
+    except Exception:
+        before_waiver = None
+        before_status = None
+
     upd = update_waiver(waiver_id, {"status": new_status})
     if upd is None:
         return False, "Failed to update waiver status."
@@ -409,6 +440,25 @@ def submit_decision(
     )
     if appr is None:
         return False, "Failed to create waiver approval record."
+
+    target_label = event_name or "Unknown event"
+    if before_waiver and before_waiver.get("reason"):
+        target_label = f"{target_label} — {before_waiver['reason'][:50]}"
+
+    log_data_change(
+        source="waiver_review",
+        action="approve" if new_status == "approved" else "deny",
+        target_collection="waivers",
+        target_id=waiver_id,
+        actor_user_id=approver_id,
+        target_label=target_label,
+        before={"status": before_status} if before_status else None,
+        after={"status": new_status},
+        metadata={
+            "comments": comments or "Approved.",
+            "waiver_id": str(waiver_id),
+        },
+    )
 
     if cadet_email:
         send_waiver_decision_email(

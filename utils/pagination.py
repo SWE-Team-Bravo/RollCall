@@ -120,7 +120,6 @@ def render_pagination_controls(
     page_key = f"{prefix}_page"
     page_size_key = f"{prefix}_page_size"
     page_value = int(pagination.get("page", 1) or 1)
-    page_size_value = normalize_page_size(pagination.get("page_size", DEFAULT_PAGE_SIZE))
     total_pages = max(int(pagination.get("total_pages", 1) or 1), 1)
     total_count = max(int(pagination.get("total_count", 0) or 0), 0)
 
@@ -130,7 +129,9 @@ def render_pagination_controls(
     def _go_to_page(next_page: int) -> None:
         st.session_state[page_key] = min(max(int(next_page), 1), total_pages)
 
-    summary_col, page_col, page_size_col, prev_col, next_col = st.columns([3, 1, 1, 1, 1])
+    summary_col, page_col, page_size_col, prev_col, next_col = st.columns(
+        [3, 1, 1, 1, 1]
+    )
     summary_col.caption(f"Page {page_value} of {total_pages} • {total_count} total")
     page_col.selectbox(
         "Page",

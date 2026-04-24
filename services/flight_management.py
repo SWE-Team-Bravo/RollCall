@@ -1,10 +1,15 @@
+from typing import Any
+
 import pandas as pd
+from bson import ObjectId
 
 from services.cadets import assign_cadet_to_flight, get_all_cadets
+from utils.audit_log import log_data_change
 from utils.db import get_collection
 from utils.db_schema_crud import (
     get_all_flights,
     get_cadet_by_id,
+    get_flight_by_id,
     get_user_by_id,
     unassign_cadet_from_flight,
 )
@@ -161,6 +166,9 @@ def assign_selected_cadets_to_flight(
     cadet_ids: list[str],
     flight_id: str,
     cadet_rows_by_id: dict[str, dict[str, str | bool]],
+    *,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
 ) -> tuple[str, str]:
     if not cadet_ids:
         return "warning", "Select at least one cadet."
@@ -169,6 +177,15 @@ def assign_selected_cadets_to_flight(
     reassigned_count = 0
     errors = []
     target_flight_id = str(flight_id)
+    affected_cadets: list[dict[str, Any]] = []
+
+    try:
+        flight = get_flight_by_id(flight_id)
+        flight_name = (
+            flight.get("name", "Unnamed flight") if flight else "Unknown flight"
+        )
+    except Exception:
+        flight_name = "Unknown flight"
 
     for cadet_id in cadet_ids:
         row = cadet_rows_by_id.get(cadet_id)
@@ -186,8 +203,32 @@ def assign_selected_cadets_to_flight(
             assigned_count += 1
             if current_flight_id:
                 reassigned_count += 1
+            affected_cadets.append(
+                {
+                    "cadet_id": cadet_id,
+                    "cadet_name": cadet_name,
+                    "previous_flight_id": current_flight_id or None,
+                }
+            )
         except Exception as e:
             errors.append(f"{cadet_name}: {e}")
+
+    if affected_cadets:
+        log_data_change(
+            source="flight_management",
+            action="assign",
+            target_collection="flights",
+            target_id=flight_id,
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+            target_label=flight_name,
+            metadata={
+                "affected_cadets": affected_cadets,
+                "assigned_count": assigned_count,
+                "reassigned_count": reassigned_count,
+                "errors": errors,
+            },
+        )
 
     return _build_assign_feedback(assigned_count, reassigned_count, errors)
 
@@ -195,21 +236,49 @@ def assign_selected_cadets_to_flight(
 def unassign_selected_cadets(
     cadet_ids: list[str],
     cadet_rows_by_id: dict[str, dict[str, str | bool]],
+    *,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
 ) -> tuple[str, str]:
     if not cadet_ids:
         return "warning", "Select at least one cadet."
 
     unassigned_count = 0
     errors = []
+    affected_cadets: list[dict[str, Any]] = []
 
     for cadet_id in cadet_ids:
         row = cadet_rows_by_id.get(cadet_id)
         cadet_name = row["name"] if row else cadet_id
+        current_flight_id = str(row.get("current_flight_id", "") or "") if row else ""
         try:
             unassign_cadet_from_flight(cadet_id)
             unassigned_count += 1
+            affected_cadets.append(
+                {
+                    "cadet_id": cadet_id,
+                    "cadet_name": cadet_name,
+                    "previous_flight_id": current_flight_id or None,
+                }
+            )
         except Exception as e:
             errors.append(f"{cadet_name}: {e}")
+
+    if affected_cadets:
+        log_data_change(
+            source="flight_management",
+            action="unassign",
+            target_collection="flights",
+            target_id="bulk",
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+            target_label="Flight Unassignment",
+            metadata={
+                "affected_cadets": affected_cadets,
+                "unassigned_count": unassigned_count,
+                "errors": errors,
+            },
+        )
 
     if unassigned_count and not errors:
         return "success", f"Unassigned {unassigned_count} cadet(s)."

@@ -1,6 +1,6 @@
 import streamlit as st
 from services.admin_users import confirm_destructive_action
-from utils.auth import require_role
+from utils.auth import get_current_user, require_role
 from services.cadets import build_cadet_display_map
 
 from services.flight_management import (
@@ -39,6 +39,14 @@ if "flight_feedback" not in st.session_state:
     st.session_state.flight_feedback = None
 if "expanded_flight_ids" not in st.session_state:
     st.session_state.expanded_flight_ids = []
+
+
+def _get_actor_email() -> str | None:
+    user = get_current_user()
+    if user is None:
+        return None
+    email = str(user.get("email", "") or "").strip()
+    return email or None
 
 
 def keep_flight_expanded(flight_id: str) -> None:
@@ -254,6 +262,7 @@ else:
                     selected_cadet_ids,
                     flight["_id"],
                     cadet_rows_by_id,
+                    actor_email=_get_actor_email(),
                 )
                 clear_flight_table_state(flight_id)
                 set_flight_feedback(flight_id, level, message)
@@ -320,6 +329,7 @@ else:
                     level, message = unassign_selected_cadets(
                         selected_member_ids,
                         cadet_rows_by_id,
+                        actor_email=_get_actor_email(),
                     )
                     clear_flight_table_state(flight_id)
                     set_flight_feedback(flight_id, level, message)

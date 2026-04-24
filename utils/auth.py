@@ -13,6 +13,7 @@ from utils.auth_logic import (
     user_has_any_role,
 )
 from utils.db import get_collection
+from utils.db_schema_crud import get_user_by_email
 from utils.names import format_full_name
 
 _COOKIE_NAME = "rollcall_auth"
@@ -119,6 +120,17 @@ def get_current_user() -> dict | None:
     email = st.session_state.get("username")
     raw = st.session_state.get("_raw_users", {})
     return extract_user_from_raw(email, raw)
+
+
+def get_current_user_doc() -> dict | None:
+    """Return the full MongoDB user document for the currently authenticated user."""
+    user = get_current_user()
+    if user is None:
+        return None
+    email = str(user.get("email", "") or "").strip()
+    if not email:
+        return None
+    return get_user_by_email(email)
 
 
 def require_auth():

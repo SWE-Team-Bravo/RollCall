@@ -1,20 +1,24 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import streamlit as st
 import pandas as pd
 
-from utils.auth import require_role
+from utils.audit_log import log_data_change, serialize_doc_for_audit
+from utils.auth import get_current_user_doc, require_role
 from utils.db import get_collection
 from utils.db_schema_crud import create_user, update_user
-from utils.db_schema_crud import create_user, update_user, delete_user
 from utils.password_reset import build_password_updates
 from utils.password_reset_email import send_temporary_password_email
 from services.admin_users import (
+    confirm_destructive_action,
     list_users_for_admin,
     validate_new_user_data,
     build_update_user_payload,
+    validate_disable_user,
+    is_user_disabled,
     ALLOWED_ROLES,
 )
 from utils.pagination import (
@@ -35,6 +39,42 @@ def _load_users() -> list[dict[str, Any]]:
     return list(col.find())
 
 
+def _load_user_by_id(user_id: Any) -> dict[str, Any] | None:
+    col = get_collection("users")
+    if col is None:
+        return None
+    return col.find_one({"_id": user_id})
+
+
+def _audit_user_change(
+    *,
+    action: str,
+    target_label: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    actor_user: dict[str, Any] | None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    target = after or before or {}
+    target_id = target.get("_id")
+    if target_id is None:
+        return
+
+    log_data_change(
+        source="user_management",
+        action=action,
+        target_collection="users",
+        target_id=target_id,
+        actor_user_id=actor_user.get("_id") if actor_user else None,
+        actor_email=str(actor_user.get("email", "") or "").strip() or None if actor_user else None,
+        actor_roles=list(actor_user.get("roles", [])) if actor_user else [],
+        target_label=target_label,
+        before=serialize_doc_for_audit(before),
+        after=serialize_doc_for_audit(after),
+        metadata=metadata,
+    )
+
+
 def _get_existing_emails(
     users: list[dict[str, Any]], exclude_user_id: Any | None = None
 ) -> set[str]:
@@ -48,19 +88,28 @@ def _get_existing_emails(
     return emails
 
 
-def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> None:
+def _render_edit_row(
+    summary: dict[str, Any],
+    users: list[dict[str, Any]],
+    actor_user: dict[str, Any] | None,
+) -> None:
     cols = st.columns([3, 4, 2, 3])
 
     user_id = summary["id"]
+    existing_user = next((u for u in users if str(u.get("_id")) == user_id), None)
+    if existing_user is None:
+        st.error("User no longer exists.")
+        st.session_state["admin_users_editing"] = None
+        st.rerun()
 
     new_first = cols[0].text_input(
         "First Name",
-        summary["name"].split(" ", 1)[0] if " " in summary["name"] else summary["name"],
+        str(existing_user.get("first_name", "") or ""),
         key=f"edit_first_{user_id}",
     )
     new_last = cols[0].text_input(
         "Last Name",
-        summary["name"].split(" ", 1)[1] if " " in summary["name"] else "",
+        str(existing_user.get("last_name", "") or ""),
         key=f"edit_last_{user_id}",
     )
     new_email = cols[1].text_input(
@@ -85,14 +134,6 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
     save_btn, cancel_btn = cols[3].columns(2)
 
     if save_btn.button("Save", key=f"save_{user_id}"):
-        # Find the full existing user document by id from the provided list
-        existing_user = next((u for u in users if str(u.get("_id")) == user_id), None)
-        if existing_user is None:
-            st.error("User no longer exists.")
-            st.session_state["admin_users_editing"] = None
-            st.rerun()
-            return
-
         other_emails = _get_existing_emails(users, exclude_user_id=existing_user["_id"])
         updates, errors = build_update_user_payload(
             existing_user=existing_user,
@@ -108,10 +149,18 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
             for field, msg in errors.items():
                 st.error(f"{field.capitalize()}: {msg}")
         else:
+            before_user = dict(existing_user)
             result = update_user(existing_user["_id"], updates)
             if result is not None:
+                after_user = _load_user_by_id(existing_user["_id"])
+                _audit_user_change(
+                    action="update",
+                    target_label=str(existing_user.get("email", "") or "User"),
+                    before=before_user,
+                    after=after_user,
+                    actor_user=actor_user,
+                )
                 st.success("User updated successfully.")
-                st.session_state["admin_users_selected"] = user_id
                 st.session_state["admin_users_editing"] = None
                 st.rerun()
             else:
@@ -122,52 +171,106 @@ def _render_edit_row(summary: dict[str, str], users: list[dict[str, Any]]) -> No
         st.rerun()
 
 
-st.title("User Management")
-st.caption("Create, edit, and disable user accounts and roles.")
-def _render_delete_confirmation(
-    summary: dict[str, str], users: list[dict[str, Any]]
+actor_user = get_current_user_doc()
+
+
+def _render_status_confirmation(
+    summary: dict[str, Any],
+    users: list[dict[str, Any]],
+    actor_user: dict[str, Any] | None,
 ) -> None:
+    existing_user = next((u for u in users if str(u.get("_id")) == summary["id"]), None)
+    if existing_user is None:
+        st.error("User no longer exists.")
+        st.session_state["admin_users_confirm_status_change"] = None
+        return
+
+    if is_user_disabled(existing_user):
+        st.warning(f"Enable user {summary['email']}?")
+        confirm_btn, cancel_btn = st.columns(2)
+        if confirm_btn.button("Enable User", key=f"confirm_enable_{summary['id']}"):
+            before_user = dict(existing_user)
+            result = update_user(
+                existing_user["_id"],
+                {
+                    "disabled": False,
+                    "disabled_at": None,
+                    "disabled_by_user_id": None,
+                    "disabled_reason": None,
+                },
+            )
+            if result is not None:
+                after_user = _load_user_by_id(existing_user["_id"])
+                _audit_user_change(
+                    action="enable",
+                    target_label=str(existing_user.get("email", "") or "User"),
+                    before=before_user,
+                    after=after_user,
+                    actor_user=actor_user,
+                )
+                st.session_state["admin_users_success"] = "User enabled successfully."
+            else:
+                st.error("Failed to enable user (database unavailable).")
+
+            st.session_state["admin_users_confirm_status_change"] = None
+            st.rerun()
+
+        if cancel_btn.button("Cancel", key=f"cancel_enable_{summary['id']}"):
+            st.session_state["admin_users_confirm_status_change"] = None
+            st.rerun()
+        return
+
     st.warning(
-        f"Type DELETE below to permanently delete user {summary['email']}.",
+        f"Type DELETE below to disable user {summary['email']} without removing their history.",
     )
     confirmation = st.text_input(
-        "Confirm delete",
+        "Confirm disable",
         key=f"confirm_input_{summary['id']}",
     )
     confirm_btn, cancel_btn = st.columns(2)
 
-    if confirm_btn.button("Confirm Delete", key=f"confirm_btn_{summary['id']}"):
-        if confirm_btn.button("Confirm Delete", key=f"confirm_btn_{summary['id']}"):
-            if not confirm_delete_user(confirmation):
-                st.error("Confirmation text does not match 'DELETE'.")
-                return
+    if confirm_btn.button("Confirm Disable", key=f"confirm_disable_{summary['id']}"):
+        if not confirm_destructive_action(confirmation):
+            st.error("Confirmation text does not match 'DELETE'.")
+            return
 
-            # Fetch the latest user doc and delete it from the provided list
-            existing_user = next(
-                (u for u in users if str(u.get("_id")) == summary["id"]), None
+        error = validate_disable_user(existing_user, actor_user, users)
+        if error:
+            st.error(error)
+            return
+
+        before_user = dict(existing_user)
+        updates = {
+            "disabled": True,
+            "disabled_at": datetime.now(timezone.utc),
+            "disabled_by_user_id": actor_user.get("_id") if actor_user else None,
+            "disabled_reason": "Disabled by admin",
+        }
+        result = update_user(existing_user["_id"], updates)
+        if result is not None:
+            after_user = _load_user_by_id(existing_user["_id"])
+            _audit_user_change(
+                action="disable",
+                target_label=str(existing_user.get("email", "") or "User"),
+                before=before_user,
+                after=after_user,
+                actor_user=actor_user,
             )
-            if existing_user is None:
-                st.error("User no longer exists.")
-            else:
-                result = delete_user(existing_user["_id"])
-                if result is not None:
-                    st.session_state["admin_users_success"] = (
-                        "User deleted successfully."
-                    )
-                    st.session_state.pop("admin_users_selected", None)
-                else:
-                    st.error("Failed to delete user (database unavailable).")
+            st.session_state["admin_users_success"] = "User disabled successfully."
+            st.session_state.pop("admin_users_selected", None)
+        else:
+            st.error("Failed to disable user (database unavailable).")
 
-            st.session_state["admin_users_confirm_delete"] = None
-            st.rerun()
+        st.session_state["admin_users_confirm_status_change"] = None
+        st.rerun()
 
-    if cancel_btn.button("Cancel", key=f"cancel_delete_{summary['id']}"):
-        st.session_state["admin_users_confirm_delete"] = None
+    if cancel_btn.button("Cancel", key=f"cancel_disable_{summary['id']}"):
+        st.session_state["admin_users_confirm_status_change"] = None
         st.rerun()
 
 
 st.title("User Management")
-st.caption("Create, edit, and delete user accounts and roles.")
+st.caption("Create, edit, disable, and enable user accounts and roles.")
 if "admin_users_success" not in st.session_state:
     st.session_state["admin_users_success"] = None
 
@@ -217,6 +320,14 @@ with st.expander("Create New User", expanded=False):
                 roles=payload["roles"],
             )
             if result is not None:
+                created_user = _load_user_by_id(result.inserted_id)
+                _audit_user_change(
+                    action="create",
+                    target_label=payload["email"],
+                    before=None,
+                    after=created_user,
+                    actor_user=actor_user,
+                )
                 st.success("User created successfully.")
             else:
                 st.error("Failed to create user (database unavailable).")
@@ -238,8 +349,8 @@ else:
 
     if "admin_users_editing" not in st.session_state:
         st.session_state["admin_users_editing"] = None
-    if "admin_users_confirm_delete" not in st.session_state:
-        st.session_state["admin_users_confirm_delete"] = None
+    if "admin_users_confirm_status_change" not in st.session_state:
+        st.session_state["admin_users_confirm_status_change"] = None
     if "admin_users_reset_pw" not in st.session_state:
         st.session_state["admin_users_reset_pw"] = None
     if "admin_users_last_temp_pw" not in st.session_state:
@@ -250,7 +361,7 @@ else:
         )
 
     st.subheader("Filters")
-    f1, f2 = st.columns([2, 4])
+    f1, f2, f3 = st.columns([2, 2, 4])
     with f1:
         role_filter = st.selectbox(
             "Role",
@@ -258,6 +369,12 @@ else:
             index=0,
         )
     with f2:
+        status_filter = st.selectbox(
+            "Status",
+            options=["All", "Active", "Disabled"],
+            index=0,
+        )
+    with f3:
         search = st.text_input("Search (name or email)", value="")
     with st.container():
         show_disabled_only = st.checkbox("Show disabled users only", value=False)
@@ -267,6 +384,9 @@ else:
     for s in summaries:
         role = str(s.get("role", "") or "")
         if role_filter != "All" and role != role_filter:
+            continue
+        status = str(s.get("status", "Active") or "Active")
+        if status_filter != "All" and status != status_filter:
             continue
         if search_norm:
             hay = f"{s.get('name', '')} {s.get('email', '')}".lower()
@@ -285,7 +405,7 @@ else:
     else:
         users_page, users_page_size = init_pagination_state(
             "admin_users",
-            reset_token=f"{role_filter}|{search_norm}",
+            reset_token=f"{role_filter}|{status_filter}|{search_norm}",
         )
         paginated_filtered = paginate_list(
             filtered,
@@ -305,7 +425,7 @@ else:
                     ),
                     "Email": s.get("email", ""),
                     "Role": s.get("role", "") or "-",
-                    "Status": "Disabled" if s.get("disabled", False) else "Active",
+                    "Status": s.get("status", "Active"),
                 }
                 for s in page_filtered
             ],
@@ -330,35 +450,22 @@ else:
             format_func=_label,
             key="admin_users_selected",
         )
-        st.session_state.admin_users_selected = selected_id
+
+        selected_summary = summary_by_id.get(selected_id, {})
+        status_action_label = (
+            "Enable" if selected_summary.get("disabled") else "Disable"
+        )
 
         b1, b2, b3, _ = st.columns([2, 2, 3, 7])
         with b1:
             if st.button("Edit", key="admin_users_edit_selected"):
                 st.session_state["admin_users_editing"] = selected_id
-                st.session_state["admin_users_confirm_delete"] = None
+                st.session_state["admin_users_confirm_status_change"] = None
                 st.session_state["admin_users_reset_pw"] = None
                 st.rerun()
         with b2:
-            target_summary = summary_by_id.get(selected_id, {})
-            currently_disabled = bool(target_summary.get("disabled", False))
-            toggle_label = "Enable" if currently_disabled else "Disable"
-            if st.button(toggle_label, key="admin_users_toggle_selected"):
-                existing_user = next(
-                    (u for u in raw_users if str(u.get("_id")) == selected_id), None
-                )
-                if existing_user is None:
-                    st.error("User no longer exists.")
-                else:
-                    update_result = update_user(
-                        existing_user["_id"],
-                        {"disabled": not currently_disabled},
-                    )
-                    if update_result is not None:
-                        action = "enabled" if currently_disabled else "disabled"
-                        st.success(f"User {action} successfully.")
-                    else:
-                        st.error("Failed to update user status (database unavailable).")
+            if st.button(status_action_label, key="admin_users_status_selected"):
+                st.session_state["admin_users_confirm_status_change"] = selected_id
                 st.session_state["admin_users_editing"] = None
                 st.session_state["admin_users_reset_pw"] = None
                 st.rerun()
@@ -366,24 +473,21 @@ else:
             if st.button("Reset Password", key="admin_users_reset_selected"):
                 st.session_state["admin_users_reset_pw"] = selected_id
                 st.session_state["admin_users_editing"] = None
-                st.session_state["admin_users_confirm_delete"] = None
+                st.session_state["admin_users_confirm_status_change"] = None
                 st.session_state["admin_users_last_temp_pw"] = None
                 st.rerun()
 
     editing_id = st.session_state.get("admin_users_editing")
-    if editing_id and editing_id in summary_by_id:
-        st.divider()
-        _render_edit_row(summary_by_id[editing_id], raw_users)
-    confirm_id = st.session_state.get("admin_users_confirm_delete")
+    confirm_id = st.session_state.get("admin_users_confirm_status_change")
     reset_id = st.session_state.get("admin_users_reset_pw")
 
     if editing_id and editing_id in summary_by_id:
         st.divider()
-        _render_edit_row(summary_by_id[editing_id], raw_users)
+        _render_edit_row(summary_by_id[editing_id], raw_users, actor_user)
 
     if confirm_id and confirm_id in summary_by_id:
         st.divider()
-        _render_delete_confirmation(summary_by_id[confirm_id], raw_users)
+        _render_status_confirmation(summary_by_id[confirm_id], raw_users, actor_user)
 
     if reset_id and reset_id in summary_by_id:
         st.divider()
@@ -411,10 +515,19 @@ else:
                     st.error("User no longer exists.")
                 else:
                     updates, temp_pw = build_password_updates()
+                    before_user = dict(existing_user)
                     result = update_user(existing_user["_id"], updates)
                     if result is None:
                         st.error("Failed to reset password (database unavailable).")
                     else:
+                        after_user = _load_user_by_id(existing_user["_id"])
+                        _audit_user_change(
+                            action="reset_password",
+                            target_label=str(existing_user.get("email", "") or "User"),
+                            before=before_user,
+                            after=after_user,
+                            actor_user=actor_user,
+                        )
                         st.session_state["admin_users_last_temp_pw"] = temp_pw
                         st.success("Password reset successfully.")
 
