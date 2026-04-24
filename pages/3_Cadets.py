@@ -19,6 +19,8 @@ from services.cadets import (
     get_cadet_export_df,
     import_cadets_from_roster,
     parse_roster_xlsx,
+    RANK_OPTIONS,
+    RANK_TO_LEVEL,
 )
 
 from services.account_settings import build_profile_updates
@@ -27,14 +29,6 @@ from utils.export import to_excel
 
 
 require_role("admin", "cadre")
-
-RANK_OPTIONS = (
-    "100/150 (freshman)",
-    "200/250/500 (sophomore)",
-    "300 (junior)",
-    "400 (senior)",
-    "700/800/900 (super senior)",
-)
 
 
 def add_cadet():
@@ -72,7 +66,7 @@ def add_cadet():
 
 
 def edit_cadet(cadet):
-    current_rank = cadet.get("rank", "")
+    current_rank = str(cadet.get("rank", ""))
     rank_index = RANK_OPTIONS.index(current_rank) if current_rank in RANK_OPTIONS else 0
     cadet_id = str(cadet["_id"])
 
@@ -125,6 +119,7 @@ def edit_cadet(cadet):
                         "last_name": user_updates["last_name"],
                         "email": user_updates["email"],
                         "rank": new_rank,
+                        "level": RANK_TO_LEVEL.get(new_rank, "freshman"),
                     },
                 )
             else:
@@ -216,12 +211,13 @@ def show_cadets():
                 "Last Name": str(source.get("last_name", "") or ""),
                 "Email": str(source.get("email", "") or ""),
                 "Rank": str(cadet.get("rank", "") or ""),
+                "Level": (RANK_TO_LEVEL.get(str(cadet.get("rank")), "")).capitalize(),
             }
         )
 
     df = pd.DataFrame(
         rows,
-        columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank"]),
+        columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank", "Level"]),
     )
     st.dataframe(df, hide_index=True, width="stretch")
 
@@ -252,12 +248,15 @@ def show_cadets():
     if st.session_state.selected_cadet_id not in cadet_by_id:
         st.session_state.selected_cadet_id = cadet_ids[0]
 
+    cadet_labels = {cid: _cadet_label(cid) for cid in cadet_ids}
+    selected_index = cadet_ids.index(st.session_state.selected_cadet_id)
     selected_id = st.selectbox(
         "Select cadet",
         options=cadet_ids,
-        format_func=_cadet_label,
-        key="selected_cadet_id",
+        format_func=lambda cid: cadet_labels.get(cid, cid),
+        index=selected_index,
     )
+    st.session_state.selected_cadet_id = selected_id
 
     action_col1, action_col2, _ = st.columns([2, 2, 10])
     with action_col1:

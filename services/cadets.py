@@ -15,6 +15,21 @@ from utils.db_schema_crud import (
 from utils.names import format_full_name
 from utils.validators import is_valid_email, is_valid_name
 
+RANK_OPTIONS = ("100", "150", "200", "250", "300", "400", "500", "700", "800", "900")
+
+RANK_TO_LEVEL = {
+    "100": "freshman",
+    "150": "freshman",
+    "200": "sophomore",
+    "250": "sophomore",
+    "300": "junior",
+    "400": "senior",
+    "500": "sophomore",
+    "700": "super senior",
+    "800": "super senior",
+    "900": "super senior",
+}
+
 CLASS_TO_RANK = {
     "AS100": "100/150 (freshman)",
     "AS150": "100/150 (freshman)",
@@ -91,7 +106,13 @@ def add_cadet_for_user(email: str, rank: str, first_name: str, last_name: str) -
     user = get_user_by_email(email)
     if user is None:
         return False
-    create_cadet(user["_id"], rank, first_name, last_name, email)
+    create_cadet(
+        user["_id"],
+        rank,
+        first_name,
+        last_name,
+        email,
+    )
     return True
 
 
@@ -111,10 +132,14 @@ def get_cadet_export_df() -> pd.DataFrame | str:
                 "Last Name": source.get("last_name", ""),
                 "Email": source.get("email", ""),
                 "Rank": cadet.get("rank", ""),
+                "Level": (RANK_TO_LEVEL.get(str(cadet.get("rank")), "")).capitalize(),
             }
         )
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(
+        rows,
+        columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank", "Level"]),
+    )
 
 
 def parse_roster_xlsx(file) -> tuple[list[dict], list[str]]:
