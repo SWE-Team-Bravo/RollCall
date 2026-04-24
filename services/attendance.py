@@ -3,9 +3,10 @@ from typing import Any
 from datetime import datetime, timedelta
 
 from utils.datetime_utils import ensure_utc
+from services.event_config import get_checkin_window_minutes
 
 
-CHECKIN_WINDOW_MINUTES = 10
+CHECKIN_WINDOW_MINUTES = get_checkin_window_minutes()
 
 
 def generate_attendance_password() -> str:
