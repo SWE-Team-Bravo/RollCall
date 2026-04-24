@@ -8,6 +8,7 @@ from utils.auth import get_current_user, init_auth
 from utils.db_schema_crud import get_user_by_email, update_user
 from utils.password import hash_password
 from utils.password_reset import (
+    PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
     generate_password_reset_token,
     validate_password_reset_token,
 )
@@ -144,7 +145,7 @@ with st.expander("Forgot password?", expanded=False):
                 token = generate_password_reset_token(
                     email=str(user_doc.get("email")),
                     secret=auth_cookie_key,
-                    expires_in_seconds=30 * 60,
+                    expires_in_seconds=PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
                     password_changed_at=user_doc.get("password_changed_at"),
                 )
                 send_password_reset_email(

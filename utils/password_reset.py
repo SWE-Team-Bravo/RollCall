@@ -11,6 +11,9 @@ import jwt
 from utils.password import hash_password
 
 
+PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS = 30 * 60
+
+
 def _to_int_timestamp(value: Any | None) -> int | None:
     if value is None:
         return None
@@ -68,7 +71,7 @@ def generate_password_reset_token(
     *,
     email: str,
     secret: str,
-    expires_in_seconds: int = 30 * 60,
+    expires_in_seconds: int = PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
     password_changed_at: Any | None,
 ) -> str:
     """Generate a signed, time-limited password reset token.
