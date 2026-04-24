@@ -8,6 +8,7 @@ from services.attendance import is_already_checked_in, is_within_checkin_window
 from services.event_config import get_checkin_window_minutes
 from services.cadet_attendance import get_cadet_flight_label, load_cadet_flights
 from services.event_codes import validate_code
+from utils.audit_log import log_checkin_attempt
 from utils.auth import get_current_user, require_auth
 from utils.auth_logic import user_has_any_role
 from utils.db_schema_crud import (
@@ -140,6 +141,13 @@ if (
                 str(event.get("event_name", "") or "the event")
                 if event
                 else "the event"
+            )
+            log_checkin_attempt(
+                cadet_id=cadet_id,
+                outcome="success",
+                event_id=event_code["event_id"],
+                user_id=user["_id"],
+                source="attendance_submission",
             )
             st.success(f"Checked in for **{event_name}**!")
             st.balloons()

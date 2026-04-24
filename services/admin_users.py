@@ -5,6 +5,18 @@ from typing import Any, Dict, List, Tuple
 from utils.validators import is_valid_email
 
 
+def is_user_disabled(user: Dict[str, Any]) -> bool:
+    return bool(user.get("disabled", False))
+
+
+def count_enabled_admins(users: List[Dict[str, Any]]) -> int:
+    return sum(
+        1
+        for user in users
+        if not is_user_disabled(user) and "admin" in list(user.get("roles") or [])
+    )
+
+
 def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
     # Return a normalized summary for admin user listing.
 
@@ -40,15 +52,16 @@ def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
 
     all_roles = roles if isinstance(roles, (list, tuple)) else []
     waiver_reviewer = "waiver_reviewer" in all_roles
-    is_disabled = bool(user.get("disabled", False))
+    disabled = is_user_disabled(user)
 
     return {
         "id": user_id,
         "email": email,
-        "name": name,
+        "name": f"{name} [Disabled]" if disabled else name,
         "role": primary_role,
         "waiver_reviewer": waiver_reviewer,
-        "disabled": is_disabled,
+        "disabled": disabled,
+        "status": "Disabled" if disabled else "Active",
     }
 
 
@@ -206,14 +219,20 @@ def build_update_user_payload(
     return updates, {}
 
 
-def confirm_delete_user(confirmation_input: str) -> bool:
-    """Return True only if the admin has confirmed deletion.
+def validate_disable_user(
+    target_user: Dict[str, Any],
+    actor_user: Dict[str, Any] | None,
+    all_users: List[Dict[str, Any]],
+) -> str | None:
+    """Return an error message if the disable action should be blocked,
+    or None if it is allowed."""
+    if actor_user and str(target_user.get("_id")) == str(actor_user.get("_id")):
+        return "You cannot disable your own account."
 
-    The current policy is that the admin must type the exact keyword
-    "DELETE" (case-insensitive, ignoring surrounding whitespace).
-    """
+    if "admin" in list(target_user.get("roles") or []) and count_enabled_admins(all_users) <= 1:
+        return "You cannot disable the last enabled admin user."
 
-    return confirm_destructive_action(confirmation_input)
+    return None
 
 
 def confirm_destructive_action(confirmation_input: str) -> bool:

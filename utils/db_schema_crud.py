@@ -46,11 +46,14 @@ def get_user_by_email(email: str) -> dict | None:
     return col.find_one({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
 
 
-def get_users_by_role(role: str) -> list[dict]:
+def get_users_by_role(role: str, *, include_disabled: bool = False) -> list[dict]:
     col = get_collection("users")
     if col is None:
         return []
-    return list(col.find({"roles": role}))
+    query: dict = {"roles": role}
+    if not include_disabled:
+        query["disabled"] = {"$ne": True}
+    return list(col.find(query))
 
 
 def get_users_by_ids(user_ids: list[str | ObjectId]) -> list[dict]:
@@ -220,11 +223,18 @@ def get_event_by_id(event_id: str | ObjectId) -> dict | None:
     return col.find_one({"_id": ObjectId(event_id)})
 
 
-def get_events_by_type(event_type: str) -> list[dict]:
+def get_events_by_type(
+    event_type: str,
+    *,
+    include_archived: bool = False,
+) -> list[dict]:
     col = get_collection("events")
     if col is None:
         return []
-    return list(col.find({"event_type": event_type}))
+    query: dict = {"event_type": event_type}
+    if not include_archived:
+        query["archived"] = {"$ne": True}
+    return list(col.find(query))
 
 
 def get_events_by_creator(user_id: str | ObjectId) -> list[dict]:
@@ -247,15 +257,6 @@ def update_event(event_id: str | ObjectId, updates: dict) -> UpdateResult | None
     if col is None:
         return None
     return col.update_one({"_id": ObjectId(event_id)}, {"$set": updates})
-
-
-def delete_event(event_id: str | ObjectId) -> DeleteResult | None:
-    col = get_collection("events")
-    if col is None:
-        return None
-    return col.delete_one({"_id": ObjectId(event_id)})
-
-
 # -- Event Assignments
 
 

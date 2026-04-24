@@ -1,16 +1,16 @@
 from unittest.mock import patch, MagicMock
 from services.event_config import (
-    _DEFAULT_EMAIL_ENABLED,
+    DEFAULT_EMAIL_ENABLED,
     get_event_config,
     save_event_config,
     get_absence_thresholds,
     get_checkin_window_minutes,
     get_waiver_reminder,
     is_email_enabled,
-    _DEFAULT_PT_THRESHOLD,
-    _DEFAULT_LLAB_THRESHOLD,
-    _DEFAULT_CHECKIN_WINDOW_MINUTES,
-    _DEFAULT_WAIVER_REMINDER_DAYS,
+    DEFAULT_PT_THRESHOLD,
+    DEFAULT_LLAB_THRESHOLD,
+    DEFAULT_CHECKIN_WINDOW_MINUTES,
+    DEFAULT_WAIVER_REMINDER_DAYS,
 )
 
 
@@ -113,16 +113,16 @@ def test_absence_thresholds_from_config():
 def test_absence_thresholds_defaults_when_none():
     with patch("services.event_config.get_event_config", return_value=None):
         assert get_absence_thresholds() == (
-            _DEFAULT_PT_THRESHOLD,
-            _DEFAULT_LLAB_THRESHOLD,
+            DEFAULT_PT_THRESHOLD,
+            DEFAULT_LLAB_THRESHOLD,
         )
 
 
 def test_absence_thresholds_defaults_when_keys_missing():
     with patch("services.event_config.get_event_config", return_value={}):
         assert get_absence_thresholds() == (
-            _DEFAULT_PT_THRESHOLD,
-            _DEFAULT_LLAB_THRESHOLD,
+            DEFAULT_PT_THRESHOLD,
+            DEFAULT_LLAB_THRESHOLD,
         )
 
 
@@ -138,12 +138,12 @@ def test_checkin_window_from_config():
 
 def test_checkin_window_default_when_none():
     with patch("services.event_config.get_event_config", return_value=None):
-        assert get_checkin_window_minutes() == _DEFAULT_CHECKIN_WINDOW_MINUTES
+        assert get_checkin_window_minutes() == DEFAULT_CHECKIN_WINDOW_MINUTES
 
 
 def test_checkin_window_default_when_key_missing():
     with patch("services.event_config.get_event_config", return_value={}):
-        assert get_checkin_window_minutes() == _DEFAULT_CHECKIN_WINDOW_MINUTES
+        assert get_checkin_window_minutes() == DEFAULT_CHECKIN_WINDOW_MINUTES
 
 
 # --------------------- test get_waiver_reminder --------------------
@@ -159,12 +159,12 @@ def test_waiver_reminder_from_config():
 
 def test_waiver_reminder_default_when_none():
     with patch("services.event_config.get_event_config", return_value=None):
-        assert get_waiver_reminder() == _DEFAULT_WAIVER_REMINDER_DAYS
+        assert get_waiver_reminder() == DEFAULT_WAIVER_REMINDER_DAYS
 
 
 def test_waiver_reminder_default_when_key_missing():
     with patch("services.event_config.get_event_config", return_value={}):
-        assert get_waiver_reminder() == _DEFAULT_WAIVER_REMINDER_DAYS
+        assert get_waiver_reminder() == DEFAULT_WAIVER_REMINDER_DAYS
 
 
 # --------------------- test is_email_enabled --------------------
@@ -186,9 +186,9 @@ def test_email_disabled_from_config():
 
 def test_email_enabled_default_when_none():
     with patch("services.event_config.get_event_config", return_value=None):
-        assert is_email_enabled() is _DEFAULT_EMAIL_ENABLED
+        assert is_email_enabled() is DEFAULT_EMAIL_ENABLED
 
 
 def test_email_enabled_default_when_key_missing():
     with patch("services.event_config.get_event_config", return_value={}):
-        assert is_email_enabled() is _DEFAULT_EMAIL_ENABLED
+        assert is_email_enabled() is DEFAULT_EMAIL_ENABLED

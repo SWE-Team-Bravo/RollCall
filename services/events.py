@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo, available_timezones
 
 from bson import ObjectId
 
+from utils.audit_log import log_data_change, serialize_doc_for_audit
 from utils.db import get_db
 from utils.datetime_utils import ensure_utc
 
@@ -17,6 +18,21 @@ _PREFERRED_TIMEZONES = [
     "Pacific/Honolulu",
     "UTC",
 ]
+
+
+def _coerce_object_id_or_raw(value: str | ObjectId | None) -> str | ObjectId | None:
+    if value is None or isinstance(value, ObjectId):
+        return value
+    try:
+        return ObjectId(value)
+    except Exception:
+        return value
+
+
+def _active_event_query(*, include_archived: bool) -> dict[str, Any]:
+    if include_archived:
+        return {}
+    return {"archived": {"$ne": True}}
 
 
 def get_timezone_options() -> list[str]:
@@ -110,12 +126,12 @@ def has_event_ended(
     return current_time > end_at
 
 
-def get_all_events() -> list[dict]:
+def get_all_events(*, include_archived: bool = False) -> list[dict]:
     """Return all events sorted by start date descending."""
     db = get_db()
     if db is None:
         return []
-    events = list(db.events.find({}).sort("start_date", -1))
+    events = list(db.events.find(_active_event_query(include_archived=include_archived)).sort("start_date", -1))
     for e in events:
         e["_id"] = str(e["_id"])
     return events
@@ -128,6 +144,9 @@ def create_event(
     end_date: date,
     created_by_user_id: str,
     tz_name: str = "UTC",
+    *,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
 ) -> bool:
     """Insert a new event. Returns True on success."""
     if start_date > end_date:
@@ -136,26 +155,117 @@ def create_event(
     if db is None:
         return False
     start_dt, end_dt = build_event_bounds(start_date, end_date, tz_name)
-    db.events.insert_one(
-        {
-            "event_name": name,
-            "event_type": event_type,
-            "start_date": start_dt,
-            "end_date": end_dt,
-            "timezone_name": tz_name,
-            "created_by_user_id": created_by_user_id,
-        }
+    event_doc = {
+        "event_name": name,
+        "event_type": event_type,
+        "start_date": start_dt,
+        "end_date": end_dt,
+        "timezone_name": tz_name,
+        "created_by_user_id": _coerce_object_id_or_raw(created_by_user_id),
+        "archived": False,
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = db.events.insert_one(event_doc)
+    inserted = db.events.find_one({"_id": result.inserted_id})
+    log_data_change(
+        source="event_management",
+        action="create",
+        target_collection="events",
+        target_id=result.inserted_id,
+        actor_user_id=actor_user_id,
+        actor_email=actor_email,
+        target_label=name,
+        before=None,
+        after=serialize_doc_for_audit(inserted),
+        metadata={"event_type": event_type},
     )
     return True
 
 
-def delete_event(event_id: str) -> bool:
-    """Delete an event by its string ID. Returns True on success."""
+def archive_event(
+    event_id: str,
+    *,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
+) -> bool:
+    """Archive an event by its string ID. Returns True on success."""
     db = get_db()
     if db is None:
         return False
-    result = db.events.delete_one({"_id": ObjectId(event_id)})
-    return result.deleted_count == 1
+    object_id = ObjectId(event_id)
+    before = db.events.find_one({"_id": object_id})
+    if before is None:
+        return False
+    archived_by = _coerce_object_id_or_raw(actor_user_id)
+    result = db.events.update_one(
+        {"_id": object_id, "archived": {"$ne": True}},
+        {
+            "$set": {
+                "archived": True,
+                "archived_at": datetime.now(timezone.utc),
+                "archived_by_user_id": archived_by,
+            }
+        },
+    )
+    if result.modified_count != 1:
+        return False
+    after = db.events.find_one({"_id": object_id})
+    log_data_change(
+        source="event_management",
+        action="archive",
+        target_collection="events",
+        target_id=object_id,
+        actor_user_id=actor_user_id,
+        actor_email=actor_email,
+        target_label=str(before.get("event_name", "") or "Event"),
+        before=serialize_doc_for_audit(before),
+        after=serialize_doc_for_audit(after),
+    )
+    return True
+
+
+def restore_event(
+    event_id: str,
+    *,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
+) -> bool:
+    db = get_db()
+    if db is None:
+        return False
+    object_id = ObjectId(event_id)
+    before = db.events.find_one({"_id": object_id})
+    if before is None:
+        return False
+    result = db.events.update_one(
+        {"_id": object_id, "archived": True},
+        {
+            "$set": {
+                "archived": False,
+                "restored_at": datetime.now(timezone.utc),
+                "restored_by_user_id": _coerce_object_id_or_raw(actor_user_id),
+            },
+            "$unset": {
+                "archived_at": "",
+                "archived_by_user_id": "",
+            },
+        },
+    )
+    if result.modified_count != 1:
+        return False
+    after = db.events.find_one({"_id": object_id})
+    log_data_change(
+        source="event_management",
+        action="restore",
+        target_collection="events",
+        target_id=object_id,
+        actor_user_id=actor_user_id,
+        actor_email=actor_email,
+        target_label=str(before.get("event_name", "") or "Event"),
+        before=serialize_doc_for_audit(before),
+        after=serialize_doc_for_audit(after),
+    )
+    return True
 
 
 def update_event(
@@ -165,6 +275,9 @@ def update_event(
     start_date: date,
     end_date: date,
     tz_name: str = "UTC",
+    *,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
 ) -> bool:
     """Update an existing event. Returns True on success."""
     if start_date > end_date:
@@ -173,8 +286,12 @@ def update_event(
     if db is None:
         return False
     start_dt, end_dt = build_event_bounds(start_date, end_date, tz_name)
+    object_id = ObjectId(event_id)
+    before = db.events.find_one({"_id": object_id})
+    if before is None:
+        return False
     result = db.events.update_one(
-        {"_id": ObjectId(event_id)},
+        {"_id": object_id},
         {
             "$set": {
                 "event_name": name,
@@ -185,4 +302,17 @@ def update_event(
             }
         },
     )
+    if result.modified_count == 1:
+        after = db.events.find_one({"_id": object_id})
+        log_data_change(
+            source="event_management",
+            action="update",
+            target_collection="events",
+            target_id=object_id,
+            actor_user_id=actor_user_id,
+            actor_email=actor_email,
+            target_label=name,
+            before=serialize_doc_for_audit(before),
+            after=serialize_doc_for_audit(after),
+        )
     return result.modified_count == 1

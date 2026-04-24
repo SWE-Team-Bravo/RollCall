@@ -3,7 +3,9 @@ from services.admin_users import (
     list_users_for_admin,
     validate_new_user_data,
     build_update_user_payload,
-    confirm_delete_user,
+    count_enabled_admins,
+    validate_disable_user,
+    confirm_destructive_action,
 )
 
 
@@ -196,15 +198,31 @@ def test_summarize_user_waiver_reviewer_false_when_absent():
     assert summary["waiver_reviewer"] is False
 
 
-def test_summarize_user_exposes_disabled_flag():
-    user_doc = {
-        "_id": "u3",
-        "email": "disabled@rollcall.local",
-        "roles": ["cadet"],
-        "disabled": True,
-    }
-    summary = summarize_user(user_doc)
+def test_summarize_user_marks_disabled_accounts():
+    summary = summarize_user(
+        {
+            "_id": "u3",
+            "first_name": "Dana",
+            "last_name": "Disabled",
+            "email": "disabled@example.com",
+            "roles": ["cadet"],
+            "disabled": True,
+        }
+    )
+
     assert summary["disabled"] is True
+    assert summary["status"] == "Disabled"
+    assert "[Disabled]" in summary["name"]
+
+
+def test_count_enabled_admins_ignores_disabled_admins():
+    assert count_enabled_admins(
+        [
+            {"roles": ["admin"]},
+            {"roles": ["admin"], "disabled": True},
+            {"roles": ["cadet"]},
+        ]
+    ) == 1
 
 
 def test_build_update_user_payload_adds_waiver_reviewer():
@@ -250,11 +268,37 @@ def test_build_update_user_payload_removes_waiver_reviewer():
     assert "waiver_reviewer" not in updates["roles"]
 
 
-def test_confirm_delete_user_requires_exact_keyword():
-    # Only the exact keyword (case-insensitive, trimmed) should allow delete.
-    assert confirm_delete_user("DELETE") is True
-    assert confirm_delete_user("  DELETE  ") is True
-    assert confirm_delete_user("delete") is False
-    assert confirm_delete_user("Delete") is False
-    assert confirm_delete_user("del") is False
-    assert confirm_delete_user("DELETE EVERYTHING") is False
+def test_confirm_destructive_action_requires_exact_keyword():
+    assert confirm_destructive_action("DELETE") is True
+    assert confirm_destructive_action("  DELETE  ") is True
+    assert confirm_destructive_action("delete") is False
+    assert confirm_destructive_action("Delete") is False
+    assert confirm_destructive_action("del") is False
+    assert confirm_destructive_action("DELETE EVERYTHING") is False
+
+
+def test_validate_disable_user_blocks_self_disable():
+    admin = {"_id": "a1", "roles": ["admin"]}
+    error = validate_disable_user(admin, admin, [admin])
+    assert error == "You cannot disable your own account."
+
+
+def test_validate_disable_user_blocks_last_admin():
+    admin = {"_id": "a1", "roles": ["admin"]}
+    actor = {"_id": "a2", "roles": ["admin"]}
+    error = validate_disable_user(admin, actor, [admin])
+    assert error == "You cannot disable the last enabled admin user."
+
+
+def test_validate_disable_user_allows_disable_with_other_admins():
+    admin1 = {"_id": "a1", "roles": ["admin"]}
+    admin2 = {"_id": "a2", "roles": ["admin"]}
+    error = validate_disable_user(admin1, admin2, [admin1, admin2])
+    assert error is None
+
+
+def test_validate_disable_user_allows_non_admin_disable():
+    cadet = {"_id": "c1", "roles": ["cadet"]}
+    actor = {"_id": "a1", "roles": ["admin"]}
+    error = validate_disable_user(cadet, actor, [cadet, actor])
+    assert error is None

@@ -159,5 +159,25 @@ class TestRestoreSession:
 
         assert "authentication_status" not in session
 
+    def test_ignores_disabled_user_filtered_from_credentials(self):
+        token = _make_token()
+        session: dict = {}
+
+        with (
+            patch(
+                "utils.auth._load_credentials",
+                return_value=({"usernames": {}}, {"usernames": {}}),
+            ),
+            patch("streamlit.context") as mock_ctx,
+            patch("streamlit.session_state", session),
+        ):
+            mock_ctx.cookies = {_COOKIE_NAME: token}
+
+            from utils.auth import restore_session
+
+            restore_session()
+
+        assert "authentication_status" not in session
+
 
 _COOKIE_NAME = "rollcall_auth"

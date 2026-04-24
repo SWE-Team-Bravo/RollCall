@@ -3,13 +3,15 @@ import time
 import streamlit as st
 import pandas as pd
 
-from utils.auth import require_role
+from utils.audit_log import log_data_change
+from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import (
     update_cadet,
     delete_cadet,
     update_user,
     get_user_by_id,
     get_user_by_email,
+    get_cadet_by_id,
 )
 
 from services.cadets import (
@@ -101,6 +103,10 @@ def edit_cadet(cadet):
     if col1.button("Save", key=f"save_{cadet_id}"):
         check, msg = validate_cadet_input(new_first, new_last, new_email)
         if check:
+            before_cadet = dict(cadet)
+            current_user = get_current_user()
+            actor_email = str(current_user.get("email", "") or "").strip() if current_user else None
+
             if user_doc is not None:
                 user_updates, errors = build_profile_updates(
                     user_doc=user_doc,
@@ -140,6 +146,19 @@ def edit_cadet(cadet):
                         "rank": new_rank,
                     },
                 )
+
+            after_cadet = get_cadet_by_id(cadet_id)
+            target_label = f"{new_first} {new_last}".strip() or (user_doc.get("email") if user_doc else "Cadet")
+            log_data_change(
+                source="cadet_management",
+                action="update",
+                target_collection="cadets",
+                target_id=cadet_id,
+                actor_email=actor_email,
+                target_label=target_label,
+                before=before_cadet,
+                after=after_cadet,
+            )
 
             st.session_state.selected_cadet_id = cadet_id
             st.session_state.editing_id = None

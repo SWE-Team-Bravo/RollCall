@@ -54,6 +54,15 @@ def test_empty_docs_returns_empty_dicts():
     assert raw == {"usernames": {}}
 
 
+def test_disabled_users_are_excluded_from_credentials_and_raw():
+    credentials, raw = build_credentials_from_docs(
+        [_doc(email="active@example.com"), _doc(email="disabled@example.com") | {"disabled": True}]
+    )
+    assert "active@example.com" in credentials["usernames"]
+    assert "disabled@example.com" not in credentials["usernames"]
+    assert "disabled@example.com" not in raw["usernames"]
+
+
 def test_name_stripped_when_no_last_name():
     doc = _doc(first="TJ", last="")
     credentials, _ = build_credentials_from_docs([doc])
@@ -99,6 +108,13 @@ def test_missing_roles_defaults_to_empty_list():
     user = extract_user_from_raw("x@x.com", raw)
     assert user is not None
     assert user["roles"] == []
+
+
+def test_extract_user_from_raw_includes_disabled_flag():
+    _, raw = build_credentials_from_docs([_doc()])
+    user = extract_user_from_raw("tj@example.com", raw)
+    assert user is not None
+    assert user["disabled"] is False
 
 
 # --- user_has_any_role ---

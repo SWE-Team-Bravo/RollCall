@@ -23,23 +23,17 @@ from services.events import (
     get_event_time_bounds,
     get_timezone_options,
 )
-from utils.auth import get_current_user, require_role
-from utils.db_schema_crud import get_user_by_email
+from utils.auth import get_current_user_doc, require_role
 
 require_role("flight_commander", "cadre", "admin")
 
 st.title("Event Code Generator")
 st.caption("Generate attendance codes for cadets to self-report.")
 
-current_user = get_current_user()
-assert current_user is not None
-
-email = str(current_user.get("email", "") or "").strip()
-user = get_user_by_email(email)
+user = get_current_user_doc()
 if user is None:
     st.error("Could not find user account.")
     st.stop()
-assert user is not None
 
 all_events = get_all_events()
 
@@ -115,6 +109,7 @@ if st.button("Generate New Code", type="primary", width="stretch"):
             event_date=str(selected_event.get("start_date", "")),
             created_by_user_id=user["_id"],
             expires_at=expires_at,
+            actor_email=str(user.get("email", "") or "").strip() or None,
         )
         if result is None:
             st.error("Database unavailable. Could not generate code.")
@@ -167,7 +162,11 @@ def _active_code_panel(event_id: str, tz: str) -> None:
             st.warning("This code has expired. Generate a new one above.")
 
     if st.button("Expire Code Now", type="secondary"):
-        if expire_code(active_code["_id"]):
+        if expire_code(
+            active_code["_id"],
+            actor_user_id=user.get("_id"),
+            actor_email=str(user.get("email", "") or "").strip() or None,
+        ):
             st.success("Code expired.")
             st.rerun()
         else:
