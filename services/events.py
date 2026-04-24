@@ -156,3 +156,33 @@ def delete_event(event_id: str) -> bool:
         return False
     result = db.events.delete_one({"_id": ObjectId(event_id)})
     return result.deleted_count == 1
+
+
+def update_event(
+    event_id: str,
+    name: str,
+    event_type: str,
+    start_date: date,
+    end_date: date,
+    tz_name: str = "UTC",
+) -> bool:
+    """Update an existing event. Returns True on success."""
+    if start_date > end_date:
+        return False
+    db = get_db()
+    if db is None:
+        return False
+    start_dt, end_dt = build_event_bounds(start_date, end_date, tz_name)
+    result = db.events.update_one(
+        {"_id": ObjectId(event_id)},
+        {
+            "$set": {
+                "event_name": name,
+                "event_type": event_type,
+                "start_date": start_dt,
+                "end_date": end_dt,
+                "timezone_name": tz_name,
+            }
+        },
+    )
+    return result.modified_count == 1
