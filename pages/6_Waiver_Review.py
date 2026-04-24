@@ -4,9 +4,9 @@ import pandas as pd
 
 from services.waiver_review import (
     get_flight_options,
-    get_waiver_context,
+    get_paginated_waiver_review_rows,
     get_waiver_export_df,
-    get_waivers,
+    get_waiver_review_rows,
     submit_decision,
 )
 from services.waivers import WAIVER_STATUS_BADGE
@@ -14,6 +14,7 @@ from services.waivers import WAIVER_STATUS_BADGE
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 from utils.export import to_excel
+from utils.pagination import init_pagination_state, render_pagination_controls, sync_pagination_state
 
 from utils.st_helpers import require
 
@@ -45,55 +46,34 @@ flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
 cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
 viewer_roles = list(current_user.get("roles") or [])
-waivers = get_waivers(status_filter.lower(), viewer_roles)
+pagination_reset_token = "|".join(
+    [
+        status_filter.lower(),
+        flight_filter,
+        cadet_search,
+        ",".join(sorted(viewer_roles)),
+    ]
+)
+review_page, review_page_size = init_pagination_state(
+    "waiver_review",
+    reset_token=pagination_reset_token,
+)
 
-if not waivers:
-    st.info("No waivers found for the selected filters.")
-    st.stop()
-
-rows = []
-for waiver in waivers:
-    waiver_id = waiver.get("_id")
-    if waiver_id is None:
-        continue
-
-    ctx = get_waiver_context(waiver)
-    if ctx is None:
-        continue
-
-    cadet_name = ctx["cadet_name"]
-    cadet_email = ctx["cadet_email"]
-    flight_name = ctx["flight_name"]
-    event_name = ctx["event_name"]
-    event_date = ctx["event_date"]
-    event_type = ctx["event_type"]
-    waiver_type = ctx["waiver_type"]
-    attachments = ctx["attachments"]
-    waiver_status = (waiver.get("status") or "pending").lower()
-
-    if flight_filter != "All flights" and flight_name != flight_filter:
-        continue
-
-    if cadet_search:
-        hay = f"{cadet_name} {cadet_email}".lower()
-        if cadet_search not in hay:
-            continue
-
-    rows.append(
-        {
-            "waiver_id": waiver_id,
-            "waiver_status": waiver_status,
-            "waiver_type": waiver_type,
-            "attachments": attachments,
-            "reason": waiver.get("reason", ""),
-            "cadet_name": cadet_name,
-            "cadet_email": cadet_email,
-            "flight_name": flight_name,
-            "event_name": event_name,
-            "event_date": event_date,
-            "event_type": event_type,
-        }
-    )
+rows = get_waiver_review_rows(
+    status_filter=status_filter.lower(),
+    flight_filter=flight_filter,
+    cadet_search=cadet_search,
+    viewer_roles=viewer_roles,
+)
+paginated_rows = get_paginated_waiver_review_rows(
+    status_filter=status_filter.lower(),
+    flight_filter=flight_filter,
+    cadet_search=cadet_search,
+    viewer_roles=viewer_roles,
+    page=review_page,
+    page_size=review_page_size,
+)
+sync_pagination_state("waiver_review", paginated_rows)
 
 export_df = get_waiver_export_df(rows)
 if isinstance(export_df, str):
@@ -104,7 +84,7 @@ if not rows:
     st.info("No waivers matched the selected filters.")
     st.stop()
 
-for w in rows:
+for w in paginated_rows["items"]:
     with st.container(border=True):
         top = st.columns([4, 2, 2])
         top[0].markdown(f"**{w['cadet_name']}**  \n{w['cadet_email']}")
@@ -164,6 +144,9 @@ for w in rows:
                         st.rerun()
                     else:
                         st.error(err)
+
+st.divider()
+render_pagination_controls("waiver_review", paginated_rows)
 
 st.divider()
 col1, col2, spacer = st.columns([2, 2, 10])

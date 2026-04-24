@@ -17,12 +17,16 @@ from utils.attendance_status import (
 )
 from utils.db import get_collection, get_db
 from utils.export import to_excel
+from utils.pagination import (
+    build_pagination_metadata,
+    init_pagination_state,
+    paginate_list,
+    render_pagination_controls,
+    sync_pagination_state,
+)
 
 
 require_role("admin", "cadre", "flight_commander")
-
-
-_MAX_EVENTS = 200
 
 
 def _utc_datetime(d: date, end_of_day: bool) -> datetime:
@@ -187,7 +191,24 @@ if event_type_choice == "PT":
 elif event_type_choice == "LLAB":
     event_query["event_type"] = "lab"
 
-total_event_count = events_col.count_documents({})
+event_pagination_reset_token = "|".join(
+    [
+        start_dt.isoformat(),
+        end_dt.isoformat(),
+        event_type_choice,
+        selected_flight_name,
+    ]
+)
+event_page, event_page_size = init_pagination_state(
+    "dashboard_events",
+    reset_token=event_pagination_reset_token,
+)
+total_event_count = int(events_col.count_documents(event_query))
+event_pagination = build_pagination_metadata(
+    page=event_page,
+    page_size=event_page_size,
+    total_count=total_event_count,
+)
 
 event_docs = list(
     events_col.find(
@@ -195,10 +216,11 @@ event_docs = list(
         {"_id": 1, "start_date": 1, "event_name": 1, "event_type": 1},
     )
     .sort("start_date", -1)
-    .limit(_MAX_EVENTS)
+    .skip(event_pagination["skip"])
+    .limit(event_pagination["page_size"])
 )
-
-too_many_events = total_event_count > _MAX_EVENTS
+event_pagination = {**event_pagination, "items": event_docs}
+sync_pagination_state("dashboard_events", event_pagination)
 
 if not event_docs:
     st.info("No events found for the selected filters.")
@@ -239,11 +261,7 @@ else:
         # --- Event summary (one row per event)
 
         st.subheader("Event Summary")
-        st.caption(f"Showing {len(event_docs)}/{total_event_count} events")
-        if too_many_events:
-            st.warning(
-                f"Showing newest {_MAX_EVENTS} of {total_event_count} events. Narrow the date range to see older events."
-            )
+        st.caption(f"Showing {len(event_docs)} event(s) on this page.")
 
         # Aggregate counts by event_id and status. Prefer doing this server-side.
         status_counts: dict[ObjectId, dict[str, int]] = {
@@ -314,18 +332,25 @@ else:
                 width="stretch",
                 hide_index=True,
             )
+            render_pagination_controls("dashboard_events", event_pagination)
 
-            _summary_events = [
-                event_by_id.get(eid, {}) for eid in summary_df["_event_id"]
-            ]
-            selected_label = st.selectbox(
+            summary_event_ids = list(summary_df["_event_id"])
+            if (
+                "dashboard_selected_event_id" not in st.session_state
+                or st.session_state["dashboard_selected_event_id"] not in summary_event_ids
+            ):
+                _summary_events = [event_by_id.get(eid, {}) for eid in summary_event_ids]
+                default_index = closest_event_index(_summary_events)
+                st.session_state["dashboard_selected_event_id"] = summary_event_ids[
+                    default_index
+                ]
+
+            selected_event_id = st.selectbox(
                 "Select an event to view cadets",
-                options=list(summary_df["Event"]),
-                index=closest_event_index(_summary_events),
+                options=summary_event_ids,
+                format_func=lambda eid: _event_label(event_by_id.get(eid, {})),
+                key="dashboard_selected_event_id",
             )
-
-            selected_row = summary_df.loc[summary_df["Event"] == selected_label].iloc[0]
-            selected_event_id = selected_row["_event_id"]
             selected_event = event_by_id.get(selected_event_id)
 
             st.subheader("Cadets for Selected Event")
@@ -357,7 +382,26 @@ else:
                 if not cadet_rows:
                     st.info("No cadets match the current status filter.")
                 else:
-                    cadet_df = pd.DataFrame(cadet_rows)
+                    cadet_pagination_reset_token = "|".join(
+                        [
+                            str(selected_event_id),
+                            status_choice,
+                            selected_flight_name,
+                        ]
+                    )
+                    cadet_page, cadet_page_size = init_pagination_state(
+                        "dashboard_cadets",
+                        reset_token=cadet_pagination_reset_token,
+                    )
+                    paginated_cadets = paginate_list(
+                        cadet_rows,
+                        page=cadet_page,
+                        page_size=cadet_page_size,
+                    )
+                    sync_pagination_state("dashboard_cadets", paginated_cadets)
+
+                    cadet_df = pd.DataFrame(paginated_cadets["items"])
+                    export_cadet_df = pd.DataFrame(cadet_rows)
                     styler = cadet_df.style
                     if hasattr(styler, "map"):
                         styler = styler.map(
@@ -371,16 +415,16 @@ else:
                         )
 
                     col1, col2, spacer = st.columns([1.5, 2, 10])
-                    if isinstance(cadet_df, pd.DataFrame):
+                    if isinstance(export_cadet_df, pd.DataFrame):
                         col1.download_button(
                             "Export CSV",
-                            cadet_df.to_csv().encode("utf-8"),
+                            export_cadet_df.to_csv(index=False).encode("utf-8"),
                             "attendance.csv",
                             "text/csv",
                         )
                         col2.download_button(
                             "Export Excel",
-                            to_excel(cadet_df),
+                            to_excel(export_cadet_df),
                             "attendance.xlsx",
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
@@ -394,3 +438,4 @@ else:
                         st.warning("Excused")
 
                     st.dataframe(styler, width="stretch", hide_index=True)
+                    render_pagination_controls("dashboard_cadets", paginated_cadets)

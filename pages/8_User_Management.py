@@ -15,6 +15,12 @@ from services.admin_users import (
     confirm_delete_user,
     ALLOWED_ROLES,
 )
+from utils.pagination import (
+    init_pagination_state,
+    paginate_list,
+    render_pagination_controls,
+    sync_pagination_state,
+)
 
 
 require_role("admin")
@@ -261,6 +267,18 @@ else:
     if not filtered:
         st.info("No users match your filters.")
     else:
+        users_page, users_page_size = init_pagination_state(
+            "admin_users",
+            reset_token=f"{role_filter}|{search_norm}",
+        )
+        paginated_filtered = paginate_list(
+            filtered,
+            page=users_page,
+            page_size=users_page_size,
+        )
+        sync_pagination_state("admin_users", paginated_filtered)
+        page_filtered = list(paginated_filtered["items"])
+
         df = pd.DataFrame(
             [
                 {
@@ -268,15 +286,16 @@ else:
                     "Email": s.get("email", ""),
                     "Role": s.get("role", "") or "-",
                 }
-                for s in filtered
+                for s in page_filtered
             ],
             columns=pd.Index(["Name", "Email", "Role"]),
         )
         st.dataframe(df, hide_index=True, width="stretch")
+        render_pagination_controls("admin_users", paginated_filtered)
 
-        filtered_ids = [s["id"] for s in filtered]
-        if st.session_state.admin_users_selected not in filtered_ids:
-            st.session_state.admin_users_selected = filtered_ids[0]
+        page_filtered_ids = [s["id"] for s in page_filtered]
+        if st.session_state.admin_users_selected not in page_filtered_ids:
+            st.session_state.admin_users_selected = page_filtered_ids[0]
 
         def _label(user_id: str) -> str:
             s = summary_by_id.get(user_id, {})
@@ -286,7 +305,7 @@ else:
 
         selected_id = st.selectbox(
             "Select user",
-            options=filtered_ids,
+            options=page_filtered_ids,
             format_func=_label,
             key="admin_users_selected",
         )
