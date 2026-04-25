@@ -40,6 +40,7 @@ def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
 
     all_roles = roles if isinstance(roles, (list, tuple)) else []
     waiver_reviewer = "waiver_reviewer" in all_roles
+    is_disabled = bool(user.get("disabled", False))
 
     return {
         "id": user_id,
@@ -47,6 +48,7 @@ def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
         "name": name,
         "role": primary_role,
         "waiver_reviewer": waiver_reviewer,
+        "disabled": is_disabled,
     }
 
 

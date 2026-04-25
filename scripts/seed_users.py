@@ -148,6 +148,7 @@ def populate():
             "password_hash": PASSWORD,
             "role": role,
             "roles": [role],
+            "disabled": False,
             "created_at": now,
         }
         result = db["users"].insert_one(doc)
