@@ -103,10 +103,12 @@ uv run python scripts/seed_users.py
 
 This resets and seeds demo data, including user accounts.
 
+You can log in with a seeded user's email and password.
+
 Default demo password:
 - `password`
 
-Example seeded usernames:
+Example seeded user emails:
 - `admin1`
 - `cadre1`
 - `fc1`
@@ -176,6 +178,6 @@ If you self-host MongoDB on the same machine, run MongoDB as its own service and
   - verify `MONGODB_URI` and `MONGODB_DB` in `.env`
 - login fails for seeded users:
   - reseed using `uv run python scripts/seed_users.py`
-  - ensure you are using username/email values from the seeded records
+  - ensure you are using a seeded user email and the correct password (`password` by default)
 - Streamlit command not found:
   - use `uv run streamlit ...` instead of relying on global PATH
