@@ -9,7 +9,7 @@ import pandas as pd
 from utils.audit_log import log_data_change, serialize_doc_for_audit
 from utils.auth import get_current_user_doc, require_role
 from utils.db import get_collection
-from utils.db_schema_crud import create_user, update_user
+from utils.db_schema_crud import create_user, update_user, delete_user
 from utils.password_reset import build_password_updates
 from utils.password_reset_email import send_temporary_password_email
 from services.admin_users import (
@@ -269,6 +269,57 @@ def _render_status_confirmation(
         st.rerun()
 
 
+def _render_delete_confirmation(
+    summary: dict[str, Any],
+    users: list[dict[str, Any]],
+    actor_user: dict[str, Any] | None,
+) -> None:
+    existing_user = next((u for u in users if str(u.get("_id")) == summary["id"]), None)
+    if existing_user is None:
+        st.error("User no longer exists.")
+        st.session_state["admin_users_confirm_delete"] = None
+        return
+
+    st.warning(
+        f"Type DELETE below to **permanently delete** user {summary['email']}. "
+        "This action cannot be undone.",
+    )
+    confirmation = st.text_input(
+        "Confirm deletion",
+        key=f"confirm_delete_input_{summary['id']}",
+    )
+    confirm_btn, cancel_btn = st.columns(2)
+
+    if confirm_btn.button(
+        "Confirm Delete", type="primary", key=f"confirm_delete_{summary['id']}"
+    ):
+        if not confirm_destructive_action(confirmation):
+            st.error("Confirmation text does not match 'DELETE'.")
+            return
+
+        before_user = dict(existing_user)
+        result = delete_user(existing_user["_id"])
+        if result is not None:
+            _audit_user_change(
+                action="delete",
+                target_label=str(existing_user.get("email", "") or "User"),
+                before=before_user,
+                after=None,
+                actor_user=actor_user,
+            )
+            st.session_state["admin_users_success"] = "User deleted successfully."
+            st.session_state.pop("admin_users_selected", None)
+        else:
+            st.error("Failed to delete user (database unavailable).")
+
+        st.session_state["admin_users_confirm_delete"] = None
+        st.rerun()
+
+    if cancel_btn.button("Cancel", key=f"cancel_delete_{summary['id']}"):
+        st.session_state["admin_users_confirm_delete"] = None
+        st.rerun()
+
+
 st.title("User Management")
 st.caption("Create, edit, disable, and enable user accounts and roles.")
 if "admin_users_success" not in st.session_state:
@@ -353,6 +404,8 @@ else:
         st.session_state["admin_users_confirm_status_change"] = None
     if "admin_users_reset_pw" not in st.session_state:
         st.session_state["admin_users_reset_pw"] = None
+    if "admin_users_confirm_delete" not in st.session_state:
+        st.session_state["admin_users_confirm_delete"] = None
     if "admin_users_last_temp_pw" not in st.session_state:
         st.session_state["admin_users_last_temp_pw"] = None
     if "admin_users_selected" not in st.session_state:
@@ -376,8 +429,6 @@ else:
         )
     with f3:
         search = st.text_input("Search (name or email)", value="")
-    with st.container():
-        show_disabled_only = st.checkbox("Show disabled users only", value=False)
 
     search_norm = search.strip().lower()
     filtered = []
@@ -392,12 +443,6 @@ else:
             hay = f"{s.get('name', '')} {s.get('email', '')}".lower()
             if search_norm not in hay:
                 continue
-        is_disabled = bool(s.get("disabled", False))
-        if show_disabled_only:
-            if not is_disabled:
-                continue
-        elif is_disabled:
-            continue
         filtered.append(s)
 
     if not filtered:
@@ -418,11 +463,7 @@ else:
         df = pd.DataFrame(
             [
                 {
-                    "Name": (
-                        f"{s.get('name', '')} (DISABLED)"
-                        if s.get("disabled", False)
-                        else s.get("name", "")
-                    ),
+                    "Name": s.get("name", ""),
                     "Email": s.get("email", ""),
                     "Role": s.get("role", "") or "-",
                     "Status": s.get("status", "Active"),
@@ -456,29 +497,42 @@ else:
             "Enable" if selected_summary.get("disabled") else "Disable"
         )
 
-        b1, b2, b3, _ = st.columns([2, 2, 3, 7])
+        b1, b2, b3, b4, _ = st.columns([2, 2, 2, 3, 5])
         with b1:
             if st.button("Edit", key="admin_users_edit_selected"):
                 st.session_state["admin_users_editing"] = selected_id
                 st.session_state["admin_users_confirm_status_change"] = None
+                st.session_state["admin_users_confirm_delete"] = None
                 st.session_state["admin_users_reset_pw"] = None
                 st.rerun()
         with b2:
             if st.button(status_action_label, key="admin_users_status_selected"):
                 st.session_state["admin_users_confirm_status_change"] = selected_id
                 st.session_state["admin_users_editing"] = None
+                st.session_state["admin_users_confirm_delete"] = None
                 st.session_state["admin_users_reset_pw"] = None
                 st.rerun()
         with b3:
+            if selected_summary.get("disabled") and st.button(
+                "Delete User", type="secondary", key="admin_users_delete_selected"
+            ):
+                st.session_state["admin_users_confirm_delete"] = selected_id
+                st.session_state["admin_users_editing"] = None
+                st.session_state["admin_users_confirm_status_change"] = None
+                st.session_state["admin_users_reset_pw"] = None
+                st.rerun()
+        with b4:
             if st.button("Reset Password", key="admin_users_reset_selected"):
                 st.session_state["admin_users_reset_pw"] = selected_id
                 st.session_state["admin_users_editing"] = None
                 st.session_state["admin_users_confirm_status_change"] = None
+                st.session_state["admin_users_confirm_delete"] = None
                 st.session_state["admin_users_last_temp_pw"] = None
                 st.rerun()
 
     editing_id = st.session_state.get("admin_users_editing")
     confirm_id = st.session_state.get("admin_users_confirm_status_change")
+    delete_id = st.session_state.get("admin_users_confirm_delete")
     reset_id = st.session_state.get("admin_users_reset_pw")
 
     if editing_id and editing_id in summary_by_id:
@@ -488,6 +542,10 @@ else:
     if confirm_id and confirm_id in summary_by_id:
         st.divider()
         _render_status_confirmation(summary_by_id[confirm_id], raw_users, actor_user)
+
+    if delete_id and delete_id in summary_by_id:
+        st.divider()
+        _render_delete_confirmation(summary_by_id[delete_id], raw_users, actor_user)
 
     if reset_id and reset_id in summary_by_id:
         st.divider()
