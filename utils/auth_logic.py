@@ -10,8 +10,6 @@ def build_credentials_from_docs(
     raw: dict = {"usernames": {}}
     credentials: dict = {"usernames": {}}
     for doc in docs:
-        if doc.get("disabled") is True:
-            continue
         email = doc["email"]
         raw["usernames"][email.lower()] = doc
         if bool(doc.get("disabled", False)):
