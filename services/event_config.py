@@ -5,9 +5,10 @@ DEFAULT_PT_DAYS = ["Monday", "Tuesday", "Thursday"]
 DEFAULT_LLAB_DAYS = ["Friday"]
 DEFAULT_PT_THRESHOLD = 9
 DEFAULT_LLAB_THRESHOLD = 2
-DEFAULT_CHECKIN_WINDOW_MINUTES = 10
+DEFAULT_CHECKIN_WINDOW_MINUTES = 20
 DEFAULT_WAIVER_REMINDER_DAYS = 3
 DEFAULT_EMAIL_ENABLED = True
+DEFAULT_TIMEZONE = "America/New_York"
 
 
 def get_event_config() -> dict | None:
@@ -50,6 +51,13 @@ def get_event_config() -> dict | None:
     }
 
 
+def get_default_timezone() -> str:
+    config = get_event_config()
+    if config is None:
+        return DEFAULT_TIMEZONE
+    return config.get("default_timezone", DEFAULT_TIMEZONE)
+
+
 def save_event_config(
     pt_days: list[str],
     llab_days: list[str],
@@ -58,6 +66,7 @@ def save_event_config(
     checkin_window: int,
     waiver_reminder_days: int,
     email_enabled: bool,
+    default_timezone: str = DEFAULT_TIMEZONE,
     *,
     actor_user_id: str | None = None,
     actor_email: str | None = None,
@@ -80,6 +89,7 @@ def save_event_config(
                 "checkin_window": checkin_window,
                 "waiver_reminder_days": waiver_reminder_days,
                 "email_enabled": email_enabled,
+                "default_timezone": default_timezone,
             }
         },
     )

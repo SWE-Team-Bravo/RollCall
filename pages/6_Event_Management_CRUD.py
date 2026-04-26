@@ -1,10 +1,15 @@
+import folium
 import streamlit as st
-from datetime import date
+from datetime import date, time
+from typing import cast
+from streamlit_folium import st_folium
 from services.event_config import (
     DEFAULT_CHECKIN_WINDOW_MINUTES,
     DEFAULT_LLAB_THRESHOLD,
     DEFAULT_PT_THRESHOLD,
+    DEFAULT_TIMEZONE,
     DEFAULT_WAIVER_REMINDER_DAYS,
+    get_default_timezone,
     get_event_config,
     save_event_config,
 )
@@ -32,6 +37,8 @@ if "edit_event_success" not in st.session_state:
     st.session_state.edit_event_success = None
 if "restore_event_success" not in st.session_state:
     st.session_state.restore_event_success = None
+if "edit_geofence_init_id" not in st.session_state:
+    st.session_state.edit_geofence_init_id = None
 
 st.title("Event Management")
 
@@ -63,6 +70,11 @@ def infer_event_type(selected_date: date, config: dict) -> str:
 # ── load config once ─────────────────────────────────────────────────────────
 
 config = get_event_config() or {}
+TZ_OPTIONS = get_timezone_options()
+_configured_tz = get_default_timezone()
+_configured_tz_index = (
+    TZ_OPTIONS.index(_configured_tz) if _configured_tz in TZ_OPTIONS else 0
+)
 
 # =============================================================================
 # SECTION 1 — Schedule Configuration (merged from #33)
@@ -130,6 +142,19 @@ with st.expander("Event Schedule Configuration", expanded=False):
         key="cfg_email_enabled",
     )
 
+    st.divider()
+
+    _cfg_tz_default = config.get("default_timezone", DEFAULT_TIMEZONE)
+    _cfg_tz_index = (
+        TZ_OPTIONS.index(_cfg_tz_default) if _cfg_tz_default in TZ_OPTIONS else 0
+    )
+    default_timezone = st.selectbox(
+        "Default Timezone for Events",
+        TZ_OPTIONS,
+        index=_cfg_tz_index,
+        key="cfg_default_timezone",
+    )
+
     if st.button("Save Schedule Configuration"):
         if save_event_config(
             pt_days,
@@ -139,6 +164,7 @@ with st.expander("Event Schedule Configuration", expanded=False):
             checkin_window,
             waiver_reminder_days,
             email_enabled,
+            default_timezone,
             actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
             actor_email=current_user_doc.get("email") if current_user_doc else None,
         ):
@@ -156,17 +182,59 @@ st.divider()
 
 st.subheader("Create New Event")
 
-TZ_OPTIONS = get_timezone_options()
+# ── Geofence picker (must live outside st.form so the map widget works) ───────
+create_use_geofence = st.checkbox(
+    "Enable geofence check-in verification", key="create_use_geofence"
+)
+if create_use_geofence:
+    st.caption(
+        "Click the map to set the geofence center. Cadets outside this radius will be warned but not blocked."
+    )
+    _clat = st.session_state.get("create_geofence_lat")
+    _clon = st.session_state.get("create_geofence_lon")
+    _crad = st.session_state.get("create_geofence_radius", 150)
+    _has_pin = _clat is not None and _clon is not None
+    _center: list[float] = (
+        [cast(float, _clat), cast(float, _clon)] if _has_pin else [41.1548, -81.3414]
+    )
+    _zoom = 16 if _has_pin else 15
+    _m = folium.Map(location=_center, zoom_start=_zoom)
+    if _has_pin:
+        _loc: list[float] = [cast(float, _clat), cast(float, _clon)]
+        folium.Circle(
+            location=_loc, radius=_crad, color="#0066cc", fill=True, fill_opacity=0.2
+        ).add_to(_m)
+        folium.Marker(_loc, tooltip="Geofence center").add_to(_m)
+    _map_data = st_folium(_m, width=None, height=400, key="create_geofence_map")
+    if _map_data and _map_data.get("last_clicked"):
+        _new_lat = _map_data["last_clicked"]["lat"]
+        _new_lon = _map_data["last_clicked"]["lng"]
+        if _new_lat != _clat or _new_lon != _clon:
+            st.session_state.create_geofence_lat = _new_lat
+            st.session_state.create_geofence_lon = _new_lon
+            st.rerun()
+    if _clat is not None:
+        st.caption(f"Center: {_clat:.6f}, {_clon:.6f}")
+    else:
+        st.caption("No location selected yet — click the map.")
+    st.number_input(
+        "Radius (meters)",
+        min_value=50,
+        max_value=1000,
+        value=_crad,
+        step=25,
+        key="create_geofence_radius",
+    )
 
 with st.form("create_event_form"):
     event_name = st.text_input("Event Name", placeholder="e.g. Week 3 PT")
 
-    start_date = st.date_input("Start Date", value=date.today())
-    end_date = st.date_input("End Date", value=date.today())
-    tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=0)
-    st.caption(
-        "Dates are stored as 12:00 AM through 11:59 PM in the selected timezone."
-    )
+    c1, c2 = st.columns(2)
+    start_date = c1.date_input("Start Date", value=date.today())
+    start_time = c1.time_input("Start Time", value=time(6, 0))
+    end_date = c2.date_input("End Date", value=date.today())
+    end_time = c2.time_input("End Time", value=time(7, 0))
+    tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=_configured_tz_index)
 
     auto_type = infer_event_type(start_date, config)
     type_options = ["pt", "lab"]
@@ -187,11 +255,8 @@ if submitted:
     elif end_date < start_date:
         st.error("End date cannot be before start date.")
     else:
-        creator_id = (
-            str(current_user_doc["_id"])
-            if current_user_doc
-            else "unknown"
-        )
+        creator_id = str(current_user_doc["_id"]) if current_user_doc else "unknown"
+        _geo_enabled = st.session_state.get("create_use_geofence", False)
         if create_event(
             event_name.strip(),
             event_type,
@@ -199,6 +264,12 @@ if submitted:
             end_date,
             creator_id,
             tz_name,
+            _geo_enabled,
+            st.session_state.get("create_geofence_lat") if _geo_enabled else None,
+            st.session_state.get("create_geofence_lon") if _geo_enabled else None,
+            int(st.session_state.get("create_geofence_radius", 150)),
+            start_time,
+            end_time,
             actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
             actor_email=current_user_doc.get("email") if current_user_doc else None,
         ):
@@ -240,8 +311,8 @@ else:
                 {
                     "Name": e.get("event_name", "—"),
                     "Type": e.get("event_type", "—").upper(),
-                    "Start Date": e.get("start_date", "—"),
-                    "End Date": e.get("end_date", "—"),
+                    "Start": e.get("_display_start", "—"),
+                    "End": e.get("_display_end", "—"),
                 }
                 for e in active_events
             ]
@@ -257,7 +328,7 @@ else:
         st.caption("No active events available to edit.")
     else:
         edit_labels = [
-            f"{e.get('start_date', '—')} — {e.get('event_name', '—')}"
+            f"{e.get('_display_start', '—')} — {e.get('event_name', '—')}"
             for e in active_events
         ]
         selected_edit_label = st.selectbox(
@@ -270,6 +341,74 @@ else:
             st.rerun()
 
         if st.session_state.edit_event_id == selected_edit_event["_id"]:
+            # Seed geofence session state from event data when first opening this edit
+            if st.session_state.edit_geofence_init_id != st.session_state.edit_event_id:
+                st.session_state.edit_use_geofence = selected_edit_event.get(
+                    "geofence_enabled", False
+                )
+                st.session_state.edit_geofence_lat = selected_edit_event.get(
+                    "geofence_lat"
+                )
+                st.session_state.edit_geofence_lon = selected_edit_event.get(
+                    "geofence_lon"
+                )
+                st.session_state.edit_geofence_radius = selected_edit_event.get(
+                    "geofence_radius_meters", 150
+                )
+                st.session_state.edit_geofence_init_id = st.session_state.edit_event_id
+
+            # ── Geofence picker (outside form) ────────────────────────────────
+            edit_use_geofence = st.checkbox(
+                "Enable geofence check-in verification",
+                value=st.session_state.get("edit_use_geofence", False),
+                key="edit_use_geofence",
+            )
+            if edit_use_geofence:
+                st.caption("Click the map to update the geofence center.")
+                _elat = st.session_state.get("edit_geofence_lat")
+                _elon = st.session_state.get("edit_geofence_lon")
+                _erad = st.session_state.get("edit_geofence_radius", 150)
+                _ehas_pin = _elat is not None and _elon is not None
+                _ecenter: list[float] = (
+                    [cast(float, _elat), cast(float, _elon)]
+                    if _ehas_pin
+                    else [41.1548, -81.3414]
+                )
+                _ezoom = 16 if _ehas_pin else 15
+                _em = folium.Map(location=_ecenter, zoom_start=_ezoom)
+                if _ehas_pin:
+                    _eloc: list[float] = [cast(float, _elat), cast(float, _elon)]
+                    folium.Circle(
+                        location=_eloc,
+                        radius=_erad,
+                        color="#0066cc",
+                        fill=True,
+                        fill_opacity=0.2,
+                    ).add_to(_em)
+                    folium.Marker(_eloc, tooltip="Geofence center").add_to(_em)
+                _emap_data = st_folium(
+                    _em, width=None, height=400, key="edit_geofence_map"
+                )
+                if _emap_data and _emap_data.get("last_clicked"):
+                    _new_elat = _emap_data["last_clicked"]["lat"]
+                    _new_elon = _emap_data["last_clicked"]["lng"]
+                    if _new_elat != _elat or _new_elon != _elon:
+                        st.session_state.edit_geofence_lat = _new_elat
+                        st.session_state.edit_geofence_lon = _new_elon
+                        st.rerun()
+                if _elat is not None:
+                    st.caption(f"Center: {_elat:.6f}, {_elon:.6f}")
+                else:
+                    st.caption("No location selected yet — click the map.")
+                st.number_input(
+                    "Radius (meters)",
+                    min_value=50,
+                    max_value=1000,
+                    value=_erad,
+                    step=25,
+                    key="edit_geofence_radius",
+                )
+
             with st.form("edit_event_form"):
                 st.markdown(f"**Editing:** {selected_edit_event.get('event_name', '')}")
 
@@ -289,17 +428,55 @@ else:
                 except ValueError:
                     parsed_end = date.today()
 
-                new_start = st.date_input("Start Date", value=parsed_start, key="edit_start")
-                new_end = st.date_input("End Date", value=parsed_end, key="edit_end")
+                from zoneinfo import ZoneInfo
+                from utils.datetime_utils import ensure_utc
+
+                _event_tz = ZoneInfo(selected_edit_event.get("timezone_name", "UTC"))
+                _es = (
+                    ensure_utc(existing_start).astimezone(_event_tz)
+                    if hasattr(existing_start, "hour")
+                    else None
+                )
+                _ee = (
+                    ensure_utc(existing_end).astimezone(_event_tz)
+                    if hasattr(existing_end, "hour")
+                    else None
+                )
+                _default_start_time = time(_es.hour, _es.minute) if _es else time(6, 0)
+                _default_end_time = time(_ee.hour, _ee.minute) if _ee else time(7, 0)
+
+                ec1, ec2 = st.columns(2)
+                new_start = ec1.date_input(
+                    "Start Date", value=parsed_start, key="edit_start"
+                )
+                new_start_time = ec1.time_input(
+                    "Start Time", value=_default_start_time, key="edit_start_time"
+                )
+                new_end = ec2.date_input("End Date", value=parsed_end, key="edit_end")
+                new_end_time = ec2.time_input(
+                    "End Time", value=_default_end_time, key="edit_end_time"
+                )
 
                 existing_tz = selected_edit_event.get("timezone_name", "UTC")
-                tz_index = TZ_OPTIONS.index(existing_tz) if existing_tz in TZ_OPTIONS else 0
-                new_tz = st.selectbox("Timezone", TZ_OPTIONS, index=tz_index, key="edit_tz")
+                tz_index = (
+                    TZ_OPTIONS.index(existing_tz)
+                    if existing_tz in TZ_OPTIONS
+                    else _configured_tz_index
+                )
+                new_tz = st.selectbox(
+                    "Timezone", TZ_OPTIONS, index=tz_index, key="edit_tz"
+                )
 
                 existing_type = selected_edit_event.get("event_type", "pt")
                 type_options = ["pt", "lab"]
-                type_index = type_options.index(existing_type) if existing_type in type_options else 0
-                new_type = st.selectbox("Event Type", type_options, index=type_index, key="edit_type")
+                type_index = (
+                    type_options.index(existing_type)
+                    if existing_type in type_options
+                    else 0
+                )
+                new_type = st.selectbox(
+                    "Event Type", type_options, index=type_index, key="edit_type"
+                )
 
                 c1, c2 = st.columns(2)
                 save = c1.form_submit_button("Save Changes", type="primary")
@@ -311,6 +488,7 @@ else:
                 elif new_end < new_start:
                     st.error("End date cannot be before start date.")
                 else:
+                    _egeo = st.session_state.get("edit_use_geofence", False)
                     if update_event(
                         selected_edit_event["_id"],
                         new_name.strip(),
@@ -318,16 +496,30 @@ else:
                         new_start,
                         new_end,
                         new_tz,
-                        actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
-                        actor_email=current_user_doc.get("email") if current_user_doc else None,
+                        _egeo,
+                        st.session_state.get("edit_geofence_lat") if _egeo else None,
+                        st.session_state.get("edit_geofence_lon") if _egeo else None,
+                        int(st.session_state.get("edit_geofence_radius", 150)),
+                        new_start_time,
+                        new_end_time,
+                        actor_user_id=current_user_doc.get("_id")
+                        if current_user_doc
+                        else None,
+                        actor_email=current_user_doc.get("email")
+                        if current_user_doc
+                        else None,
                     ):
                         st.session_state.edit_event_id = None
-                        st.session_state.edit_event_success = f"Event '{new_name.strip()}' updated successfully!"
+                        st.session_state.edit_geofence_init_id = None
+                        st.session_state.edit_event_success = (
+                            f"Event '{new_name.strip()}' updated successfully!"
+                        )
                         st.rerun()
                     else:
                         st.error("Could not update event.")
             if cancel:
                 st.session_state.edit_event_id = None
+                st.session_state.edit_geofence_init_id = None
                 st.rerun()
 
     st.divider()
@@ -342,7 +534,7 @@ else:
             st.session_state.archive_event_success = None
 
         event_labels = [
-            f"{e.get('start_date', '—')} — {e.get('event_name', '—')}"
+            f"{e.get('_display_start', '—')} — {e.get('event_name', '—')}"
             for e in active_events
         ]
         selected_label = st.selectbox("Select event to archive", event_labels)
@@ -356,11 +548,17 @@ else:
             if c1.button("Yes, archive", type="primary"):
                 if archive_event(
                     selected_event["_id"],
-                    actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
-                    actor_email=current_user_doc.get("email") if current_user_doc else None,
+                    actor_user_id=current_user_doc.get("_id")
+                    if current_user_doc
+                    else None,
+                    actor_email=current_user_doc.get("email")
+                    if current_user_doc
+                    else None,
                 ):
                     st.session_state.confirm_archive_event_id = None
-                    st.session_state.archive_event_success = "Event archived successfully."
+                    st.session_state.archive_event_success = (
+                        "Event archived successfully."
+                    )
                     st.rerun()
                 else:
                     st.error("Could not archive event.")
@@ -374,8 +572,7 @@ else:
 
     # Keep archived events expander open when user has previously interacted with it
     _archived_expanded = (
-        len(archived_events) > 0
-        and "restore_event_selectbox" in st.session_state
+        len(archived_events) > 0 and "restore_event_selectbox" in st.session_state
     )
 
     with st.expander(
@@ -394,8 +591,8 @@ else:
                     {
                         "Name": e.get("event_name", "—"),
                         "Type": e.get("event_type", "—").upper(),
-                        "Start Date": e.get("start_date", "—"),
-                        "End Date": e.get("end_date", "—"),
+                        "Start": e.get("_display_start", "—"),
+                        "End": e.get("_display_end", "—"),
                     }
                     for e in archived_events
                 ]
@@ -403,7 +600,7 @@ else:
             st.dataframe(archived_df, width="stretch", hide_index=True)
 
             archived_labels = [
-                f"{e.get('start_date', '—')} — {e.get('event_name', '—')}"
+                f"{e.get('_display_start', '—')} — {e.get('event_name', '—')}"
                 for e in archived_events
             ]
             selected_archived_label = st.selectbox(
@@ -418,8 +615,12 @@ else:
             if st.button("Restore Selected Event"):
                 if restore_event(
                     selected_archived_event["_id"],
-                    actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
-                    actor_email=current_user_doc.get("email") if current_user_doc else None,
+                    actor_user_id=current_user_doc.get("_id")
+                    if current_user_doc
+                    else None,
+                    actor_email=current_user_doc.get("email")
+                    if current_user_doc
+                    else None,
                 ):
                     st.session_state.restore_event_success = (
                         "Event restored successfully."

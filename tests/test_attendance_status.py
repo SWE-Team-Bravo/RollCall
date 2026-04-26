@@ -19,7 +19,10 @@ def test_attendance_status_label_uses_default_for_unknown_status():
 
 
 def test_attendance_status_label_uses_no_record_default_for_missing_status():
-    assert get_attendance_status_label(None, default=NO_RECORD_STATUS_LABEL) == NO_RECORD_STATUS_LABEL
+    assert (
+        get_attendance_status_label(None, default=NO_RECORD_STATUS_LABEL)
+        == NO_RECORD_STATUS_LABEL
+    )
 
 
 def test_attendance_status_cell_style_matches_no_record():

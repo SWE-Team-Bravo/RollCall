@@ -127,7 +127,8 @@ def _fullscreen_dialog(code_str: str) -> None:
 
 
 @st.fragment(run_every=1)
-def _active_code_panel(event_id: str, tz: str, user: dict) -> None:
+def _active_code_panel(event_id: str, tz: str) -> None:
+    assert user is not None
     active_code = get_active_code(event_id)
 
     if not active_code:
@@ -172,4 +173,4 @@ def _active_code_panel(event_id: str, tz: str, user: dict) -> None:
             st.error("Could not expire code.")
 
 
-_active_code_panel(_selected_event_id, tz_name, user)
+_active_code_panel(_selected_event_id, tz_name)

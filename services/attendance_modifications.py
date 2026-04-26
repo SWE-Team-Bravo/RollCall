@@ -161,7 +161,9 @@ def _latest_visible_event_change_docs(event_id: str | ObjectId) -> list[dict[str
     return visible_docs
 
 
-def _latest_visible_event_change_pipeline(event_id: str | ObjectId) -> list[dict[str, Any]]:
+def _latest_visible_event_change_pipeline(
+    event_id: str | ObjectId,
+) -> list[dict[str, Any]]:
     return [
         {
             "$match": {
@@ -352,8 +354,10 @@ def get_event_change_history(
 
     items = _hydrate_changes(docs)
     for doc, item in zip(docs, items):
-        latest_doc = doc if col is not None and hasattr(col, "aggregate") else _latest_pair_history_doc(
-            doc["event_id"], doc["cadet_id"]
+        latest_doc = (
+            doc
+            if col is not None and hasattr(col, "aggregate")
+            else _latest_pair_history_doc(doc["event_id"], doc["cadet_id"])
         )
         if latest_doc is not None:
             item.update(_selected_action_state(doc, latest_doc))

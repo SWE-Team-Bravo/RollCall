@@ -216,13 +216,16 @@ def test_summarize_user_marks_disabled_accounts():
 
 
 def test_count_enabled_admins_ignores_disabled_admins():
-    assert count_enabled_admins(
-        [
-            {"roles": ["admin"]},
-            {"roles": ["admin"], "disabled": True},
-            {"roles": ["cadet"]},
-        ]
-    ) == 1
+    assert (
+        count_enabled_admins(
+            [
+                {"roles": ["admin"]},
+                {"roles": ["admin"], "disabled": True},
+                {"roles": ["cadet"]},
+            ]
+        )
+        == 1
+    )
 
 
 def test_build_update_user_payload_adds_waiver_reviewer():

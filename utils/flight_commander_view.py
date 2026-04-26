@@ -6,6 +6,7 @@ from typing import Any
 from services.attendance_merge import merge_attendance_records
 from utils.datetime_utils import ensure_utc
 
+
 def _is_active_event(event: dict[str, Any], now: datetime) -> bool:
     start = event.get("start_date")
     end = event.get("end_date")

@@ -5,6 +5,7 @@ from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
 
 from utils.db import get_collection
+from utils.names import format_full_name
 from utils.password import hash_password
 
 
@@ -22,7 +23,9 @@ def create_user(
         {
             "first_name": first_name,
             "last_name": last_name,
-            "name": f"{first_name} {last_name}".strip(),
+            "name": format_full_name(
+                {"first_name": first_name, "last_name": last_name}
+            ),
             "email": email,
             "password_hash": hash_password(password),
             "roles": roles,
@@ -62,6 +65,52 @@ def get_users_by_ids(user_ids: list[str | ObjectId]) -> list[dict]:
         return []
     object_ids = [ObjectId(u_id) for u_id in user_ids]
     return list(col.find({"_id": {"$in": object_ids}}))
+
+
+def get_users_by_emails(emails: list[str]) -> dict[str, dict]:
+    if not emails:
+        return {}
+    col = get_collection("users")
+    if col is None:
+        return {}
+    conditions = [
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+        for email in emails
+    ]
+    users = col.find({"$or": conditions})
+    return {u["email"].lower().strip(): u for u in users}
+
+
+def get_users_by_names(names: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    if not names:
+        return {}
+    col = get_collection("users")
+    if col is None:
+        return {}
+    conditions = [
+        {
+            "first_name": {"$regex": f"^{re.escape(first)}$", "$options": "i"},
+            "last_name": {"$regex": f"^{re.escape(last)}$", "$options": "i"},
+        }
+        for first, last in names
+    ]
+    users = col.find({"$or": conditions})
+    result: dict[tuple[str, str], dict] = {}
+    for u in users:
+        key = (u.get("first_name", "").lower().strip(), u.get("last_name", "").lower().strip())
+        result[key] = u
+    return result
+
+
+def get_cadets_by_user_ids_map(user_ids: list) -> dict[str, dict]:
+    if not user_ids:
+        return {}
+    col = get_collection("cadets")
+    if col is None:
+        return {}
+    object_ids = [ObjectId(uid) for uid in user_ids]
+    cadets = col.find({"user_id": {"$in": object_ids}})
+    return {str(c["user_id"]): c for c in cadets}
 
 
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
@@ -317,6 +366,10 @@ def create_attendance_record(
     status: str,
     recorded_by_user_id: str | ObjectId,
     recorded_by_roles: list[str] | None = None,
+    location_lat: float | None = None,
+    location_lon: float | None = None,
+    location_outside_fence: bool = False,
+    location_unavailable: bool = False,
 ) -> InsertOneResult | None:
     col = get_collection("attendance_records")
     if col is None:
@@ -330,6 +383,13 @@ def create_attendance_record(
     }
     if recorded_by_roles is not None:
         doc["recorded_by_roles"] = list(recorded_by_roles)
+    if location_lat is not None:
+        doc["location_lat"] = location_lat
+        doc["location_lon"] = location_lon
+    if location_outside_fence:
+        doc["location_outside_fence"] = True
+    if location_unavailable:
+        doc["location_unavailable"] = True
     return col.insert_one(doc)
 
 
