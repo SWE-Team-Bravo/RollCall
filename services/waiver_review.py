@@ -37,7 +37,9 @@ def get_flight_options() -> list[str]:
 
 
 def get_waivers(
-    status_filter: str, viewer_roles: list[str] | None = None
+    status_filter: str,
+    viewer_roles: list[str] | None = None,
+    viewer_flight_id: str | None = None,
 ) -> list[dict]:
     waivers = get_all_waivers()
     if status_filter != "all":
@@ -74,6 +76,7 @@ def _waiver_review_base_pipeline(
     flight_filter: str,
     cadet_search: str,
     viewer_roles: list[str] | None,
+    viewer_flight_id: str | None = None,
 ) -> list[dict]:
     search_regex = re.escape(cadet_search.strip()) if cadet_search.strip() else ""
     pipeline: list[dict] = []
@@ -199,6 +202,9 @@ def _waiver_review_base_pipeline(
             }
         )
 
+    if viewer_flight_id is not None:
+        pipeline.append({"$match": {"cadet.flight_id": ObjectId(viewer_flight_id)}})
+
     return pipeline
 
 
@@ -288,6 +294,7 @@ def get_waiver_review_rows(
     flight_filter: str,
     cadet_search: str,
     viewer_roles: list[str] | None = None,
+    viewer_flight_id: str | None = None,
 ) -> list[dict]:
     col = get_collection("waivers")
     if col is None or not hasattr(col, "aggregate"):
@@ -303,6 +310,7 @@ def get_waiver_review_rows(
         flight_filter=flight_filter,
         cadet_search=cadet_search,
         viewer_roles=viewer_roles,
+        viewer_flight_id=viewer_flight_id,
     )
     docs = list(col.aggregate(pipeline + [{"$sort": {"created_at": -1, "_id": -1}}]))
     return _waiver_review_rows_from_docs(docs)
@@ -314,6 +322,7 @@ def get_paginated_waiver_review_rows(
     flight_filter: str,
     cadet_search: str,
     viewer_roles: list[str] | None = None,
+    viewer_flight_id: str | None = None,
     page: int = 1,
     page_size: int = 25,
 ) -> dict[str, object]:
@@ -336,6 +345,7 @@ def get_paginated_waiver_review_rows(
         flight_filter=flight_filter,
         cadet_search=cadet_search,
         viewer_roles=viewer_roles,
+        viewer_flight_id=viewer_flight_id,
     )
     count_docs = list(col.aggregate(base_pipeline + [{"$count": "total_count"}]))
     total_count = int(count_docs[0]["total_count"]) if count_docs else 0

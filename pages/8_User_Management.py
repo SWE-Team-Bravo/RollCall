@@ -13,6 +13,7 @@ from utils.db_schema_crud import create_user, update_user, delete_user
 from utils.password_reset import build_password_updates
 from utils.password_reset_email import send_temporary_password_email
 from services.admin_users import (
+    ROLE_LABELS,
     confirm_destructive_action,
     list_users_for_admin,
     validate_new_user_data,
@@ -105,20 +106,21 @@ def _render_edit_row(
         st.rerun()
     assert existing_user is not None
 
+    edit_version = st.session_state.get(f"edit_version_{user_id}", 0)
     new_first = cols[0].text_input(
         "First Name",
         str(existing_user.get("first_name", "") or ""),
-        key=f"edit_first_{user_id}",
+        key=f"edit_first_{user_id}_{edit_version}",
     )
     new_last = cols[0].text_input(
         "Last Name",
         str(existing_user.get("last_name", "") or ""),
-        key=f"edit_last_{user_id}",
+        key=f"edit_last_{user_id}_{edit_version}",
     )
     new_email = cols[1].text_input(
         "Email",
         summary["email"],
-        key=f"edit_email_{user_id}",
+        key=f"edit_email_{user_id}_{edit_version}",
     )
     new_role = cols[2].selectbox(
         "Role",
@@ -126,12 +128,13 @@ def _render_edit_row(
         index=sorted(ALLOWED_ROLES).index(summary["role"])
         if summary["role"] in ALLOWED_ROLES
         else 0,
-        key=f"edit_role_{user_id}",
+        key=f"edit_role_{user_id}_{edit_version}",
+        format_func=lambda r: ROLE_LABELS.get(r, r),
     )
     new_waiver_reviewer = cols[2].checkbox(
         "Waiver reviewer",
         value=bool(summary.get("waiver_reviewer", False)),
-        key=f"edit_wr_{user_id}",
+        key=f"edit_wr_{user_id}_{edit_version}",
     )
 
     save_btn, cancel_btn = cols[3].columns(2)
@@ -164,6 +167,8 @@ def _render_edit_row(
                     actor_user=actor_user,
                 )
                 st.success("User updated successfully.")
+                st.session_state["admin_users_selected_value"] = user_id
+                st.session_state[f"edit_version_{user_id}"] = edit_version + 1
                 st.session_state["admin_users_editing"] = None
                 st.rerun()
             else:
@@ -345,7 +350,11 @@ with st.expander("Create New User", expanded=False):
             email = st.text_input("Email")
         with col2:
             last_name = st.text_input("Last Name")
-            role = st.selectbox("Role", sorted(ALLOWED_ROLES))
+            role = st.selectbox(
+                "Role",
+                sorted(ALLOWED_ROLES),
+                format_func=lambda r: ROLE_LABELS.get(r, r),
+            )
 
         password = st.text_input("Temporary Password", type="password")
         create_submitted = st.form_submit_button("Create User", type="primary")
@@ -468,7 +477,7 @@ else:
                 {
                     "Name": s.get("name", ""),
                     "Email": s.get("email", ""),
-                    "Role": s.get("role", "") or "-",
+                    "Role": s.get("role_label", s.get("role", "")) or "-",
                     "Status": s.get("status", "Active"),
                 }
                 for s in page_filtered
@@ -488,12 +497,25 @@ else:
             email = str(s.get("email", "") or "").strip()
             return f"{name} ({email})".strip()
 
+        if "admin_users_selected_value" not in st.session_state:
+            st.session_state["admin_users_selected_value"] = (
+                page_filtered_ids[0] if page_filtered_ids else None
+            )
+
+        if st.session_state["admin_users_selected_value"] not in page_filtered_ids:
+            st.session_state["admin_users_selected_value"] = page_filtered_ids[0]
+
         selected_id = st.selectbox(
             "Select user",
             options=page_filtered_ids,
             format_func=_label,
-            key="admin_users_selected",
+            index=page_filtered_ids.index(
+                st.session_state["admin_users_selected_value"]
+            )
+            if st.session_state["admin_users_selected_value"] in page_filtered_ids
+            else 0,
         )
+        st.session_state["admin_users_selected_value"] = selected_id
 
         selected_summary = summary_by_id.get(selected_id, {})
         status_action_label = (

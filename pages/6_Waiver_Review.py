@@ -12,8 +12,12 @@ from services.waiver_review import (
 )
 from services.waivers import WAIVER_STATUS_BADGE
 
-from utils.auth import get_current_user, require_role
-from utils.db_schema_crud import get_user_by_email
+from utils.auth import get_current_user, get_current_user_doc, require_role
+from utils.db_schema_crud import (
+    get_cadet_by_user_id,
+    get_flight_by_commander,
+    get_user_by_email,
+)
 from utils.export import to_excel
 from utils.pagination import (
     init_pagination_state,
@@ -32,6 +36,7 @@ st.title("Waiver Review")
 st.caption("Review waiver requests and approve/deny with comments.")
 
 current_user = get_current_user()
+current_user_doc = get_current_user_doc()
 assert current_user is not None
 
 approver_email = current_user.get("email", "")
@@ -47,10 +52,36 @@ approver_id = approver_user["_id"]
 status_filter = st.selectbox(
     "Status", ["All", "Pending", "Approved", "Denied"], index=0
 )
-flight_filter = st.selectbox("Flight", get_flight_options(), index=0)
-cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
 
 viewer_roles = list(current_user.get("roles") or [])
+is_fc_only = "flight_commander" in viewer_roles and not (
+    {"admin", "cadre"} & set(viewer_roles)
+)
+
+viewer_flight_id = None
+fc_flight = None
+if is_fc_only and current_user_doc:
+    fc_cadet = get_cadet_by_user_id(current_user_doc["_id"])
+    if fc_cadet:
+        fc_flight = get_flight_by_commander(fc_cadet["_id"])
+        if fc_flight:
+            viewer_flight_id = str(fc_flight["_id"])
+
+flight_options = get_flight_options()
+default_flight_index = 0
+if is_fc_only and viewer_flight_id and fc_flight:
+    fc_flight_name = fc_flight.get("name", "")
+    if fc_flight_name in flight_options:
+        default_flight_index = flight_options.index(fc_flight_name)
+
+flight_filter = st.selectbox(
+    "Flight",
+    options=flight_options,
+    index=default_flight_index,
+    disabled=is_fc_only,
+)
+cadet_search = st.text_input("Cadet search (name or email)", "").strip().lower()
+
 pagination_reset_token = "|".join(
     [
         status_filter.lower(),
@@ -69,12 +100,14 @@ rows = get_waiver_review_rows(
     flight_filter=flight_filter,
     cadet_search=cadet_search,
     viewer_roles=viewer_roles,
+    viewer_flight_id=viewer_flight_id,
 )
 paginated_rows = get_paginated_waiver_review_rows(
     status_filter=status_filter.lower(),
     flight_filter=flight_filter,
     cadet_search=cadet_search,
     viewer_roles=viewer_roles,
+    viewer_flight_id=viewer_flight_id,
     page=review_page,
     page_size=review_page_size,
 )
