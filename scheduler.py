@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 
 import streamlit as st
 
+from services.waiver_review import get_waiver_context
 from utils.datetime_utils import ensure_utc
 from utils.waiver_email import send_waiver_reminder_email
 from services.event_config import get_waiver_reminder
@@ -26,11 +27,15 @@ def send_pending_waiver_reminders_emails():
         if isinstance(last_reminder, datetime) and ensure_utc(last_reminder) > cutoff:
             continue
 
+        ctx = get_waiver_context(w)
+        if ctx is None:
+            continue
+
         send_waiver_reminder_email(
             waiver_id=str(w["_id"]),
-            cadet_name=w.get("cadet_name", "Unknown"),
-            event_name=w.get("event_name", "Unknown"),
-            event_date=w.get("event_date", "Unknown"),
+            cadet_name=ctx["cadet_name"],
+            event_name=ctx["event_name"],
+            event_date=ctx["event_date"],
             days_pending=(datetime.now(timezone.utc) - created_at).days,
         )
 
