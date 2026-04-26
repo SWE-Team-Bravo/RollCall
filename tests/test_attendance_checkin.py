@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-import pytest
+import pytest  # type: ignore
 
 from services.attendance import (
     is_already_checked_in,

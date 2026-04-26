@@ -1,5 +1,5 @@
 import os
-import pytest
+import pytest  # type: ignore
 import subprocess
 import requests
 import requests.adapters

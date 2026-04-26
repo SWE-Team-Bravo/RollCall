@@ -217,7 +217,10 @@ def test_import_creates_user_and_cadet(
     created_cadet_result.inserted_id = MagicMock()
     mock_create_cadet.return_value = created_cadet_result
     mock_create_user.return_value = inserted
-    mock_get_user_by_id.return_value = {"_id": inserted.inserted_id, "email": "jdoe@kent.edu"}
+    mock_get_user_by_id.return_value = {
+        "_id": inserted.inserted_id,
+        "email": "jdoe@kent.edu",
+    }
     mock_get_cadet_by_id.return_value = {
         "_id": created_cadet_result.inserted_id,
         "email": "jdoe@kent.edu",
@@ -289,9 +292,18 @@ def test_analyze_flags_email_conflict(mock_get_emails, mock_get_names, mock_get_
     existing_id = ObjectId()
     mock_get_emails.return_value = {"jdoe@kent.edu": {"_id": existing_id}}
     mock_get_names.return_value = {}
-    mock_get_cadets.return_value = {str(existing_id): {"_id": ObjectId(), "user_id": existing_id}}
+    mock_get_cadets.return_value = {
+        str(existing_id): {"_id": ObjectId(), "user_id": existing_id}
+    }
     result = analyze_roster_for_import(
-        [{"first_name": "John", "last_name": "Doe", "email": "jdoe@kent.edu", "rank": "100"}]
+        [
+            {
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "jdoe@kent.edu",
+                "rank": "100",
+            }
+        ]
     )
     assert len(result) == 1
     assert result[0]["conflict_type"] == "email_exists"
@@ -309,7 +321,14 @@ def test_analyze_flags_name_conflict(mock_get_emails, mock_get_names, mock_get_c
     mock_get_names.return_value = {("jane", "smith"): {"_id": existing_id}}
     mock_get_cadets.return_value = {str(existing_id): None}
     result = analyze_roster_for_import(
-        [{"first_name": "Jane", "last_name": "Smith", "email": "jane@kent.edu", "rank": "200"}]
+        [
+            {
+                "first_name": "Jane",
+                "last_name": "Smith",
+                "email": "jane@kent.edu",
+                "rank": "200",
+            }
+        ]
     )
     assert len(result) == 1
     assert result[0]["conflict_type"] == "name_exists"
@@ -319,8 +338,18 @@ def test_analyze_flags_name_conflict(mock_get_emails, mock_get_names, mock_get_c
 def test_analyze_flags_intra_file_duplicate():
     result = analyze_roster_for_import(
         [
-            {"first_name": "A", "last_name": "B", "email": "dup@kent.edu", "rank": "100"},
-            {"first_name": "C", "last_name": "D", "email": "dup@kent.edu", "rank": "200"},
+            {
+                "first_name": "A",
+                "last_name": "B",
+                "email": "dup@kent.edu",
+                "rank": "100",
+            },
+            {
+                "first_name": "C",
+                "last_name": "D",
+                "email": "dup@kent.edu",
+                "rank": "200",
+            },
         ]
     )
     assert result[0]["conflict_type"] == "intra_file_duplicate"
@@ -335,7 +364,14 @@ def test_analyze_no_conflict(mock_get_emails, mock_get_names, mock_get_cadets):
     mock_get_names.return_value = {}
     mock_get_cadets.return_value = {}
     result = analyze_roster_for_import(
-        [{"first_name": "New", "last_name": "User", "email": "new@kent.edu", "rank": "100"}]
+        [
+            {
+                "first_name": "New",
+                "last_name": "User",
+                "email": "new@kent.edu",
+                "rank": "100",
+            }
+        ]
     )
     assert result[0]["conflict_type"] == "none"
     assert result[0]["existing_user"] is None

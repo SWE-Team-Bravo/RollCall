@@ -1,4 +1,4 @@
-import pytest
+import pytest  # type: ignore
 
 from utils.validators import is_valid_email, is_valid_name
 

@@ -4,7 +4,7 @@ from email.message import Message
 import smtplib
 from unittest.mock import patch, MagicMock
 
-import pytest
+import pytest  # type: ignore
 
 from services.email_templates import _DEFAULT_TEMPLATES
 from utils.waiver_email import (

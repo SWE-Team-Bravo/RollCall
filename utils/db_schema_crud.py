@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
@@ -97,7 +98,10 @@ def get_users_by_names(names: list[tuple[str, str]]) -> dict[tuple[str, str], di
     users = col.find({"$or": conditions})
     result: dict[tuple[str, str], dict] = {}
     for u in users:
-        key = (u.get("first_name", "").lower().strip(), u.get("last_name", "").lower().strip())
+        key = (
+            u.get("first_name", "").lower().strip(),
+            u.get("last_name", "").lower().strip(),
+        )
         result[key] = u
     return result
 
@@ -374,7 +378,7 @@ def create_attendance_record(
     col = get_collection("attendance_records")
     if col is None:
         return None
-    doc = {
+    doc: dict[str, Any] = {
         "event_id": ObjectId(event_id),
         "cadet_id": ObjectId(cadet_id),
         "status": status,
@@ -452,7 +456,7 @@ def upsert_attendance_record(
     col = get_collection("attendance_records")
     if col is None:
         return None
-    set_doc = {
+    set_doc: dict[str, Any] = {
         "status": status,
         "recorded_by_user_id": ObjectId(recorded_by_user_id),
         "updated_at": datetime.now(timezone.utc),
@@ -748,7 +752,7 @@ def _validate_flight_association(
             f"Cadet is already assigned to {assigned_flight_name}. Unassign them first."
         )
 
-    commander_query = {"commander_cadet_id": cadet_object_id}
+    commander_query: dict[str, Any] = {"commander_cadet_id": cadet_object_id}
     if target_object_id is not None:
         commander_query["_id"] = {"$ne": target_object_id}
 

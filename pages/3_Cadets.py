@@ -159,7 +159,7 @@ def edit_cadet(cadet):
             after_cadet = get_cadet_by_id(cadet_id)
             target_label = format_full_name(
                 {"first_name": new_first, "last_name": new_last},
-                default=(user_doc.get("email") if user_doc else "Cadet"),
+                default=str(user_doc.get("email") or "Cadet") if user_doc else "Cadet",
             )
             log_data_change(
                 source="cadet_management",
@@ -406,7 +406,9 @@ with tab_import:
                 st.write(f"- {err['name']} ({err['email']}): {err['reason']}")
 
     # ---- Step 1: Upload & preview ----
-    uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"], key="roster_uploader")
+    uploaded = st.file_uploader(
+        "Upload roster (.xlsx)", type=["xlsx"], key="roster_uploader"
+    )
     if uploaded:
         cadets, parse_errors = parse_roster_xlsx(uploaded)
         if parse_errors:
@@ -443,10 +445,14 @@ with tab_import:
             default_actions = DEFAULT_ROSTER_IMPORT_ACTIONS
             valid_actions = VALID_ROSTER_IMPORT_ACTIONS
 
-            st.write(f"Found **{len(preview)}** cadet(s). Review the preview below before importing.")
+            st.write(
+                f"Found **{len(preview)}** cadet(s). Review the preview below before importing."
+            )
 
             # Conflict resolution: global defaults for each conflict type present
-            present_conflicts = {r["conflict_type"] for r in preview if r["conflict_type"] != "none"}
+            present_conflicts = {
+                r["conflict_type"] for r in preview if r["conflict_type"] != "none"
+            }
             if present_conflicts:
                 st.divider()
                 st.write("**Conflict Resolution**")
@@ -463,10 +469,15 @@ with tab_import:
                         global_key = f"roster_global_{ctype}"
                         # Derive global default from the first row of this type
                         first_idx = next(
-                            i for i, r in enumerate(preview) if r["conflict_type"] == ctype
+                            i
+                            for i, r in enumerate(preview)
+                            if r["conflict_type"] == ctype
                         )
                         current_global = st.session_state.get(
-                            global_key, st.session_state.get(f"roster_action_{first_idx}", default_actions[ctype])
+                            global_key,
+                            st.session_state.get(
+                                f"roster_action_{first_idx}", default_actions[ctype]
+                            ),
                         )
                         if current_global not in options:
                             current_global = options[0]
@@ -487,7 +498,9 @@ with tab_import:
                         ctype = row["conflict_type"]
                         if ctype == "none":
                             continue
-                        label = f"{row['first_name']} {row['last_name']} ({row['email']})"
+                        label = (
+                            f"{row['first_name']} {row['last_name']} ({row['email']})"
+                        )
                         options = valid_actions[ctype]
                         default = st.session_state.get(
                             f"roster_action_{i}", default_actions[ctype]
@@ -539,6 +552,6 @@ with tab_import:
                 st.session_state.import_result = result
                 # Clean up preview state so a fresh upload starts clean
                 for key in list(st.session_state.keys()):
-                    if key.startswith("roster_"):
+                    if isinstance(key, str) and key.startswith("roster_"):
                         del st.session_state[key]
                 st.rerun()
