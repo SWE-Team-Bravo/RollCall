@@ -122,6 +122,82 @@ if not rows:
     st.info("No waivers matched the selected filters.")
     st.stop()
 
+pending_items = [
+    w for w in cast(list, paginated_rows["items"]) if w["waiver_status"] == "pending"
+]
+
+if pending_items:
+    st.subheader("Bulk Actions")
+
+    pending_df = pd.DataFrame(
+        [
+            {
+                "Selected": False,
+                "Cadet": w["cadet_name"],
+                "Flight": w["flight_name"],
+                "Event": f"{w['event_date']} — {w['event_name']}",
+                "Type": w["waiver_type"],
+                "Reason": w["reason"],
+                "_waiver_id": str(w["waiver_id"]),
+            }
+            for w in pending_items
+        ]
+    )
+
+    edited_df = st.data_editor(
+        pending_df.drop(columns=["_waiver_id"]),
+        column_config={
+            "Selected": st.column_config.CheckboxColumn("Selected", default=False)
+        },
+        hide_index=True,
+        width="stretch",
+        key="bulk_waiver_select",
+    )
+
+    selected_indexes = edited_df[
+        edited_df.get("Selected", pd.Series([False] * len(edited_df)))
+    ].index.tolist()
+    selected_waiver_ids = [pending_df.iloc[i]["_waiver_id"] for i in selected_indexes]
+
+    if selected_waiver_ids:
+        col1, col2 = st.columns([3, 5])
+        bulk_decision = col1.radio(
+            "Bulk Decision", ["Approve", "Deny"], horizontal=True
+        )
+        bulk_comments = col2.text_input("Comments (required for Deny)")
+
+        if st.button("Apply to Selected", type="primary"):
+            if bulk_decision == "Deny" and not bulk_comments.strip():
+                st.error("please provide comments when denying waivers.")
+            else:
+                success_count = 0
+                fail_count = 0
+                for w_id in selected_waiver_ids:
+                    w = next(
+                        (x for x in pending_items if str(x["waiver_id"]) == w_id), None
+                    )
+                    if w is None:
+                        continue
+                    ok, _ = submit_decision(
+                        waiver_id=w["waiver_id"],
+                        approver_id=approver_id,
+                        decision=bulk_decision,
+                        comments=bulk_comments.strip(),
+                        cadet_email=w["cadet_email"],
+                        event_name=w["event_name"],
+                        event_date=w["event_date"],
+                    )
+                    if ok:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                st.success(f"Applied to {success_count} waiver(s).")
+                if fail_count:
+                    st.error(f"{fail_count} waiver(s) failed.")
+                st.rerun()
+
+st.divider()
+
 for w in cast(list, paginated_rows["items"]):
     with st.container(border=True):
         top = st.columns([4, 2, 2])

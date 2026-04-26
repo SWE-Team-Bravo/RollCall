@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timezone
+from typing import Any, Union
 
 from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
@@ -257,6 +258,8 @@ def update_event(event_id: str | ObjectId, updates: dict) -> UpdateResult | None
     if col is None:
         return None
     return col.update_one({"_id": ObjectId(event_id)}, {"$set": updates})
+
+
 # -- Event Assignments
 
 
@@ -439,10 +442,40 @@ def create_waiver(
     waiver_type: str = "non-medical",
     cadre_only: bool = False,
     attachments: list | None = None,
-) -> InsertOneResult | None:
+) -> Union[InsertOneResult, Any] | None:
     col = get_collection("waivers")
     if col is None:
         return None
+
+    existing = col.find_one(
+        {
+            "attendance_record_id": ObjectId(attendance_record_id),
+            "status": "withdrawn",
+        }
+    )
+    if existing:
+        col.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "reason": reason,
+                    "status": status,
+                    "waiver_type": waiver_type,
+                    "cadre_only": cadre_only,
+                    "attachments": attachments or [],
+                    "submitted_by_user_id": ObjectId(submitted_by_user_id),
+                    "auto_denied": False,
+                    "created_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+
+        class _FakeInsertResult:
+            def __init__(self, inserted_id):
+                self.inserted_id = inserted_id
+
+        return _FakeInsertResult(existing["_id"])
+
     doc: dict = {
         "attendance_record_id": ObjectId(attendance_record_id),
         "reason": reason,
