@@ -1,6 +1,5 @@
 import re
 from datetime import datetime, timezone
-from typing import Any, Union
 
 from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
@@ -442,39 +441,17 @@ def create_waiver(
     waiver_type: str = "non-medical",
     cadre_only: bool = False,
     attachments: list | None = None,
-) -> Union[InsertOneResult, Any] | None:
+) -> InsertOneResult | None:
     col = get_collection("waivers")
     if col is None:
         return None
 
-    existing = col.find_one(
+    existing_withdrawn = col.find_one(
         {
             "attendance_record_id": ObjectId(attendance_record_id),
             "status": "withdrawn",
         }
     )
-    if existing:
-        col.update_one(
-            {"_id": existing["_id"]},
-            {
-                "$set": {
-                    "reason": reason,
-                    "status": status,
-                    "waiver_type": waiver_type,
-                    "cadre_only": cadre_only,
-                    "attachments": attachments or [],
-                    "submitted_by_user_id": ObjectId(submitted_by_user_id),
-                    "auto_denied": False,
-                    "created_at": datetime.now(timezone.utc),
-                }
-            },
-        )
-
-        class _FakeInsertResult:
-            def __init__(self, inserted_id):
-                self.inserted_id = inserted_id
-
-        return _FakeInsertResult(existing["_id"])
 
     doc: dict = {
         "attendance_record_id": ObjectId(attendance_record_id),
@@ -486,7 +463,12 @@ def create_waiver(
         "attachments": attachments or [],
         "created_at": datetime.now(timezone.utc),
     }
+
+    if existing_withdrawn:
+        doc["previous_waiver_id"] = existing_withdrawn["_id"]
+
     result = col.insert_one(doc)
+
     is_valid, why = validate_waiver(ObjectId(attendance_record_id))
     if not is_valid:
         col.update_one(
@@ -580,7 +562,12 @@ def get_waiver_by_attendance_record(
     col = get_collection("waivers")
     if col is None:
         return None
-    return col.find_one({"attendance_record_id": ObjectId(attendance_record_id)})
+    return col.find_one(
+        {
+            "attendance_record_id": ObjectId(attendance_record_id),
+            "status": {"$nin": ["withdrawn"]},
+        }
+    )
 
 
 def get_waivers_by_status(status: str) -> list[dict]:

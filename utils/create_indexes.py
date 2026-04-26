@@ -61,8 +61,11 @@ def create_indexes() -> None:
         [
             IndexModel(
                 [("attendance_record_id", ASCENDING)],
-                name="attendance_record_id_unique",
+                name="attendance_record_id_active_unique",
                 unique=True,
+                partialFilterExpression={
+                    "status": {"$in": ["pending", "approved", "denied", "auto_denied"]}
+                },
             ),
             IndexModel(
                 [("submitted_by_user_id", ASCENDING)], name="submitted_by_user_id"
@@ -126,7 +129,11 @@ def create_indexes() -> None:
                 name="target_collection_id_created_at",
             ),
             IndexModel(
-                [("source", ASCENDING), ("event_id", ASCENDING), ("created_at", ASCENDING)],
+                [
+                    ("source", ASCENDING),
+                    ("event_id", ASCENDING),
+                    ("created_at", ASCENDING),
+                ],
                 name="source_event_created_at",
             ),
             IndexModel(
