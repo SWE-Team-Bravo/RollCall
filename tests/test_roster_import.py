@@ -5,6 +5,8 @@ import openpyxl
 
 from services.cadets import (
     CLASS_TO_RANK,
+    DEFAULT_ROSTER_IMPORT_ACTIONS,
+    VALID_ROSTER_IMPORT_ACTIONS,
     import_cadets_from_roster,
     parse_roster_xlsx,
     analyze_roster_for_import,
@@ -196,15 +198,30 @@ def test_import_skips_existing_user(mock_get_cadet, mock_create_cadet, mock_get_
 
 @patch("services.cadets.get_user_by_email")
 @patch("services.cadets.create_cadet")
+@patch("services.cadets.get_cadet_by_id")
+@patch("services.cadets.get_user_by_id")
+@patch("services.cadets.log_data_change")
 @patch("utils.db_schema_crud.create_user")
 def test_import_creates_user_and_cadet(
-    mock_create_user, mock_create_cadet, mock_get_user
+    mock_create_user,
+    mock_log_data_change,
+    mock_get_user_by_id,
+    mock_get_cadet_by_id,
+    mock_create_cadet,
+    mock_get_user,
 ):
     mock_get_user.return_value = None
     inserted = MagicMock()
-    inserted.inserted_id = "new_id"
-    mock_create_cadet.return_value = MagicMock()
+    inserted.inserted_id = MagicMock()
+    created_cadet_result = MagicMock()
+    created_cadet_result.inserted_id = MagicMock()
+    mock_create_cadet.return_value = created_cadet_result
     mock_create_user.return_value = inserted
+    mock_get_user_by_id.return_value = {"_id": inserted.inserted_id, "email": "jdoe@kent.edu"}
+    mock_get_cadet_by_id.return_value = {
+        "_id": created_cadet_result.inserted_id,
+        "email": "jdoe@kent.edu",
+    }
     result = import_cadets_from_roster(
         [
             {
@@ -220,6 +237,7 @@ def test_import_creates_user_and_cadet(
     assert "temp_password" in result["created"][0]
     assert result["skipped"] == []
     assert result["errors"] == []
+    assert mock_log_data_change.call_count == 2
 
 
 @patch("services.cadets.get_user_by_email")
@@ -328,11 +346,28 @@ def test_analyze_no_conflict(mock_get_emails, mock_get_names, mock_get_cadets):
 
 @patch("services.cadets.update_user")
 @patch("services.cadets.update_cadet")
-def test_import_update_existing(mock_update_cadet, mock_update_user):
+@patch("services.cadets.get_cadet_by_id")
+@patch("services.cadets.get_user_by_id")
+@patch("services.cadets.log_data_change")
+def test_import_update_existing(
+    mock_log_data_change,
+    mock_get_user_by_id,
+    mock_get_cadet_by_id,
+    mock_update_cadet,
+    mock_update_user,
+):
     from bson import ObjectId
 
     existing_id = ObjectId()
     cadet_id = ObjectId()
+    mock_get_user_by_id.side_effect = [
+        {"_id": existing_id, "email": "old@kent.edu"},
+        {"_id": existing_id, "email": "jdoe@kent.edu"},
+    ]
+    mock_get_cadet_by_id.side_effect = [
+        {"_id": cadet_id, "user_id": existing_id, "rank": "100/150 (freshman)"},
+        {"_id": cadet_id, "user_id": existing_id, "rank": "200/250/500 (sophomore)"},
+    ]
     row = {
         "first_name": "John",
         "last_name": "Doe",
@@ -347,14 +382,35 @@ def test_import_update_existing(mock_update_cadet, mock_update_user):
     assert result["updated"][0]["email"] == "jdoe@kent.edu"
     mock_update_user.assert_called_once()
     mock_update_cadet.assert_called_once()
+    assert mock_log_data_change.call_count == 2
 
 
-@patch("services.cadets.update_user")
 @patch("services.cadets.create_cadet")
-def test_import_update_existing_user_no_cadet(mock_create_cadet, mock_update_user):
+@patch("services.cadets.update_user")
+@patch("services.cadets.get_cadet_by_id")
+@patch("services.cadets.get_user_by_id")
+@patch("services.cadets.log_data_change")
+def test_import_update_existing_user_no_cadet(
+    mock_log_data_change,
+    mock_get_user_by_id,
+    mock_get_cadet_by_id,
+    mock_update_user,
+    mock_create_cadet,
+):
     from bson import ObjectId
 
     existing_id = ObjectId()
+    created_cadet_id = ObjectId()
+    mock_get_user_by_id.side_effect = [
+        {"_id": existing_id, "email": "old@kent.edu"},
+        {"_id": existing_id, "email": "jdoe@kent.edu"},
+    ]
+    mock_create_cadet.return_value = MagicMock(inserted_id=created_cadet_id)
+    mock_get_cadet_by_id.return_value = {
+        "_id": created_cadet_id,
+        "user_id": existing_id,
+        "rank": "100/150 (freshman)",
+    }
     row = {
         "first_name": "John",
         "last_name": "Doe",
@@ -367,6 +423,7 @@ def test_import_update_existing_user_no_cadet(mock_create_cadet, mock_update_use
     result = import_cadets_from_roster([row], actions=["Update"])
     assert len(result["updated"]) == 1
     mock_create_cadet.assert_called_once()
+    assert mock_log_data_change.call_count == 2
 
 
 def test_import_skip_via_action():
@@ -386,3 +443,13 @@ def test_import_skip_via_action():
     assert len(result["skipped"]) == 1
     assert result["updated"] == []
     assert result["created"] == []
+
+
+def test_roster_import_action_config_exports():
+    assert DEFAULT_ROSTER_IMPORT_ACTIONS["none"] == "Create"
+    assert DEFAULT_ROSTER_IMPORT_ACTIONS["email_exists"] == "Update"
+    assert VALID_ROSTER_IMPORT_ACTIONS["name_exists"] == [
+        "Skip",
+        "Update",
+        "Create as New",
+    ]

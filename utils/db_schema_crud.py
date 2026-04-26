@@ -5,6 +5,7 @@ from bson import ObjectId
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
 
 from utils.db import get_collection
+from utils.names import format_full_name
 from utils.password import hash_password
 
 
@@ -22,7 +23,9 @@ def create_user(
         {
             "first_name": first_name,
             "last_name": last_name,
-            "name": f"{first_name} {last_name}".strip(),
+            "name": format_full_name(
+                {"first_name": first_name, "last_name": last_name}
+            ),
             "email": email,
             "password_hash": hash_password(password),
             "roles": roles,
@@ -44,24 +47,6 @@ def get_user_by_email(email: str) -> dict | None:
     if col is None:
         return None
     return col.find_one({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
-
-
-def get_user_by_name(first_name: str, last_name: str) -> dict | None:
-    col = get_collection("users")
-    if col is None:
-        return None
-    return col.find_one(
-        {
-            "first_name": {
-                "$regex": f"^{re.escape(first_name)}$",
-                "$options": "i",
-            },
-            "last_name": {
-                "$regex": f"^{re.escape(last_name)}$",
-                "$options": "i",
-            },
-        }
-    )
 
 
 def get_users_by_role(role: str, *, include_disabled: bool = False) -> list[dict]:

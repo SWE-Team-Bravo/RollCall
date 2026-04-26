@@ -16,6 +16,8 @@ from utils.db_schema_crud import (
 )
 
 from services.cadets import (
+    DEFAULT_ROSTER_IMPORT_ACTIONS,
+    VALID_ROSTER_IMPORT_ACTIONS,
     add_cadet_for_user,
     get_all_cadets,
     validate_cadet_input,
@@ -30,6 +32,7 @@ from services.cadets import (
 from services.account_settings import build_profile_updates
 
 from utils.export import to_excel
+from utils.names import format_full_name
 from utils.pagination import (
     init_pagination_state,
     paginate_list,
@@ -150,7 +153,10 @@ def edit_cadet(cadet):
                 )
 
             after_cadet = get_cadet_by_id(cadet_id)
-            target_label = f"{new_first} {new_last}".strip() or (user_doc.get("email") if user_doc else "Cadet")
+            target_label = format_full_name(
+                {"first_name": new_first, "last_name": new_last},
+                default=(user_doc.get("email") if user_doc else "Cadet"),
+            )
             log_data_change(
                 source="cadet_management",
                 action="update",
@@ -418,12 +424,7 @@ with tab_import:
                     action_key = f"roster_action_{i}"
                     if action_key not in st.session_state:
                         ctype = r["conflict_type"]
-                        default = {
-                            "none": "Create",
-                            "email_exists": "Update",
-                            "name_exists": "Skip",
-                            "intra_file_duplicate": "Skip",
-                        }.get(ctype, "Skip")
+                        default = DEFAULT_ROSTER_IMPORT_ACTIONS.get(ctype, "Skip")
                         st.session_state[action_key] = default
 
             preview = st.session_state.roster_preview
@@ -435,18 +436,8 @@ with tab_import:
                 "name_exists": "Name exists",
                 "intra_file_duplicate": "Duplicate in file",
             }
-            default_actions = {
-                "none": "Create",
-                "email_exists": "Update",
-                "name_exists": "Skip",
-                "intra_file_duplicate": "Skip",
-            }
-            valid_actions = {
-                "none": ["Create"],
-                "email_exists": ["Skip", "Update"],
-                "name_exists": ["Skip", "Update", "Create as New"],
-                "intra_file_duplicate": ["Skip"],
-            }
+            default_actions = DEFAULT_ROSTER_IMPORT_ACTIONS
+            valid_actions = VALID_ROSTER_IMPORT_ACTIONS
 
             st.write(f"Found **{len(preview)}** cadet(s). Review the preview below before importing.")
 
@@ -475,10 +466,10 @@ with tab_import:
                         )
                         if current_global not in options:
                             current_global = options[0]
+                        st.session_state[global_key] = current_global
                         chosen = st.selectbox(
                             label,
                             options=options,
-                            index=options.index(current_global),
                             key=global_key,
                         )
                         # Apply this global choice to every row of this type
@@ -499,10 +490,10 @@ with tab_import:
                         )
                         if default not in options:
                             default = options[0]
+                        st.session_state[f"roster_action_{i}"] = default
                         st.selectbox(
                             label,
                             options=options,
-                            index=options.index(default),
                             key=f"roster_action_{i}",
                         )
 
@@ -536,7 +527,11 @@ with tab_import:
                     for i, r in enumerate(preview)
                 ]
                 with st.spinner("Importing cadets..."):
-                    result = import_cadets_from_roster(preview, actions)
+                    result = import_cadets_from_roster(
+                        preview,
+                        actions,
+                        actor_user=get_current_user(),
+                    )
                 st.session_state.import_result = result
                 # Clean up preview state so a fresh upload starts clean
                 for key in list(st.session_state.keys()):

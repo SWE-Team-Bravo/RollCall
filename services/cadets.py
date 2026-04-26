@@ -1,8 +1,10 @@
 from bson import ObjectId
 import secrets
+from typing import Any
 
 import pandas as pd
 
+from utils.audit_log import log_data_change, serialize_doc_for_audit
 from utils.db import get_collection
 from utils.db_schema_crud import (
     assign_cadet_to_flight as db_assign_cadet_to_flight,
@@ -286,9 +288,42 @@ _VALID_ACTIONS = {
     "intra_file_duplicate": ["Skip"],
 }
 
+DEFAULT_ROSTER_IMPORT_ACTIONS = dict(_DEFAULT_ACTION)
+VALID_ROSTER_IMPORT_ACTIONS = {
+    conflict: list(actions) for conflict, actions in _VALID_ACTIONS.items()
+}
+
+
+def _log_roster_import_change(
+    *,
+    action: str,
+    target_collection: str,
+    target_id: Any,
+    target_label: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    actor_user: dict[str, Any] | None,
+) -> None:
+    log_data_change(
+        source="cadet_management",
+        action=action,
+        target_collection=target_collection,
+        target_id=target_id,
+        actor_user_id=actor_user.get("_id") if actor_user else None,
+        actor_email=str(actor_user.get("email", "") or "").strip() or None if actor_user else None,
+        actor_roles=list(actor_user.get("roles", [])) if actor_user else [],
+        target_label=target_label,
+        before=serialize_doc_for_audit(before),
+        after=serialize_doc_for_audit(after),
+        metadata={"workflow": "roster_import"},
+    )
+
 
 def import_cadets_from_roster(
-    cadets_data: list[dict], actions: list[str] | None = None
+    cadets_data: list[dict],
+    actions: list[str] | None = None,
+    *,
+    actor_user: dict[str, Any] | None = None,
 ) -> dict:
     from utils.db_schema_crud import create_user
 
@@ -307,12 +342,13 @@ def import_cadets_from_roster(
             last_name = cadet["last_name"]
             rank = cadet["rank"]
             existing_user = get_user_by_email(email)
+            full_name = format_full_name(cadet)
             if existing_user:
                 existing_cadet = _get_cadet_by_user_id(existing_user["_id"])
                 if existing_cadet:
                     skipped.append(
                         {
-                            "name": f"{first_name} {last_name}",
+                            "name": full_name,
                             "email": email,
                             "reason": "User already exists",
                         }
@@ -324,7 +360,7 @@ def import_cadets_from_roster(
                     )
                     created.append(
                         {
-                            "name": f"{first_name} {last_name}",
+                            "name": full_name,
                             "email": email,
                             "rank": rank,
                             "temp_password": "(existing account)",
@@ -333,7 +369,7 @@ def import_cadets_from_roster(
                 except Exception as e:
                     errors.append(
                         {
-                            "name": f"{first_name} {last_name}",
+                            "name": full_name,
                             "email": email,
                             "reason": str(e),
                         }
@@ -356,6 +392,7 @@ def import_cadets_from_roster(
         email = cadet["email"]
         first_name = cadet["first_name"]
         last_name = cadet["last_name"]
+        full_name = format_full_name(cadet)
         rank = cadet["rank"]
         existing_user = cadet.get("existing_user")
         existing_cadet = cadet.get("existing_cadet")
@@ -363,7 +400,7 @@ def import_cadets_from_roster(
         if action == "Skip":
             skipped.append(
                 {
-                    "name": f"{first_name} {last_name}",
+                    "name": full_name,
                     "email": email,
                     "reason": "Skipped by user",
                 }
@@ -373,16 +410,29 @@ def import_cadets_from_roster(
         # --- Update existing record ---
         if action == "Update" and existing_user is not None:
             try:
+                before_user = get_user_by_id(existing_user["_id"])
                 update_user(
                     existing_user["_id"],
                     {
                         "first_name": first_name,
                         "last_name": last_name,
-                        "name": f"{first_name} {last_name}".strip(),
+                        "name": format_full_name(cadet),
                         "email": email,
                     },
                 )
+                after_user = get_user_by_id(existing_user["_id"])
+                target_label = format_full_name(cadet, default=email)
+                _log_roster_import_change(
+                    action="update",
+                    target_collection="users",
+                    target_id=existing_user["_id"],
+                    target_label=target_label,
+                    before=before_user,
+                    after=after_user,
+                    actor_user=actor_user,
+                )
                 if existing_cadet:
+                    before_cadet = get_cadet_by_id(existing_cadet["_id"])
                     update_cadet(
                         existing_cadet["_id"],
                         {
@@ -392,13 +442,37 @@ def import_cadets_from_roster(
                             "rank": rank,
                         },
                     )
+                    after_cadet = get_cadet_by_id(existing_cadet["_id"])
+                    _log_roster_import_change(
+                        action="update",
+                        target_collection="cadets",
+                        target_id=existing_cadet["_id"],
+                        target_label=target_label,
+                        before=before_cadet,
+                        after=after_cadet,
+                        actor_user=actor_user,
+                    )
                 else:
-                    create_cadet(
+                    cadet_result = create_cadet(
                         existing_user["_id"], rank, first_name, last_name, email
+                    )
+                    created_cadet = (
+                        get_cadet_by_id(cadet_result.inserted_id)
+                        if cadet_result is not None
+                        else None
+                    )
+                    _log_roster_import_change(
+                        action="create",
+                        target_collection="cadets",
+                        target_id=created_cadet.get("_id") if created_cadet else None,
+                        target_label=target_label,
+                        before=None,
+                        after=created_cadet,
+                        actor_user=actor_user,
                     )
                 updated.append(
                     {
-                        "name": f"{first_name} {last_name}",
+                        "name": full_name,
                         "email": email,
                         "rank": rank,
                     }
@@ -406,7 +480,7 @@ def import_cadets_from_roster(
             except Exception as e:
                 errors.append(
                     {
-                        "name": f"{first_name} {last_name}",
+                        "name": full_name,
                         "email": email,
                         "reason": f"Failed to update account: {e}",
                     }
@@ -417,7 +491,7 @@ def import_cadets_from_roster(
         if existing_user and get_user_by_email(email):
             errors.append(
                 {
-                    "name": f"{first_name} {last_name}",
+                    "name": full_name,
                     "email": email,
                     "reason": "Email already in use — cannot create a new account with this email.",
                 }
@@ -438,10 +512,37 @@ def import_cadets_from_roster(
                     }
                 )
                 continue
-            create_cadet(user_result.inserted_id, rank, first_name, last_name, email)
+            created_user = get_user_by_id(user_result.inserted_id)
+            target_label = format_full_name(cadet, default=email)
+            _log_roster_import_change(
+                action="create",
+                target_collection="users",
+                target_id=user_result.inserted_id,
+                target_label=target_label,
+                before=None,
+                after=created_user,
+                actor_user=actor_user,
+            )
+            cadet_result = create_cadet(
+                user_result.inserted_id, rank, first_name, last_name, email
+            )
+            created_cadet = (
+                get_cadet_by_id(cadet_result.inserted_id)
+                if cadet_result is not None
+                else None
+            )
+            _log_roster_import_change(
+                action="create",
+                target_collection="cadets",
+                target_id=created_cadet.get("_id") if created_cadet else None,
+                target_label=target_label,
+                before=None,
+                after=created_cadet,
+                actor_user=actor_user,
+            )
             created.append(
                 {
-                    "name": f"{first_name} {last_name}",
+                    "name": full_name,
                     "email": email,
                     "rank": rank,
                     "temp_password": temp_password,
@@ -450,7 +551,7 @@ def import_cadets_from_roster(
         except Exception as e:
             errors.append(
                 {
-                    "name": f"{first_name} {last_name}",
+                    "name": full_name,
                     "email": email,
                     "reason": f"Failed to create account: {e}",
                 }
