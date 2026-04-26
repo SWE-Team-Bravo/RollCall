@@ -15,13 +15,16 @@ from services.event_config import (
 )
 from services.events import (
     archive_event,
+    bulk_create_events,
     create_event,
     get_all_events,
     get_timezone_options,
+    preview_semester_schedule,
     restore_event,
     update_event,
 )
 from utils.auth import require_role, get_current_user_doc
+from utils.st_helpers import require
 
 require_role("admin", "cadre")
 
@@ -39,6 +42,12 @@ if "restore_event_success" not in st.session_state:
     st.session_state.restore_event_success = None
 if "edit_geofence_init_id" not in st.session_state:
     st.session_state.edit_geofence_init_id = None
+if "gen_holidays" not in st.session_state:
+    st.session_state.gen_holidays = []
+if "gen_preview" not in st.session_state:
+    st.session_state.gen_preview = None
+if "gen_schedule_success" not in st.session_state:
+    st.session_state.gen_schedule_success = None
 
 st.title("Event Management")
 
@@ -173,6 +182,179 @@ with st.expander("Event Schedule Configuration", expanded=False):
             st.rerun()
         else:
             st.error("Database unavailable — could not save configuration.")
+
+st.divider()
+
+# =============================================================================
+# SECTION 1b — Generate Semester Schedule
+# =============================================================================
+
+with st.expander("Generate Semester Schedule", expanded=False):
+    st.markdown(
+        "Bulk-create PT and LLAB events for a full semester. "
+        "Events are named automatically (e.g. *PT Mon Aug 25 2025*)."
+    )
+
+    import pandas as _pd
+
+    _pt_days = config.get("pt_days", ["Monday", "Tuesday", "Thursday"])
+    _llab_days = config.get("llab_days", ["Friday"])
+
+    # ── Date range picker ─────────────────────────────────────────────────────
+    _today = date.today()
+    _gen_range = st.date_input(
+        "Semester date range",
+        value=(_today, _today),
+        help="Select the first and last day of the semester.",
+        key="gen_date_range",
+    )
+
+    # st.date_input with a tuple value returns a tuple; guard partial selection
+    if isinstance(_gen_range, (list, tuple)) and len(_gen_range) == 2:
+        _gen_start: date | None = _gen_range[0]  # type: ignore
+        _gen_end: date | None = _gen_range[1]  # type: ignore
+        _range_complete = True
+    else:
+        _gen_start = None
+        _gen_end = None
+        _range_complete = False
+
+    st.divider()
+
+    # ── Times ─────────────────────────────────────────────────────────────────
+    gc1, gc2 = st.columns(2)
+    with gc1:
+        st.caption("PT event times")
+        gen_pt_start = st.time_input(
+            "PT Start Time", value=time(6, 0), key="gen_pt_start"
+        )
+        gen_pt_end = st.time_input("PT End Time", value=time(7, 0), key="gen_pt_end")
+    with gc2:
+        st.caption("LLAB event times")
+        gen_llab_start = st.time_input(
+            "LLAB Start Time", value=time(6, 0), key="gen_llab_start"
+        )
+        gen_llab_end = st.time_input(
+            "LLAB End Time", value=time(9, 0), key="gen_llab_end"
+        )
+
+    gen_tz = st.selectbox(
+        "Timezone", TZ_OPTIONS, index=_configured_tz_index, key="gen_tz"
+    )
+
+    st.divider()
+
+    # ── Holiday / break picker ────────────────────────────────────────────────
+    st.markdown("**Holidays / breaks to skip**")
+    st.caption(
+        "Add individual dates that should be skipped (e.g. federal holidays, spring break days)."
+    )
+
+    _add_holiday = st.date_input(
+        "Add a date to skip",
+        value=None,
+        key="gen_holiday_picker",
+    )
+    hc1, hc2 = st.columns([1, 3])
+    if hc1.button("Add date", key="gen_add_holiday"):
+        if _add_holiday and _add_holiday not in st.session_state.gen_holidays:
+            st.session_state.gen_holidays.append(_add_holiday)
+            st.session_state.gen_preview = None
+            st.rerun()
+
+    if st.session_state.gen_holidays:
+        _sorted_holidays = sorted(st.session_state.gen_holidays)
+        for _hd in _sorted_holidays:
+            hrow1, hrow2 = st.columns([3, 1])
+            hrow1.write(_hd.strftime("%A, %B %d %Y"))
+            if hrow2.button("Remove", key=f"gen_rm_{_hd}"):
+                st.session_state.gen_holidays.remove(_hd)
+                st.session_state.gen_preview = None
+                st.rerun()
+    else:
+        st.caption("No holidays added.")
+
+    st.divider()
+
+    # ── Preview ───────────────────────────────────────────────────────────────
+    if st.button(
+        "Preview Schedule", key="gen_preview_btn", disabled=not _range_complete
+    ):
+        if _gen_start and _gen_end and _gen_end >= _gen_start:
+            st.session_state.gen_preview = preview_semester_schedule(
+                _gen_start,
+                _gen_end,
+                _pt_days,
+                _llab_days,
+                st.session_state.gen_holidays,
+            )
+        else:
+            st.error("Select a valid date range first.")
+
+    if st.session_state.gen_preview is not None:
+        _preview = st.session_state.gen_preview
+        if not _preview:
+            st.info(
+                "No events would be created for this range with the current schedule configuration."
+            )
+        else:
+            _pt_count = sum(1 for e in _preview if e["type"] == "PT")
+            _llab_count = sum(1 for e in _preview if e["type"] == "LLAB")
+            st.success(
+                f"**{len(_preview)} events** will be created: "
+                f"{_pt_count} PT · {_llab_count} LLAB"
+            )
+            _preview_df = _pd.DataFrame(
+                [
+                    {
+                        "Date": e["date"].strftime("%Y-%m-%d"),
+                        "Day": e["day"],
+                        "Type": e["type"],
+                    }
+                    for e in _preview
+                ]
+            )
+            st.dataframe(_preview_df, hide_index=True, use_container_width=True)
+
+            # ── Generate button ───────────────────────────────────────────────
+            st.warning(
+                "This will create all events shown above. This cannot be undone in bulk."
+            )
+            if st.button("Generate Schedule", key="gen_confirm_btn", type="primary"):
+                _creator_id = (
+                    str(current_user_doc["_id"]) if current_user_doc else "unknown"
+                )
+                _start = require(_gen_start, "Select a valid date range first.")
+                _end = require(_gen_end, "Select a valid date range first.")
+                _created, _skipped = bulk_create_events(
+                    _start,
+                    _end,
+                    _pt_days,
+                    _llab_days,
+                    gen_pt_start,
+                    gen_pt_end,
+                    gen_llab_start,
+                    gen_llab_end,
+                    gen_tz,
+                    st.session_state.gen_holidays,
+                    _creator_id,
+                    actor_user_id=current_user_doc.get("_id")
+                    if current_user_doc
+                    else None,
+                    actor_email=current_user_doc.get("email")
+                    if current_user_doc
+                    else None,
+                )
+                st.session_state.gen_preview = None
+                st.session_state.gen_holidays = []
+                st.session_state.gen_schedule_success = (
+                    f"Created {_created} events ({_skipped} holiday dates skipped)."
+                )
+                st.rerun()
+
+    if st.session_state.gen_schedule_success:
+        st.success(st.session_state.gen_schedule_success)
+        st.session_state.gen_schedule_success = None
 
 st.divider()
 

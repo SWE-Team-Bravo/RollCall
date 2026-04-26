@@ -7,10 +7,12 @@ import utils.db_schema_crud as db_schema_crud
 from services.events import (
     archive_event,
     build_event_bounds,
+    bulk_create_events,
     create_event,
     get_event_time_bounds,
     get_all_events,
     has_event_ended,
+    preview_semester_schedule,
     restore_event,
     update_event,
 )
@@ -648,3 +650,651 @@ def test_get_all_events_display_start_is_dash_for_missing_datetime(monkeypatch) 
 
     assert events[0]["_display_start"] == "—"
     assert events[0]["_display_end"] == "—"
+
+
+# =============================================================================
+# preview_semester_schedule
+# Week used in tests: Apr 27 (Mon) – May 3 (Sun) 2026
+# Default config: PT = Mon/Tue/Thu, LLAB = Fri
+# =============================================================================
+
+_PT_DAYS = ["Monday", "Tuesday", "Thursday"]
+_LLAB_DAYS = ["Friday"]
+
+# Apr 27 2026 = Monday
+_MON = date(2026, 4, 27)
+_TUE = date(2026, 4, 28)
+_WED = date(2026, 4, 29)
+_THU = date(2026, 4, 30)
+_FRI = date(2026, 5, 1)
+_SAT = date(2026, 5, 2)
+_SUN = date(2026, 5, 3)
+
+
+def test_preview_returns_pt_events_on_monday() -> None:
+    result = preview_semester_schedule(_MON, _MON, _PT_DAYS, _LLAB_DAYS, [])
+    assert len(result) == 1
+    assert result[0]["type"] == "PT"
+
+
+def test_preview_returns_pt_events_on_tuesday() -> None:
+    result = preview_semester_schedule(_TUE, _TUE, _PT_DAYS, _LLAB_DAYS, [])
+    assert len(result) == 1
+    assert result[0]["type"] == "PT"
+
+
+def test_preview_returns_pt_events_on_thursday() -> None:
+    result = preview_semester_schedule(_THU, _THU, _PT_DAYS, _LLAB_DAYS, [])
+    assert len(result) == 1
+    assert result[0]["type"] == "PT"
+
+
+def test_preview_returns_llab_event_on_friday() -> None:
+    result = preview_semester_schedule(_FRI, _FRI, _PT_DAYS, _LLAB_DAYS, [])
+    assert len(result) == 1
+    assert result[0]["type"] == "LLAB"
+
+
+def test_preview_skips_wednesday() -> None:
+    result = preview_semester_schedule(_WED, _WED, _PT_DAYS, _LLAB_DAYS, [])
+    assert result == []
+
+
+def test_preview_skips_saturday() -> None:
+    result = preview_semester_schedule(_SAT, _SAT, _PT_DAYS, _LLAB_DAYS, [])
+    assert result == []
+
+
+def test_preview_skips_sunday() -> None:
+    result = preview_semester_schedule(_SUN, _SUN, _PT_DAYS, _LLAB_DAYS, [])
+    assert result == []
+
+
+def test_preview_full_week_gives_four_events() -> None:
+    result = preview_semester_schedule(_MON, _SUN, _PT_DAYS, _LLAB_DAYS, [])
+    assert len(result) == 4
+    pt = [e for e in result if e["type"] == "PT"]
+    llab = [e for e in result if e["type"] == "LLAB"]
+    assert len(pt) == 3
+    assert len(llab) == 1
+
+
+def test_preview_two_weeks_gives_eight_events() -> None:
+    result = preview_semester_schedule(
+        _MON, _MON + __import__("datetime").timedelta(days=13), _PT_DAYS, _LLAB_DAYS, []
+    )
+    assert len(result) == 8
+
+
+def test_preview_skips_single_holiday_on_pt_day() -> None:
+    result = preview_semester_schedule(_MON, _SUN, _PT_DAYS, _LLAB_DAYS, [_MON])
+    assert len(result) == 3
+    assert all(e["date"] != _MON for e in result)
+
+
+def test_preview_skips_multiple_holidays() -> None:
+    result = preview_semester_schedule(
+        _MON, _SUN, _PT_DAYS, _LLAB_DAYS, [_MON, _TUE, _FRI]
+    )
+    assert len(result) == 1
+    assert result[0]["date"] == _THU
+
+
+def test_preview_holiday_on_non_scheduled_day_has_no_effect() -> None:
+    result = preview_semester_schedule(_MON, _SUN, _PT_DAYS, _LLAB_DAYS, [_WED])
+    assert len(result) == 4
+
+
+def test_preview_all_days_are_holidays_returns_empty() -> None:
+    holidays = [_MON, _TUE, _THU, _FRI]
+    result = preview_semester_schedule(_MON, _SUN, _PT_DAYS, _LLAB_DAYS, holidays)
+    assert result == []
+
+
+def test_preview_event_has_date_field_as_date_object() -> None:
+    result = preview_semester_schedule(_MON, _MON, _PT_DAYS, _LLAB_DAYS, [])
+    assert isinstance(result[0]["date"], date)
+    assert result[0]["date"] == _MON
+
+
+def test_preview_event_has_correct_day_name() -> None:
+    result = preview_semester_schedule(_MON, _MON, _PT_DAYS, _LLAB_DAYS, [])
+    assert result[0]["day"] == "Monday"
+
+
+def test_preview_llab_event_has_correct_day_name() -> None:
+    result = preview_semester_schedule(_FRI, _FRI, _PT_DAYS, _LLAB_DAYS, [])
+    assert result[0]["day"] == "Friday"
+
+
+def test_preview_events_ordered_chronologically() -> None:
+    result = preview_semester_schedule(_MON, _SUN, _PT_DAYS, _LLAB_DAYS, [])
+    dates = [e["date"] for e in result]
+    assert dates == sorted(dates)
+
+
+def test_preview_empty_pt_days_config_produces_no_pt_events() -> None:
+    result = preview_semester_schedule(_MON, _SUN, [], _LLAB_DAYS, [])
+    assert all(e["type"] != "PT" for e in result)
+    assert len(result) == 1  # only LLAB on Friday
+
+
+def test_preview_empty_llab_days_config_produces_no_llab_events() -> None:
+    result = preview_semester_schedule(_MON, _SUN, _PT_DAYS, [], [])
+    assert all(e["type"] != "LLAB" for e in result)
+    assert len(result) == 3  # only PT on Mon/Tue/Thu
+
+
+def test_preview_custom_pt_days_monday_only() -> None:
+    result = preview_semester_schedule(_MON, _SUN, ["Monday"], _LLAB_DAYS, [])
+    pt = [e for e in result if e["type"] == "PT"]
+    assert len(pt) == 1
+    assert pt[0]["date"] == _MON
+
+
+def test_preview_single_day_range_no_match_returns_empty() -> None:
+    result = preview_semester_schedule(_WED, _WED, _PT_DAYS, _LLAB_DAYS, [])
+    assert result == []
+
+
+def test_preview_same_day_start_end_on_scheduled_day() -> None:
+    result = preview_semester_schedule(_FRI, _FRI, _PT_DAYS, _LLAB_DAYS, [])
+    assert len(result) == 1
+
+
+# =============================================================================
+# bulk_create_events
+# =============================================================================
+
+
+def _make_bulk_fake_db() -> _FakeDb:
+    return _FakeDb([])
+
+
+def test_bulk_create_one_week_returns_four_created(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert created == 4
+    assert skipped == 0
+
+
+def test_bulk_create_no_matching_days_returns_zero(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _SAT,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert created == 0
+    assert skipped == 0
+
+
+def test_bulk_create_holiday_on_pt_day_increments_skipped(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [_MON],
+        "000000000000000000000001",
+    )
+
+    assert created == 3
+    assert skipped == 1
+
+
+def test_bulk_create_holiday_on_non_scheduled_day_not_counted_as_skipped(
+    monkeypatch,
+) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [_WED],
+        "000000000000000000000001",
+    )
+
+    assert created == 4
+    assert skipped == 0
+
+
+def test_bulk_create_multiple_holidays_all_counted(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [_MON, _TUE, _FRI],
+        "000000000000000000000001",
+    )
+
+    assert created == 1
+    assert skipped == 3
+
+
+def test_bulk_create_pt_event_name_format(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert fake_db.events.docs[0]["event_name"] == "PT Mon Apr 27 2026"
+
+
+def test_bulk_create_llab_event_name_format(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _FRI,
+        _FRI,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert fake_db.events.docs[0]["event_name"] == "LLAB Fri May 01 2026"
+
+
+def test_bulk_create_pt_event_type_is_pt(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert fake_db.events.docs[0]["event_type"] == "pt"
+
+
+def test_bulk_create_llab_event_type_is_lab(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _FRI,
+        _FRI,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert fake_db.events.docs[0]["event_type"] == "lab"
+
+
+def test_bulk_create_pt_times_stored_correctly(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 30),
+        time(7, 45),
+        time(8, 0),
+        time(10, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    stored = fake_db.events.docs[0]
+    assert stored["start_date"] == datetime(2026, 4, 27, 6, 30, tzinfo=timezone.utc)
+    assert stored["end_date"] == datetime(2026, 4, 27, 7, 45, tzinfo=timezone.utc)
+
+
+def test_bulk_create_llab_times_stored_correctly(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _FRI,
+        _FRI,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(7, 0),
+        time(9, 30),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    stored = fake_db.events.docs[0]
+    assert stored["start_date"] == datetime(2026, 5, 1, 7, 0, tzinfo=timezone.utc)
+    assert stored["end_date"] == datetime(2026, 5, 1, 9, 30, tzinfo=timezone.utc)
+
+
+def test_bulk_create_timezone_applied_to_times(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "America/New_York",
+        [],
+        "000000000000000000000001",
+    )
+
+    stored = fake_db.events.docs[0]
+    # 06:00 EDT (UTC-4) = 10:00 UTC
+    assert stored["start_date"] == datetime(2026, 4, 27, 10, 0, tzinfo=timezone.utc)
+    assert stored["end_date"] == datetime(2026, 4, 27, 11, 0, tzinfo=timezone.utc)
+
+
+def test_bulk_create_timezone_name_stored_on_event(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "America/Chicago",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert fake_db.events.docs[0]["timezone_name"] == "America/Chicago"
+
+
+def test_bulk_create_logs_audit_for_each_created_event(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    logged: list[dict] = []
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(
+        events_service, "log_data_change", lambda **kw: logged.append(kw)
+    )
+
+    bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert len(logged) == 4
+    assert all(entry["action"] == "create" for entry in logged)
+
+
+def test_bulk_create_returns_zero_when_db_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(events_service, "get_db", lambda: None)
+
+    created, skipped = bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert created == 0
+    assert skipped == 0
+
+
+def test_bulk_create_single_monday_creates_one_pt_event(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert created == 1
+    assert skipped == 0
+    assert len(fake_db.events.docs) == 1
+
+
+def test_bulk_create_single_friday_creates_one_llab_event(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _FRI,
+        _FRI,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert created == 1
+    assert skipped == 0
+    assert fake_db.events.docs[0]["event_type"] == "lab"
+
+
+def test_bulk_create_wednesday_only_creates_nothing(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    created, skipped = bulk_create_events(
+        _WED,
+        _WED,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert created == 0
+    assert skipped == 0
+    assert len(fake_db.events.docs) == 0
+
+
+def test_bulk_create_correct_number_of_docs_inserted(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert len(fake_db.events.docs) == 4
+
+
+def test_bulk_create_events_have_archived_false(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(events_service, "log_data_change", lambda **kw: None)
+
+    bulk_create_events(
+        _MON,
+        _SUN,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+    )
+
+    assert all(doc["archived"] is False for doc in fake_db.events.docs)
+
+
+def test_bulk_create_actor_info_forwarded_to_audit(monkeypatch) -> None:
+    fake_db = _make_bulk_fake_db()
+    logged: list[dict] = []
+    monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
+    monkeypatch.setattr(
+        events_service, "log_data_change", lambda **kw: logged.append(kw)
+    )
+
+    bulk_create_events(
+        _MON,
+        _MON,
+        _PT_DAYS,
+        _LLAB_DAYS,
+        time(6, 0),
+        time(7, 0),
+        time(6, 0),
+        time(9, 0),
+        "UTC",
+        [],
+        "000000000000000000000001",
+        actor_email="cadre@example.com",
+    )
+
+    assert logged[0]["actor_email"] == "cadre@example.com"

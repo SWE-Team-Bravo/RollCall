@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 from email.mime.text import MIMEText
 
-import pytest
+import pytest  # type: ignore
 
 from services.email_templates import _DEFAULT_TEMPLATES
 import utils.at_risk_email as m

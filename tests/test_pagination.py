@@ -1,4 +1,4 @@
-import pytest
+import pytest  # type: ignore
 
 from utils.pagination import (
     build_pagination_metadata,

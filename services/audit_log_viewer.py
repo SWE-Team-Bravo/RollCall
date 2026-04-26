@@ -293,7 +293,7 @@ def _person_search_query(search: str) -> dict[str, Any]:
     if not escaped:
         return {}
 
-    predicates = [
+    predicates: list[dict[str, Any]] = [
         {"email": {"$regex": escaped, "$options": "i"}},
         {"first_name": {"$regex": escaped, "$options": "i"}},
         {"last_name": {"$regex": escaped, "$options": "i"}},

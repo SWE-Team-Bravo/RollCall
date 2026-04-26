@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import jwt
-import pytest
+import pytest  # type: ignore
 
 _SECRET = "test-secret-key"
 _USERNAME = "jdoe"

@@ -1,7 +1,7 @@
 from unittest.mock import patch, MagicMock
 from bson import ObjectId
 import pandas as pd
-import pytest
+import pytest  # type: ignore
 
 from utils.db_schema_crud import (
     create_flight,
@@ -407,7 +407,9 @@ def test_get_flight_management_cadet_rows_excludes_commanders_and_adds_flight_in
 
 
 def test_get_cadet_rows_by_id_returns_lookup_map():
-    rows = [{"cadet_id": "cadet-1", "name": "Taylor Smith"}]
+    rows: list[dict[str, str | bool]] = [
+        {"cadet_id": "cadet-1", "name": "Taylor Smith"}
+    ]
 
     rows_by_id = get_cadet_rows_by_id(rows)
 
@@ -551,7 +553,7 @@ def test_get_assignment_table_show_assigned_includes_other_flights_without_searc
 
 
 def test_has_selected_assigned_cadets_detects_reassignment():
-    rows_by_id = {
+    rows_by_id: dict[str, dict[str, str | bool]] = {
         "cadet-1": {"is_assigned": False},
         "cadet-2": {"is_assigned": True},
     }
