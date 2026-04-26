@@ -110,7 +110,11 @@ def edit_cadet(cadet):
         if check:
             before_cadet = dict(cadet)
             current_user = get_current_user()
-            actor_email = str(current_user.get("email", "") or "").strip() if current_user else None
+            actor_email = (
+                str(current_user.get("email", "") or "").strip()
+                if current_user
+                else None
+            )
 
             if user_doc is not None:
                 user_updates, errors = build_profile_updates(

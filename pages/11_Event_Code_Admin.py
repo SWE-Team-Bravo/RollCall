@@ -34,6 +34,7 @@ user = get_current_user_doc()
 if user is None:
     st.error("Could not find user account.")
     st.stop()
+assert user is not None
 
 all_events = get_all_events()
 
@@ -65,9 +66,7 @@ selected_event_start, selected_event_end = get_event_time_bounds(
 max_expires_at = latest_allowed_expiry(selected_event_end)
 if max_expires_at is not None:
     local_event_end = max_expires_at.astimezone(ZoneInfo(tz_name))
-    st.caption(
-        "Codes must expire no later than the event end time."
-    )
+    st.caption("Codes must expire no later than the event end time.")
     if selected_event_start is not None:
         local_event_start = selected_event_start.astimezone(ZoneInfo(tz_name))
         st.caption(
@@ -129,6 +128,7 @@ def _fullscreen_dialog(code_str: str) -> None:
 
 @st.fragment(run_every=1)
 def _active_code_panel(event_id: str, tz: str) -> None:
+    assert user is not None
     active_code = get_active_code(event_id)
 
     if not active_code:

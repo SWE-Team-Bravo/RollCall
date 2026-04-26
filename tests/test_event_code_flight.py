@@ -6,7 +6,11 @@ from bson import ObjectId
 
 import services.event_codes as event_codes_svc
 import utils.db_schema_crud as crud
-from services.event_codes import build_expires_at, is_expiry_valid, latest_allowed_expiry
+from services.event_codes import (
+    build_expires_at,
+    is_expiry_valid,
+    latest_allowed_expiry,
+)
 
 
 class _FakeInsertResult:

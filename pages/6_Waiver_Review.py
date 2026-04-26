@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any, cast
 import streamlit as st
 import pandas as pd
 
@@ -14,7 +15,11 @@ from services.waivers import WAIVER_STATUS_BADGE
 from utils.auth import get_current_user, require_role
 from utils.db_schema_crud import get_user_by_email
 from utils.export import to_excel
-from utils.pagination import init_pagination_state, render_pagination_controls, sync_pagination_state
+from utils.pagination import (
+    init_pagination_state,
+    render_pagination_controls,
+    sync_pagination_state,
+)
 
 from utils.st_helpers import require
 
@@ -84,7 +89,8 @@ if not rows:
     st.info("No waivers matched the selected filters.")
     st.stop()
 
-for w in paginated_rows["items"]:
+waiver_items = cast(list[dict[str, Any]], paginated_rows["items"])
+for w in waiver_items:
     with st.container(border=True):
         top = st.columns([4, 2, 2])
         top[0].markdown(f"**{w['cadet_name']}**  \n{w['cadet_email']}")

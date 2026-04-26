@@ -306,6 +306,8 @@ def update_event(event_id: str | ObjectId, updates: dict) -> UpdateResult | None
     if col is None:
         return None
     return col.update_one({"_id": ObjectId(event_id)}, {"$set": updates})
+
+
 # -- Event Assignments
 
 
@@ -364,6 +366,10 @@ def create_attendance_record(
     status: str,
     recorded_by_user_id: str | ObjectId,
     recorded_by_roles: list[str] | None = None,
+    location_lat: float | None = None,
+    location_lon: float | None = None,
+    location_outside_fence: bool = False,
+    location_unavailable: bool = False,
 ) -> InsertOneResult | None:
     col = get_collection("attendance_records")
     if col is None:
@@ -377,6 +383,13 @@ def create_attendance_record(
     }
     if recorded_by_roles is not None:
         doc["recorded_by_roles"] = list(recorded_by_roles)
+    if location_lat is not None:
+        doc["location_lat"] = location_lat
+        doc["location_lon"] = location_lon
+    if location_outside_fence:
+        doc["location_outside_fence"] = True
+    if location_unavailable:
+        doc["location_unavailable"] = True
     return col.insert_one(doc)
 
 
