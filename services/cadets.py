@@ -9,12 +9,13 @@ from utils.db_schema_crud import (
     create_cadet,
     get_cadet_by_id,
     get_user_by_email,
-    get_user_by_name,
     get_user_by_id,
     get_all_cadets,
     update_user,
     update_cadet,
-    get_cadet_by_user_id,
+    get_users_by_emails,
+    get_users_by_names,
+    get_cadets_by_user_ids_map,
 )
 from utils.names import format_full_name
 from utils.validators import is_valid_email, is_valid_name
@@ -191,17 +192,37 @@ def analyze_roster_for_import(cadets_data: list[dict]) -> list[dict]:
       - existing_user: the matched user doc (or None)
       - existing_cadet: the matched cadet doc (or None)
     """
-    email_counts: dict[str, int] = {}
+    from collections import Counter
+
+    email_counts: dict[str, int] = Counter(c["email"].lower().strip() for c in cadets_data)
+
+    non_dup_emails = [
+        e for e in {c["email"].lower().strip() for c in cadets_data}
+        if email_counts.get(e, 0) <= 1
+    ]
+    users_by_email: dict[str, dict] = get_users_by_emails(non_dup_emails)
+
+    name_lookup_keys = set()
     for c in cadets_data:
-        email_counts[c["email"].lower().strip()] = (
-            email_counts.get(c["email"].lower().strip(), 0) + 1
-        )
+        email = c["email"].lower().strip()
+        if email not in users_by_email and email_counts.get(email, 0) <= 1:
+            name_lookup_keys.add((c["first_name"], c["last_name"]))
+    users_by_name: dict[tuple[str, str], dict] = get_users_by_names(list(name_lookup_keys))
+
+    all_matched_user_ids = []
+    for c in cadets_data:
+        email = c["email"].lower().strip()
+        existing_user = users_by_email.get(email)
+        if not existing_user and email_counts.get(email, 0) <= 1:
+            name_key = (c["first_name"].lower().strip(), c["last_name"].lower().strip())
+            existing_user = users_by_name.get(name_key)
+        if existing_user:
+            all_matched_user_ids.append(existing_user["_id"])
+    cadets_by_uid: dict[str, dict] = get_cadets_by_user_ids_map(all_matched_user_ids)
 
     results = []
     for c in cadets_data:
         email = c["email"].lower().strip()
-        first_name = c["first_name"]
-        last_name = c["last_name"]
 
         if email_counts.get(email, 0) > 1:
             results.append(
@@ -214,26 +235,27 @@ def analyze_roster_for_import(cadets_data: list[dict]) -> list[dict]:
             )
             continue
 
-        existing_user = get_user_by_email(email)
+        existing_user = users_by_email.get(email)
         if existing_user:
             results.append(
                 {
                     **c,
                     "conflict_type": "email_exists",
                     "existing_user": existing_user,
-                    "existing_cadet": get_cadet_by_user_id(existing_user["_id"]),
+                    "existing_cadet": cadets_by_uid.get(str(existing_user["_id"])),
                 }
             )
             continue
 
-        existing_user = get_user_by_name(first_name, last_name)
+        name_key = (c["first_name"].lower().strip(), c["last_name"].lower().strip())
+        existing_user = users_by_name.get(name_key)
         if existing_user:
             results.append(
                 {
                     **c,
                     "conflict_type": "name_exists",
                     "existing_user": existing_user,
-                    "existing_cadet": get_cadet_by_user_id(existing_user["_id"]),
+                    "existing_cadet": cadets_by_uid.get(str(existing_user["_id"])),
                 }
             )
             continue

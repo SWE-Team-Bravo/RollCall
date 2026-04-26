@@ -82,6 +82,52 @@ def get_users_by_ids(user_ids: list[str | ObjectId]) -> list[dict]:
     return list(col.find({"_id": {"$in": object_ids}}))
 
 
+def get_users_by_emails(emails: list[str]) -> dict[str, dict]:
+    if not emails:
+        return {}
+    col = get_collection("users")
+    if col is None:
+        return {}
+    conditions = [
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+        for email in emails
+    ]
+    users = col.find({"$or": conditions})
+    return {u["email"].lower().strip(): u for u in users}
+
+
+def get_users_by_names(names: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    if not names:
+        return {}
+    col = get_collection("users")
+    if col is None:
+        return {}
+    conditions = [
+        {
+            "first_name": {"$regex": f"^{re.escape(first)}$", "$options": "i"},
+            "last_name": {"$regex": f"^{re.escape(last)}$", "$options": "i"},
+        }
+        for first, last in names
+    ]
+    users = col.find({"$or": conditions})
+    result: dict[tuple[str, str], dict] = {}
+    for u in users:
+        key = (u.get("first_name", "").lower().strip(), u.get("last_name", "").lower().strip())
+        result[key] = u
+    return result
+
+
+def get_cadets_by_user_ids_map(user_ids: list) -> dict[str, dict]:
+    if not user_ids:
+        return {}
+    col = get_collection("cadets")
+    if col is None:
+        return {}
+    object_ids = [ObjectId(uid) for uid in user_ids]
+    cadets = col.find({"user_id": {"$in": object_ids}})
+    return {str(c["user_id"]): c for c in cadets}
+
+
 def update_user(user_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("users")
     if col is None:

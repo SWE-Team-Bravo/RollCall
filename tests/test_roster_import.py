@@ -262,15 +262,16 @@ def test_import_returns_none_user_goes_to_errors(mock_create_user, mock_get_user
 # -- analyze_roster_for_import tests
 
 
-@patch("services.cadets.get_user_by_email")
-@patch("services.cadets.get_user_by_name")
-@patch("utils.db_schema_crud.get_cadet_by_user_id")
-def test_analyze_flags_email_conflict(mock_get_cadet, mock_get_name, mock_get_email):
+@patch("services.cadets.get_cadets_by_user_ids_map")
+@patch("services.cadets.get_users_by_names")
+@patch("services.cadets.get_users_by_emails")
+def test_analyze_flags_email_conflict(mock_get_emails, mock_get_names, mock_get_cadets):
     from bson import ObjectId
 
     existing_id = ObjectId()
-    mock_get_email.return_value = {"_id": existing_id}
-    mock_get_cadet.return_value = {"_id": ObjectId(), "user_id": existing_id}
+    mock_get_emails.return_value = {"jdoe@kent.edu": {"_id": existing_id}}
+    mock_get_names.return_value = {}
+    mock_get_cadets.return_value = {str(existing_id): {"_id": ObjectId(), "user_id": existing_id}}
     result = analyze_roster_for_import(
         [{"first_name": "John", "last_name": "Doe", "email": "jdoe@kent.edu", "rank": "100"}]
     )
@@ -279,16 +280,16 @@ def test_analyze_flags_email_conflict(mock_get_cadet, mock_get_name, mock_get_em
     assert result[0]["existing_user"]["_id"] == existing_id
 
 
-@patch("services.cadets.get_user_by_email")
-@patch("services.cadets.get_user_by_name")
-@patch("utils.db_schema_crud.get_cadet_by_user_id")
-def test_analyze_flags_name_conflict(mock_get_cadet, mock_get_name, mock_get_email):
+@patch("services.cadets.get_cadets_by_user_ids_map")
+@patch("services.cadets.get_users_by_names")
+@patch("services.cadets.get_users_by_emails")
+def test_analyze_flags_name_conflict(mock_get_emails, mock_get_names, mock_get_cadets):
     from bson import ObjectId
 
-    mock_get_email.return_value = None
     existing_id = ObjectId()
-    mock_get_name.return_value = {"_id": existing_id}
-    mock_get_cadet.return_value = None
+    mock_get_emails.return_value = {}
+    mock_get_names.return_value = {("jane", "smith"): {"_id": existing_id}}
+    mock_get_cadets.return_value = {str(existing_id): None}
     result = analyze_roster_for_import(
         [{"first_name": "Jane", "last_name": "Smith", "email": "jane@kent.edu", "rank": "200"}]
     )
@@ -308,11 +309,13 @@ def test_analyze_flags_intra_file_duplicate():
     assert result[1]["conflict_type"] == "intra_file_duplicate"
 
 
-@patch("services.cadets.get_user_by_email")
-@patch("services.cadets.get_user_by_name")
-def test_analyze_no_conflict(mock_get_name, mock_get_email):
-    mock_get_email.return_value = None
-    mock_get_name.return_value = None
+@patch("services.cadets.get_cadets_by_user_ids_map")
+@patch("services.cadets.get_users_by_names")
+@patch("services.cadets.get_users_by_emails")
+def test_analyze_no_conflict(mock_get_emails, mock_get_names, mock_get_cadets):
+    mock_get_emails.return_value = {}
+    mock_get_names.return_value = {}
+    mock_get_cadets.return_value = {}
     result = analyze_roster_for_import(
         [{"first_name": "New", "last_name": "User", "email": "new@kent.edu", "rank": "100"}]
     )

@@ -1,3 +1,4 @@
+import hashlib
 import time
 
 import streamlit as st
@@ -405,11 +406,12 @@ with tab_import:
             st.error("No valid cadets found in the roster file.")
         else:
             # Analyze only once per upload and cache in session_state
+            file_hash = hashlib.sha256(uploaded.getvalue()).hexdigest()
             if (
-                st.session_state.get("roster_upload_key") != uploaded.name
+                st.session_state.get("roster_upload_key") != file_hash
                 or "roster_preview" not in st.session_state
             ):
-                st.session_state.roster_upload_key = uploaded.name
+                st.session_state.roster_upload_key = file_hash
                 st.session_state.roster_preview = analyze_roster_for_import(cadets)
                 # Initialize per-row action keys to defaults
                 for i, r in enumerate(st.session_state.roster_preview):
