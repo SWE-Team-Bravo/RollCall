@@ -104,8 +104,6 @@ else:
             at_risk_report,
             event_code_admin,
         ]
-        if "waiver_reviewer" in st.session_state.view_role:
-            pages.append(waiver_review)
     elif "cadet" in st.session_state.view_role:
         pages = [attendance, waivers, cadet_attendance]
         if "waiver_reviewer" in st.session_state.view_role:
