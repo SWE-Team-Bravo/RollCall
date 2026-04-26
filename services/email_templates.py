@@ -48,6 +48,6 @@ def save_email_template(key: str, subject: str, body: str) -> bool:
         return False
     db.event_config.update_one(
         {},
-        {"$set": {f"email_templats.{key}": {"subject": subject, "body": body}}},
+        {"$set": {f"email_templates.{key}": {"subject": subject, "body": body}}},
     )
     return True
