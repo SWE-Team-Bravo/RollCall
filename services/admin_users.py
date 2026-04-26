@@ -229,7 +229,10 @@ def validate_disable_user(
     if actor_user and str(target_user.get("_id")) == str(actor_user.get("_id")):
         return "You cannot disable your own account."
 
-    if "admin" in list(target_user.get("roles") or []) and count_enabled_admins(all_users) <= 1:
+    if (
+        "admin" in list(target_user.get("roles") or [])
+        and count_enabled_admins(all_users) <= 1
+    ):
         return "You cannot disable the last enabled admin user."
 
     return None

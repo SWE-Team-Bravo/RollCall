@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from bson import ObjectId
 
 from services.attendance_merge import merge_attendance_records
 from utils.db import get_collection
-from utils.db_schema_crud import get_attendance_by_event, get_cadets_by_ids, get_users_by_ids
+from utils.db_schema_crud import (
+    get_attendance_by_event,
+    get_cadets_by_ids,
+    get_users_by_ids,
+)
 from utils.names import format_full_name
 from utils.pagination import build_pagination_metadata, paginate_list
 
@@ -119,7 +123,9 @@ def get_attendance_by_event_for_cadets(
                 col.find(
                     {
                         "event_id": ObjectId(event_id),
-                        "cadet_id": {"$in": [ObjectId(cadet_id) for cadet_id in cadet_ids]},
+                        "cadet_id": {
+                            "$in": [ObjectId(cadet_id) for cadet_id in cadet_ids]
+                        },
                     }
                 )
             )
@@ -188,11 +194,15 @@ def get_paginated_commander_roster(
     if not cadets:
         return {**cadets_page, "items": []}
 
-    cadet_user_ids = [cadet.get("user_id") for cadet in cadets if cadet.get("user_id") is not None]
+    cadet_user_ids = [
+        cadet.get("user_id") for cadet in cadets if cadet.get("user_id") is not None
+    ]
     users_by_id = {user["_id"]: user for user in get_users_by_ids(cadet_user_ids)}
     hydrated_cadets = hydrate_cadet_names(cadets, users_by_id)
 
-    cadet_ids = [cadet.get("_id") for cadet in hydrated_cadets if cadet.get("_id") is not None]
+    cadet_ids = [
+        cadet.get("_id") for cadet in hydrated_cadets if cadet.get("_id") is not None
+    ]
     records = get_attendance_by_event_for_cadets(event_id, cadet_ids)
 
     return {**cadets_page, "items": build_commander_roster(hydrated_cadets, records)}
@@ -205,11 +215,13 @@ def get_roster_entries_for_cadet_ids(
     if not cadet_ids:
         return []
 
-    cadets = get_cadets_by_ids(cadet_ids)
+    cadets = get_cadets_by_ids(cast(list[str | ObjectId], cadet_ids))
     if not cadets:
         return []
 
-    cadet_user_ids = [cadet.get("user_id") for cadet in cadets if cadet.get("user_id") is not None]
+    cadet_user_ids: list[str | ObjectId] = [
+        cadet.get("user_id") for cadet in cadets if cadet.get("user_id") is not None
+    ]  # type: ignore[misc]
     users_by_id = {user["_id"]: user for user in get_users_by_ids(cadet_user_ids)}
     hydrated_cadets = hydrate_cadet_names(cadets, users_by_id)
     records = get_attendance_by_event_for_cadets(

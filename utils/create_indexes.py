@@ -126,7 +126,11 @@ def create_indexes() -> None:
                 name="target_collection_id_created_at",
             ),
             IndexModel(
-                [("source", ASCENDING), ("event_id", ASCENDING), ("created_at", ASCENDING)],
+                [
+                    ("source", ASCENDING),
+                    ("event_id", ASCENDING),
+                    ("created_at", ASCENDING),
+                ],
                 name="source_event_created_at",
             ),
             IndexModel(

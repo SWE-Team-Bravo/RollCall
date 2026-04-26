@@ -337,9 +337,12 @@ else:
             summary_event_ids = list(summary_df["_event_id"])
             if (
                 "dashboard_selected_event_id" not in st.session_state
-                or st.session_state["dashboard_selected_event_id"] not in summary_event_ids
+                or st.session_state["dashboard_selected_event_id"]
+                not in summary_event_ids
             ):
-                _summary_events = [event_by_id.get(eid, {}) for eid in summary_event_ids]
+                _summary_events = [
+                    event_by_id.get(eid, {}) for eid in summary_event_ids
+                ]
                 default_index = closest_event_index(_summary_events)
                 st.session_state["dashboard_selected_event_id"] = summary_event_ids[
                     default_index
@@ -361,14 +364,22 @@ else:
                 recs = list(
                     attendance_col.find(
                         {"event_id": selected_event_id, "cadet_id": {"$in": cadet_ids}},
-                        {"_id": 0, "cadet_id": 1, "status": 1},
+                        {
+                            "_id": 0,
+                            "cadet_id": 1,
+                            "status": 1,
+                            "location_outside_fence": 1,
+                        },
                     )
                 )
                 status_by_cadet: dict[ObjectId, str] = {}
+                outside_fence_by_cadet: dict[ObjectId, bool] = {}
                 for r in recs:
                     cid = r.get("cadet_id")
                     if isinstance(cid, ObjectId):
                         status_by_cadet[cid] = _status_bucket(r.get("status"))
+                        if r.get("location_outside_fence"):
+                            outside_fence_by_cadet[cid] = True
 
                 cadet_rows: list[dict[str, Any]] = []
                 for cid, name in sorted(
@@ -378,6 +389,12 @@ else:
                     if status_choice != "All" and status != status_choice:
                         continue
                     cadet_rows.append({"Cadet": name, "Status": status})
+
+                outside_fence_names = [
+                    cadet_name_by_id[cid]
+                    for cid in outside_fence_by_cadet
+                    if cid in cadet_name_by_id
+                ]
 
                 if not cadet_rows:
                     st.info("No cadets match the current status filter.")
@@ -427,6 +444,12 @@ else:
                             to_excel(export_cadet_df),
                             "attendance.xlsx",
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
+
+                    if outside_fence_names:
+                        st.warning(
+                            "Checked in outside geofence: "
+                            + ", ".join(sorted(outside_fence_names))
                         )
 
                     leg1, leg2, leg3 = st.columns(3)

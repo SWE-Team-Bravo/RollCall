@@ -1,6 +1,8 @@
 from unittest.mock import patch, MagicMock
 from services.event_config import (
     DEFAULT_EMAIL_ENABLED,
+    DEFAULT_TIMEZONE,
+    get_default_timezone,
     get_event_config,
     save_event_config,
     get_absence_thresholds,
@@ -23,7 +25,7 @@ def test_get_event_config_returns_default_when_db_none():
     assert config is not None
     assert config["pt_threshold"] == 9
     assert config["llab_threshold"] == 2
-    assert config["checkin_window"] == 10
+    assert config["checkin_window"] == DEFAULT_CHECKIN_WINDOW_MINUTES
     assert config["waiver_reminder_days"] == 3
 
 
@@ -192,3 +194,57 @@ def test_email_enabled_default_when_none():
 def test_email_enabled_default_when_key_missing():
     with patch("services.event_config.get_event_config", return_value={}):
         assert is_email_enabled() is DEFAULT_EMAIL_ENABLED
+
+
+# --------------------- test get_default_timezone --------------------
+
+
+def test_get_default_timezone_returns_configured_value():
+    with patch(
+        "services.event_config.get_event_config",
+        return_value={"default_timezone": "America/Chicago"},
+    ):
+        assert get_default_timezone() == "America/Chicago"
+
+
+def test_get_default_timezone_returns_default_when_key_missing():
+    with patch("services.event_config.get_event_config", return_value={}):
+        assert get_default_timezone() == DEFAULT_TIMEZONE
+
+
+def test_get_default_timezone_returns_default_when_config_none():
+    with patch("services.event_config.get_event_config", return_value=None):
+        assert get_default_timezone() == DEFAULT_TIMEZONE
+
+
+def test_get_default_timezone_returns_default_when_db_none():
+    with patch("services.event_config.get_db", return_value=None):
+        assert get_default_timezone() == DEFAULT_TIMEZONE
+
+
+# --------------------- test save_event_config persists default_timezone ------
+
+
+def test_save_event_config_persists_default_timezone():
+    mock_db = MagicMock()
+    with patch("services.event_config.get_db", return_value=mock_db):
+        save_event_config(
+            ["Monday"],
+            ["Friday"],
+            9,
+            2,
+            10,
+            3,
+            True,
+            default_timezone="America/Los_Angeles",
+        )
+    args = mock_db.event_config.update_one.call_args[0][1]["$set"]
+    assert args["default_timezone"] == "America/Los_Angeles"
+
+
+def test_save_event_config_default_timezone_is_eastern_if_omitted():
+    mock_db = MagicMock()
+    with patch("services.event_config.get_db", return_value=mock_db):
+        save_event_config(["Monday"], ["Friday"], 9, 2, 10, 3, True)
+    args = mock_db.event_config.update_one.call_args[0][1]["$set"]
+    assert args["default_timezone"] == DEFAULT_TIMEZONE

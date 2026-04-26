@@ -307,7 +307,7 @@ def get_member_selection_table(
     table.insert(
         0,
         "Unassign",
-        [cadet_id in selected_set for cadet_id in member_cadet_ids],  # type: ignore
+        [cadet_id in selected_set for cadet_id in member_cadet_ids],
     )
     return table
 
@@ -349,7 +349,7 @@ def _build_cadet_table(
     if not include_selection:
         column_order = ["Cadet", "Rank", "Email", "Current Flight"]
 
-    return pd.DataFrame(table_rows, columns=list(column_order))  # type: ignore
+    return pd.DataFrame(table_rows, columns=list(column_order))
 
 
 def _build_member_table(
@@ -370,7 +370,7 @@ def _build_member_table(
 
     return pd.DataFrame(
         table_rows,
-        columns=["Cadet", "Role", "Rank", "Email", "Current Flight"],  # type: ignore
+        columns=["Cadet", "Role", "Rank", "Email", "Current Flight"],
     )
 
 

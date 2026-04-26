@@ -27,7 +27,11 @@ from utils.attendance_status import (
     get_attendance_status_cell_style,
     get_attendance_status_label,
 )
-from utils.pagination import init_pagination_state, render_pagination_controls, sync_pagination_state
+from utils.pagination import (
+    init_pagination_state,
+    render_pagination_controls,
+    sync_pagination_state,
+)
 from utils.db_schema_crud import (
     get_user_by_email,
 )
@@ -191,6 +195,7 @@ _sync_roster_state(str(event_id))
 
 st.subheader("Attendance Roster")
 
+
 @st.fragment
 def _render_attendance_roster() -> None:
     roster_page, roster_page_size = init_pagination_state(
@@ -219,6 +224,12 @@ def _render_attendance_roster() -> None:
         for idx, entry in enumerate(roster)
     ]
 
+    def _location_flag(entry: dict[str, Any]) -> str:
+        rec = entry.get("record") or {}
+        if rec.get("location_outside_fence"):
+            return "Outside region"
+        return ""
+
     df = pd.DataFrame(
         {
             "Cadet": [
@@ -229,6 +240,7 @@ def _render_attendance_roster() -> None:
                 for entry in roster
             ],
             "Current Status": current_statuses,
+            "Location": [_location_flag(entry) for entry in roster],
             "Set Status": selected_statuses,
         }
     )
@@ -247,6 +259,7 @@ def _render_attendance_roster() -> None:
         column_config={
             "Cadet": st.column_config.TextColumn(disabled=True),
             "Current Status": st.column_config.TextColumn(disabled=True),
+            "Location": st.column_config.TextColumn(disabled=True),
             "Set Status": st.column_config.SelectboxColumn(
                 options=STATUS_OPTIONS,
                 required=True,
@@ -278,7 +291,9 @@ def _render_attendance_roster() -> None:
         draft_cadet_ids = list(drafts.keys())
         roster_to_save = get_roster_entries_for_cadet_ids(event_id, draft_cadet_ids)
         if not roster_to_save:
-            _set_feedback("error", "Could not load attendance roster for the selected edits.")
+            _set_feedback(
+                "error", "Could not load attendance roster for the selected edits."
+            )
             st.rerun()
 
         invalid_no_record_rows = [
@@ -294,9 +309,7 @@ def _render_attendance_roster() -> None:
             st.stop()
 
         new_statuses = {
-            str(entry["cadet"]["_id"]): STATUS_TO_DB[
-                drafts[str(entry["cadet"]["_id"])]
-            ]
+            str(entry["cadet"]["_id"]): STATUS_TO_DB[drafts[str(entry["cadet"]["_id"])]]
             for entry in roster_to_save
             if drafts.get(str(entry["cadet"]["_id"])) in STATUS_TO_DB
         }

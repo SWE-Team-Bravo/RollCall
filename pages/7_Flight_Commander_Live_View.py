@@ -208,10 +208,25 @@ def live_checkin_fragment(selected_event: dict[str, Any]) -> None:
     checked_in = view["checked_in"]
     missing = view["missing"]
 
+    record_by_cadet = {
+        str(r.get("cadet_id")): r
+        for r in attendance_records
+        if str(r.get("event_id")) == str(selected_event.get("_id"))
+    }
+
+    outside_fence_count = sum(
+        1 for r in record_by_cadet.values() if r.get("location_outside_fence")
+    )
+
     top = st.columns(3)
     top[0].metric("Checked In", len(checked_in))
     top[1].metric("Missing", len(missing))
     top[2].metric("Total Flight Cadets", len(flight_cadets))
+
+    if outside_fence_count:
+        st.warning(
+            f"{outside_fence_count} cadet(s) checked in from outside the geofence."
+        )
 
     left, right = st.columns(2)
 
@@ -219,7 +234,11 @@ def live_checkin_fragment(selected_event: dict[str, Any]) -> None:
         st.success(f"Checked In ({len(checked_in)})")
         if checked_in:
             for cadet_doc in checked_in:
-                st.write(f"✅ {_cadet_display_name(cadet_doc)}")
+                rec = record_by_cadet.get(str(cadet_doc.get("_id")), {})
+                if rec.get("location_outside_fence"):
+                    st.write(f"✅ {_cadet_display_name(cadet_doc)} — not in region")
+                else:
+                    st.write(f"✅ {_cadet_display_name(cadet_doc)}")
         else:
             st.info("No one has checked in yet.")
 
