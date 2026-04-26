@@ -70,6 +70,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 _location = get_geolocation(component_key="geo_checkin")
+_coords = _location.get("coords") if isinstance(_location, dict) else None
+_has_coords = isinstance(_coords, dict)
+
+if _has_coords:
+    st.caption("Location detected")
+else:
+    st.caption("Location unavailable")
 
 
 st.subheader("Enter your 6-digit event code")
@@ -139,9 +146,10 @@ if len(code_clean) == 6:
 
                     # Geofence check
                     if event.get("geofence_enabled"):
-                        if _location:
-                            cadet_lat = _location["coords"]["latitude"]
-                            cadet_lon = _location["coords"]["longitude"]
+                        if _has_coords:
+                            cadet_lat = _coords.get("latitude")
+                            cadet_lon = _coords.get("longitude")
+                        if cadet_lat is not None and cadet_lon is not None:
                             within, warning = is_within_geofence(
                                 event, cadet_lat, cadet_lon
                             )
@@ -158,40 +166,43 @@ if len(code_clean) == 6:
 
 # ── Location map — shown whenever GPS has resolved ────────────────────────────
 
-if _location:
-    _lat = _location["coords"]["latitude"]
-    _lon = _location["coords"]["longitude"]
-    _m = folium.Map(location=[_lat, _lon], zoom_start=17)
-    folium.Marker(
-        [_lat, _lon],
-        tooltip="Your location",
-        icon=folium.Icon(color="blue", icon="user", prefix="fa"),
-    ).add_to(_m)
+if _has_coords:
+    _lat = _coords.get("latitude")
+    _lon = _coords.get("longitude")
+    if _lat is not None and _lon is not None:
+        _m = folium.Map(location=[_lat, _lon], zoom_start=17)
+        folium.Marker(
+            [_lat, _lon],
+            tooltip="Your location",
+            icon=folium.Icon(color="blue", icon="user", prefix="fa"),
+        ).add_to(_m)
 
-    # Overlay geofence if a validated geofence event is in scope
-    if _validated_event and _validated_event.get("geofence_enabled"):
-        fence_lat = _validated_event.get("geofence_lat")
-        fence_lon = _validated_event.get("geofence_lon")
-        radius = _validated_event.get("geofence_radius_meters", 150)
-        if fence_lat is not None and fence_lon is not None:
-            within, _ = is_within_geofence(_validated_event, _lat, _lon)
-            folium.Circle(
-                location=[fence_lat, fence_lon],
-                radius=radius,
-                color="#00aa44" if within else "#cc0000",
-                fill=True,
-                fill_opacity=0.15,
-                tooltip="Geofence boundary",
-            ).add_to(_m)
-            folium.Marker(
-                [fence_lat, fence_lon],
-                tooltip="Formation location",
-                icon=folium.Icon(
-                    color="green" if within else "red", icon="flag", prefix="fa"
-                ),
-            ).add_to(_m)
+        # Overlay geofence if a validated geofence event is in scope
+        if _validated_event and _validated_event.get("geofence_enabled"):
+            fence_lat = _validated_event.get("geofence_lat")
+            fence_lon = _validated_event.get("geofence_lon")
+            radius = _validated_event.get("geofence_radius_meters", 150)
+            if fence_lat is not None and fence_lon is not None:
+                within, _ = is_within_geofence(_validated_event, _lat, _lon)
+                folium.Circle(
+                    location=[fence_lat, fence_lon],
+                    radius=radius,
+                    color="#00aa44" if within else "#cc0000",
+                    fill=True,
+                    fill_opacity=0.15,
+                    tooltip="Geofence boundary",
+                ).add_to(_m)
+                folium.Marker(
+                    [fence_lat, fence_lon],
+                    tooltip="Formation location",
+                    icon=folium.Icon(
+                        color="green" if within else "red",
+                        icon="flag",
+                        prefix="fa",
+                    ),
+                ).add_to(_m)
 
-    st_folium(_m, width=None, height=300, key="checkin_map")
+        st_folium(_m, width=None, height=300, key="checkin_map")
 
 # ── Submit ────────────────────────────────────────────────────────────────────
 

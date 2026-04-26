@@ -40,6 +40,7 @@ def extract_user_from_raw(email: str | None, raw: dict) -> dict | None:
         "last_name": str(user_info.get("last_name", "")),
         "roles": list(user_info.get("roles", [])),
         "disabled": bool(user_info.get("disabled", False)),
+        "force_password_change": bool(user_info.get("force_password_change", False)),
     }
 
 

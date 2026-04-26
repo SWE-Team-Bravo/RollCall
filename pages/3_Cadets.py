@@ -25,6 +25,7 @@ from services.cadets import (
     import_cadets_from_roster,
     parse_roster_xlsx,
     analyze_roster_for_import,
+    send_temp_passwords_to_created_cadets,
     RANK_OPTIONS,
     RANK_TO_LEVEL,
 )
@@ -378,7 +379,7 @@ with tab_import:
     st.subheader("Import Cadets from Roster")
 
     if "import_result" in st.session_state:
-        result = st.session_state.pop("import_result")
+        result = st.session_state["import_result"]
         if result.get("created"):
             st.success(f"Created {len(result['created'])} account(s).")
             rows = [
@@ -387,6 +388,7 @@ with tab_import:
                     "Email": c["email"],
                     "Rank": c["rank"],
                     "Temp Password": c["temp_password"],
+                    "Emailed": "Yes" if c.get("emailed") else "No",
                 }
                 for c in result["created"]
             ]
@@ -404,9 +406,71 @@ with tab_import:
             st.error(f"{len(result['errors'])} error(s):")
             for err in result["errors"]:
                 st.write(f"- {err['name']} ({err['email']}): {err['reason']}")
+        if result.get("email_failures"):
+            st.warning(f"{len(result['email_failures'])} email failure(s):")
+            for err in result["email_failures"]:
+                st.write(f"- {err['name']} ({err['email']}): {err['reason']}")
+
+        # ---- Retroactive email prompt ----
+        created = result.get("created", [])
+        unemailed = [c for c in created if not c.get("emailed")]
+        if unemailed and not st.session_state.get("import_email_dismissed", False):
+            st.divider()
+            st.info(
+                f"{len(unemailed)} cadet(s) were created but not yet emailed their temporary passwords."
+            )
+            c1, c2 = st.columns([3, 7])
+            with c1:
+                email_clicked = st.button(
+                    "Email temporary passwords", key="retroactive_email_temp_pw"
+                )
+            with c2:
+                dismiss_clicked = st.button(
+                    "Dismiss", type="secondary", key="dismiss_pending_email"
+                )
+
+            if email_clicked:
+                remaining, failures = send_temp_passwords_to_created_cadets(
+                    unemailed
+                )
+                # Persist mutations back into session state
+                st.session_state["import_result"]["created"] = created
+                if failures:
+                    st.warning(f"{len(failures)} email(s) failed:")
+                    for err in failures:
+                        st.write(
+                            f"- {err['name']} ({err['email']}): {err['reason']}"
+                        )
+                if not remaining:
+                    st.success(
+                        "All temporary passwords emailed successfully."
+                    )
+                else:
+                    st.info(
+                        f"{len(remaining)} cadet(s) still need to be emailed."
+                    )
+
+            if dismiss_clicked:
+                st.session_state["import_email_dismissed"] = True
+                st.rerun()
+
+        st.divider()
+        if st.button("Clear import results", key="clear_import_result"):
+            st.session_state.pop("import_result", None)
+            st.session_state.pop("import_email_dismissed", None)
+            for key in list(st.session_state.keys()):
+                if key.startswith("roster_"):
+                    del st.session_state[key]
+            st.rerun()
 
     # ---- Step 1: Upload & preview ----
-    uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"], key="roster_uploader")
+    # Hide the upload/preview UI while import results are being reviewed so
+    # that reruns (e.g. retroactive email buttons) don't redraw it below.
+    if "import_result" not in st.session_state:
+        uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"], key="roster_uploader")
+    else:
+        uploaded = None
+
     if uploaded:
         cadets, parse_errors = parse_roster_xlsx(uploaded)
         if parse_errors:
@@ -523,6 +587,11 @@ with tab_import:
 
             # ---- Step 2: Confirm import ----
             st.divider()
+            email_temp_passwords = st.checkbox(
+                "Email temporary passwords to new cadets",
+                value=False,
+                key="roster_email_temp_passwords",
+            )
             if st.button("Confirm Import", type="primary"):
                 actions = [
                     st.session_state.get(
@@ -535,6 +604,7 @@ with tab_import:
                         preview,
                         actions,
                         actor_user=get_current_user(),
+                        email_temp_passwords=email_temp_passwords,
                     )
                 st.session_state.import_result = result
                 # Clean up preview state so a fresh upload starts clean

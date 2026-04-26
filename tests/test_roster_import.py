@@ -201,9 +201,11 @@ def test_import_skips_existing_user(mock_get_cadet, mock_create_cadet, mock_get_
 @patch("services.cadets.get_cadet_by_id")
 @patch("services.cadets.get_user_by_id")
 @patch("services.cadets.log_data_change")
+@patch("services.cadets.update_user")
 @patch("utils.db_schema_crud.create_user")
 def test_import_creates_user_and_cadet(
     mock_create_user,
+    mock_update_user,
     mock_log_data_change,
     mock_get_user_by_id,
     mock_get_cadet_by_id,
@@ -237,7 +239,11 @@ def test_import_creates_user_and_cadet(
     assert "temp_password" in result["created"][0]
     assert result["skipped"] == []
     assert result["errors"] == []
+    assert result["email_failures"] == []
     assert mock_log_data_change.call_count == 2
+    mock_update_user.assert_called_once()
+    call_args = mock_update_user.call_args
+    assert call_args[0][1] == {"force_password_change": True}
 
 
 @patch("services.cadets.get_user_by_email")
@@ -453,3 +459,151 @@ def test_roster_import_action_config_exports():
         "Update",
         "Create as New",
     ]
+
+
+# -- email temp passwords on import
+
+
+@patch("services.cadets.get_user_by_email")
+@patch("services.cadets.create_cadet")
+@patch("services.cadets.get_cadet_by_id")
+@patch("services.cadets.get_user_by_id")
+@patch("services.cadets.log_data_change")
+@patch("services.cadets.update_user")
+@patch("services.cadets.send_temporary_password_email")
+@patch("utils.db_schema_crud.create_user")
+def test_import_does_not_email_when_flag_false(
+    mock_create_user,
+    mock_send_email,
+    mock_update_user,
+    mock_log_data_change,
+    mock_get_user_by_id,
+    mock_get_cadet_by_id,
+    mock_create_cadet,
+    mock_get_user,
+):
+    mock_get_user.return_value = None
+    inserted = MagicMock()
+    inserted.inserted_id = MagicMock()
+    created_cadet_result = MagicMock()
+    created_cadet_result.inserted_id = MagicMock()
+    mock_create_cadet.return_value = created_cadet_result
+    mock_create_user.return_value = inserted
+    mock_get_user_by_id.return_value = {"_id": inserted.inserted_id, "email": "jdoe@kent.edu"}
+    mock_get_cadet_by_id.return_value = {
+        "_id": created_cadet_result.inserted_id,
+        "email": "jdoe@kent.edu",
+    }
+    result = import_cadets_from_roster(
+        [
+            {
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "jdoe@kent.edu",
+                "rank": "100/150 (freshman)",
+            }
+        ],
+        email_temp_passwords=False,
+    )
+    assert len(result["created"]) == 1
+    mock_send_email.assert_not_called()
+    assert result["email_failures"] == []
+
+
+@patch("services.cadets.get_user_by_email")
+@patch("services.cadets.create_cadet")
+@patch("services.cadets.get_cadet_by_id")
+@patch("services.cadets.get_user_by_id")
+@patch("services.cadets.log_data_change")
+@patch("services.cadets.update_user")
+@patch("services.cadets.send_temporary_password_email")
+@patch("utils.db_schema_crud.create_user")
+def test_import_emails_temp_password_when_flag_true(
+    mock_create_user,
+    mock_send_email,
+    mock_update_user,
+    mock_log_data_change,
+    mock_get_user_by_id,
+    mock_get_cadet_by_id,
+    mock_create_cadet,
+    mock_get_user,
+):
+    mock_get_user.return_value = None
+    inserted = MagicMock()
+    inserted.inserted_id = MagicMock()
+    created_cadet_result = MagicMock()
+    created_cadet_result.inserted_id = MagicMock()
+    mock_create_cadet.return_value = created_cadet_result
+    mock_create_user.return_value = inserted
+    mock_get_user_by_id.return_value = {"_id": inserted.inserted_id, "email": "jdoe@kent.edu"}
+    mock_get_cadet_by_id.return_value = {
+        "_id": created_cadet_result.inserted_id,
+        "email": "jdoe@kent.edu",
+    }
+    mock_send_email.return_value = True
+    result = import_cadets_from_roster(
+        [
+            {
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "jdoe@kent.edu",
+                "rank": "100/150 (freshman)",
+            }
+        ],
+        email_temp_passwords=True,
+    )
+    assert len(result["created"]) == 1
+    mock_send_email.assert_called_once()
+    call_kwargs = mock_send_email.call_args.kwargs
+    assert call_kwargs["to_email"] == "jdoe@kent.edu"
+    assert "temporary_password" in call_kwargs
+    assert call_kwargs["subject"] is not None
+    assert call_kwargs["body"] is not None
+    assert result["email_failures"] == []
+
+
+@patch("services.cadets.get_user_by_email")
+@patch("services.cadets.create_cadet")
+@patch("services.cadets.get_cadet_by_id")
+@patch("services.cadets.get_user_by_id")
+@patch("services.cadets.log_data_change")
+@patch("services.cadets.update_user")
+@patch("services.cadets.send_temporary_password_email")
+@patch("utils.db_schema_crud.create_user")
+def test_import_collects_email_failures(
+    mock_create_user,
+    mock_send_email,
+    mock_update_user,
+    mock_log_data_change,
+    mock_get_user_by_id,
+    mock_get_cadet_by_id,
+    mock_create_cadet,
+    mock_get_user,
+):
+    mock_get_user.return_value = None
+    inserted = MagicMock()
+    inserted.inserted_id = MagicMock()
+    created_cadet_result = MagicMock()
+    created_cadet_result.inserted_id = MagicMock()
+    mock_create_cadet.return_value = created_cadet_result
+    mock_create_user.return_value = inserted
+    mock_get_user_by_id.return_value = {"_id": inserted.inserted_id, "email": "jdoe@kent.edu"}
+    mock_get_cadet_by_id.return_value = {
+        "_id": created_cadet_result.inserted_id,
+        "email": "jdoe@kent.edu",
+    }
+    mock_send_email.return_value = False
+    result = import_cadets_from_roster(
+        [
+            {
+                "first_name": "John",
+                "last_name": "Doe",
+                "email": "jdoe@kent.edu",
+                "rank": "100/150 (freshman)",
+            }
+        ],
+        email_temp_passwords=True,
+    )
+    assert len(result["created"]) == 1
+    assert len(result["email_failures"]) == 1
+    assert result["email_failures"][0]["email"] == "jdoe@kent.edu"

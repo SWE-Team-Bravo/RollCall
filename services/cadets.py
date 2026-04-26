@@ -21,6 +21,8 @@ from utils.db_schema_crud import (
 )
 from utils.names import format_full_name
 from utils.validators import is_valid_email, is_valid_name
+from utils.password_reset_email import send_temporary_password_email
+from services.email_templates import get_email_template, get_content
 
 RANK_OPTIONS = ("100", "150", "200", "250", "300", "400", "500", "700", "800", "900")
 
@@ -324,6 +326,7 @@ def import_cadets_from_roster(
     actions: list[str] | None = None,
     *,
     actor_user: dict[str, Any] | None = None,
+    email_temp_passwords: bool = False,
 ) -> dict:
     from utils.db_schema_crud import create_user
 
@@ -331,6 +334,7 @@ def import_cadets_from_roster(
     updated: list[dict] = []
     skipped: list[dict] = []
     errors: list[dict] = []
+    email_failures: list[dict] = []
 
     for i, cadet in enumerate(cadets_data):
         # Backward-compatible: raw dicts without analysis get the old behavior
@@ -512,6 +516,7 @@ def import_cadets_from_roster(
                     }
                 )
                 continue
+            update_user(user_result.inserted_id, {"force_password_change": True})
             created_user = get_user_by_id(user_result.inserted_id)
             target_label = format_full_name(cadet, default=email)
             _log_roster_import_change(
@@ -546,8 +551,30 @@ def import_cadets_from_roster(
                     "email": email,
                     "rank": rank,
                     "temp_password": temp_password,
+                    "emailed": False,
                 }
             )
+            if email_temp_passwords:
+                template = get_email_template("roster_temp_password")
+                subject, body = get_content(
+                    template, temporary_password=temp_password
+                )
+                sent = send_temporary_password_email(
+                    to_email=email,
+                    temporary_password=temp_password,
+                    subject=subject,
+                    body=body,
+                )
+                if sent:
+                    created[-1]["emailed"] = True
+                else:
+                    email_failures.append(
+                        {
+                            "name": full_name,
+                            "email": email,
+                            "reason": "Failed to send temporary password email",
+                        }
+                    )
         except Exception as e:
             errors.append(
                 {
@@ -557,4 +584,46 @@ def import_cadets_from_roster(
                 }
             )
 
-    return {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors,
+        "email_failures": email_failures,
+    }
+
+
+def send_temp_passwords_to_created_cadets(
+    created: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Email temporary passwords to created cadets that haven't been emailed yet.
+
+    Mutates each dict in *created* to set ``emailed`` to ``True`` on success.
+
+    Returns ``(pending, failures)`` where *pending* is the subset of *created*
+    still not emailed and *failures* describes the send attempts that failed.
+    """
+    failures: list[dict] = []
+    template = get_email_template("roster_temp_password")
+    for c in created:
+        if c.get("emailed"):
+            continue
+        subject, body = get_content(template, temporary_password=c["temp_password"])
+        sent = send_temporary_password_email(
+            to_email=c["email"],
+            temporary_password=c["temp_password"],
+            subject=subject,
+            body=body,
+        )
+        if sent:
+            c["emailed"] = True
+        else:
+            failures.append(
+                {
+                    "name": c["name"],
+                    "email": c["email"],
+                    "reason": "Failed to send temporary password email",
+                }
+            )
+    pending = [c for c in created if not c.get("emailed")]
+    return pending, failures
