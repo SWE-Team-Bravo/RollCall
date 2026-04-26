@@ -37,7 +37,8 @@ def get_flight_options() -> list[str]:
 
 
 def get_waivers(
-    status_filter: str, viewer_roles: list[str] | None = None
+    status_filter: str,
+    viewer_roles: list[str] | None = None,
 ) -> list[dict]:
     waivers = get_all_waivers()
     if status_filter != "all":

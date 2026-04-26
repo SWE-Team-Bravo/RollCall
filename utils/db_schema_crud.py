@@ -505,6 +505,14 @@ def create_waiver(
     col = get_collection("waivers")
     if col is None:
         return None
+
+    existing_withdrawn = col.find_one(
+        {
+            "attendance_record_id": ObjectId(attendance_record_id),
+            "status": "withdrawn",
+        }
+    )
+
     doc: dict = {
         "attendance_record_id": ObjectId(attendance_record_id),
         "reason": reason,
@@ -515,7 +523,12 @@ def create_waiver(
         "attachments": attachments or [],
         "created_at": datetime.now(timezone.utc),
     }
+
+    if existing_withdrawn:
+        doc["previous_waiver_id"] = existing_withdrawn["_id"]
+
     result = col.insert_one(doc)
+
     is_valid, why = validate_waiver(ObjectId(attendance_record_id))
     if not is_valid:
         col.update_one(
@@ -609,7 +622,12 @@ def get_waiver_by_attendance_record(
     col = get_collection("waivers")
     if col is None:
         return None
-    return col.find_one({"attendance_record_id": ObjectId(attendance_record_id)})
+    return col.find_one(
+        {
+            "attendance_record_id": ObjectId(attendance_record_id),
+            "status": {"$nin": ["withdrawn"]},
+        }
+    )
 
 
 def get_waivers_by_status(status: str) -> list[dict]:

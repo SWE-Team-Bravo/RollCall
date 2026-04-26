@@ -10,7 +10,6 @@ from services.waivers import (
     WAIVER_STATUS_BADGE,
     apply_sickness_auto_approval,
     get_absent_records_without_waiver,
-    get_all_waivers_for_cadet,
     get_common_reasons,
     resolve_cadre_only,
     resubmit_auto_denied_waiver,
@@ -36,31 +35,57 @@ STATUS_BADGE = WAIVER_STATUS_BADGE
 require_role("cadet")
 
 
-def load_waiver_data(cadet_id) -> tuple[list[dict], dict, dict]:
+def load_waiver_data(cadet_id) -> tuple[list[dict], dict, list[dict], dict]:
     records = get_attendance_by_cadet(cadet_id)
     waivers_by_record_id = {}
+    all_waivers: list[dict] = []
     events_by_id = {}
+
     for record in records:
-        waiver = get_waiver_by_attendance_record(record["_id"])
-        if waiver:
-            waivers_by_record_id[record["_id"]] = waiver
+        active_waiver = get_waiver_by_attendance_record(record["_id"])
+        if active_waiver:
+            waivers_by_record_id[record["_id"]] = active_waiver
+
+        from utils.db_schema_crud import get_waivers_by_attendance_records
+
+        record_waivers = get_waivers_by_attendance_records([record["_id"]])
+        all_waivers.extend(record_waivers)
+
         event_id = record.get("event_id")
         if event_id and event_id not in events_by_id:
             event = get_event_by_id(event_id)
             if event:
                 events_by_id[event_id] = event
-    return records, waivers_by_record_id, events_by_id
+
+    return records, waivers_by_record_id, all_waivers, events_by_id
 
 
 def show_waivers(
     records: list[dict],
-    waivers_by_record_id: dict,
+    all_waivers: list[dict],
     events_by_id: dict,
 ):
     st.divider()
     st.subheader("My Waiver Requests")
 
-    waivers = get_all_waivers_for_cadet(records, waivers_by_record_id, events_by_id)
+    waivers = []
+    for w in all_waivers:
+        record = next(
+            (r for r in records if r["_id"] == w.get("attendance_record_id")), None
+        )
+        if record is None:
+            continue
+        event = events_by_id.get(record.get("event_id"))
+        entry = dict(w)
+        entry["_event_name"] = event.get("event_name") if event else "Unknown event"
+        entry["_event_date"] = (
+            event.get("start_date").strftime("%Y-%m-%d")
+            if event and isinstance(event.get("start_date"), datetime)
+            else "Unknown date"
+        )
+        waivers.append(entry)
+
+    waivers.sort(key=lambda w: w.get("created_at") or datetime.min, reverse=True)
     if not waivers:
         st.info("You don't have any waivers.")
         return
@@ -211,12 +236,26 @@ def show_waivers(
         left = f"{dt} — {ev}".strip(" —")
         return f"{left} ({badge})".strip()
 
+    if "selected_waiver_id_value" not in st.session_state:
+        st.session_state["selected_waiver_id_value"] = next(
+            iter(waiver_by_id.keys()), None
+        )
+    elif st.session_state["selected_waiver_id_value"] not in waiver_by_id:
+        st.session_state["selected_waiver_id_value"] = next(
+            iter(waiver_by_id.keys()), None
+        )
+
     selected_id = st.selectbox(
         "Select waiver",
         options=list(waiver_by_id.keys()),
         format_func=_waiver_label,
-        key="selected_waiver_id",
+        index=list(waiver_by_id.keys()).index(
+            st.session_state["selected_waiver_id_value"]
+        )
+        if st.session_state["selected_waiver_id_value"] in waiver_by_id
+        else 0,
     )
+    st.session_state["selected_waiver_id_value"] = selected_id
 
     selected = waiver_by_id.get(str(selected_id)) if selected_id else None
     if not selected:
@@ -249,6 +288,8 @@ def show_waivers(
                 else:
                     success = withdraw_waiver(selected["_id"])
                     st.session_state.confirm_withdraw_id = None
+                    st.session_state["selected_waiver_id_value"] = waiver_id
+                    st.session_state.pop("selected_waiver_id", None)
                     if success:
                         st.session_state.show_success = "Waiver withdrawn successfully."
                     else:
@@ -464,9 +505,10 @@ if not cadet:
         st.stop()
     cadet = get_temp_cadet()
 
-records, waivers_by_record_id, events_by_id = load_waiver_data(cadet["_id"])
-
-show_waivers(records, waivers_by_record_id, events_by_id)
+records, waivers_by_record_id, all_waivers, events_by_id = load_waiver_data(
+    cadet["_id"]
+)
+show_waivers(records, all_waivers, events_by_id)
 
 st.divider()
 with st.expander(

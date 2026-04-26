@@ -5,6 +5,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from services.email_templates import get_content, get_email_template
 from utils.db_schema_crud import (
     update_waiver,
     get_waiver_by_id,
@@ -29,22 +30,20 @@ def build_email(
     status: str,
     comments: str = "",
 ) -> MIMEMultipart:
+    template = get_email_template("waiver_decision")
+    comments_text = f"\n\nComments: {comments}" if comments else ""
+    subject, body = get_content(
+        template,
+        status=status.capitalize(),
+        event_name=event_name,
+        event_date=event_date,
+        comments=comments_text,
+    )
+
     msg = MIMEMultipart()
     msg["From"] = SENDER_EMAIL or ""
     msg["To"] = to_email
-    msg["Subject"] = f"Waiver Request {status.capitalize()} — {event_name}"
-
-    if status == "approved":
-        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been approved."
-    elif status == "denied":
-        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been denied."
-    else:
-        body = f"Hi,\n\nYour waiver request for {event_name} on {event_date} has been updated."
-
-    if comments:
-        body += f"\n\nComments: {comments}"
-
-    body += "\n\nRollCall"
+    msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
     return msg
 
@@ -57,18 +56,20 @@ def build_reminder_email(
     event_date: str,
     days_pending: int,
 ) -> MIMEMultipart:
+    template = get_email_template("waiver_reminder")
+    subject, body = get_content(
+        template,
+        cadet_name=cadet_name,
+        event_name=event_name,
+        event_date=event_date,
+        days_pending=days_pending,
+        waiver_id=waiver_id,
+    )
+
     msg = MIMEMultipart()
     msg["From"] = SENDER_EMAIL or ""
     msg["To"] = to_email
-    msg["Subject"] = f"Pending Waiver Reminder — {cadet_name} — {event_name}"
-
-    body = (
-        f"Hi,\n\n"
-        f"A waiver request from {cadet_name} for {event_name} on {event_date} "
-        f"has been pending for {days_pending} day(s) and requires your review.\n\n"
-        f"Waiver ID: {waiver_id}\n\n"
-        f"RollCall"
-    )
+    msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
     return msg
 
@@ -142,16 +143,13 @@ def send_test_email(to_email: str) -> tuple[bool, str]:
         return False, "Email credentials not configured."
 
     try:
+        template = get_email_template("test_email")
+        subject, body = get_content(template)
         msg = MIMEMultipart()
         msg["From"] = SENDER_EMAIL
         msg["To"] = to_email
-        msg["Subject"] = "RollCall — Test Email"
-        msg.attach(
-            MIMEText(
-                "This is a test email from RollCall. SMTP is configured correctly.",
-                "plain",
-            )
-        )
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)

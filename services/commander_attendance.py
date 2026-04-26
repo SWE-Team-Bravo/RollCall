@@ -194,8 +194,8 @@ def get_paginated_commander_roster(
     if not cadets:
         return {**cadets_page, "items": []}
 
-    cadet_user_ids = [
-        cadet.get("user_id") for cadet in cadets if cadet.get("user_id") is not None
+    cadet_user_ids: list[Any] = [
+        cadet["user_id"] for cadet in cadets if cadet.get("user_id") is not None
     ]
     users_by_id = {user["_id"]: user for user in get_users_by_ids(cadet_user_ids)}
     hydrated_cadets = hydrate_cadet_names(cadets, users_by_id)
@@ -215,17 +215,17 @@ def get_roster_entries_for_cadet_ids(
     if not cadet_ids:
         return []
 
-    cadets = get_cadets_by_ids(cast(list[str | ObjectId], cadet_ids))
+    cadets = get_cadets_by_ids(list(cadet_ids))
     if not cadets:
         return []
 
-    cadet_user_ids: list[str | ObjectId] = [
+    cadet_user_ids: list[Any] = [
         cadet.get("user_id") for cadet in cadets if cadet.get("user_id") is not None
-    ]  # type: ignore[misc]
+    ]
     users_by_id = {user["_id"]: user for user in get_users_by_ids(cadet_user_ids)}
     hydrated_cadets = hydrate_cadet_names(cadets, users_by_id)
     records = get_attendance_by_event_for_cadets(
         event_id,
-        [cadet.get("_id") for cadet in hydrated_cadets if cadet.get("_id") is not None],
+        [cadet["_id"] for cadet in hydrated_cadets if cadet.get("_id") is not None],
     )
     return build_commander_roster(hydrated_cadets, records)

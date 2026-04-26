@@ -61,8 +61,11 @@ def create_indexes() -> None:
         [
             IndexModel(
                 [("attendance_record_id", ASCENDING)],
-                name="attendance_record_id_unique",
+                name="attendance_record_id_active_unique",
                 unique=True,
+                partialFilterExpression={
+                    "status": {"$in": ["pending", "approved", "denied", "auto_denied"]}
+                },
             ),
             IndexModel(
                 [("submitted_by_user_id", ASCENDING)], name="submitted_by_user_id"

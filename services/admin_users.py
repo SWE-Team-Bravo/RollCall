@@ -59,6 +59,7 @@ def summarize_user(user: Dict[str, Any]) -> Dict[str, Any]:
         "email": email,
         "name": f"{name} [Disabled]" if disabled else name,
         "role": primary_role,
+        "role_label": ROLE_LABELS.get(primary_role, primary_role),
         "waiver_reviewer": waiver_reviewer,
         "disabled": disabled,
         "status": "Disabled" if disabled else "Active",
@@ -76,6 +77,13 @@ def list_users_for_admin(users: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 ALLOWED_ROLES = {"admin", "cadre", "flight_commander", "cadet"}
+
+ROLE_LABELS = {
+    "admin": "Admin",
+    "cadre": "Cadre",
+    "flight_commander": "Flight Commander",
+    "cadet": "Cadet",
+}
 
 
 def validate_new_user_data(
