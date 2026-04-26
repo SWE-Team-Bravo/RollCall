@@ -1,6 +1,10 @@
 import pytest
 
-from utils.pagination import build_pagination_metadata, normalize_page_size, paginate_list
+from utils.pagination import (
+    build_pagination_metadata,
+    normalize_page_size,
+    paginate_list,
+)
 
 
 @pytest.mark.parametrize("page_size", [25, "50", 100])

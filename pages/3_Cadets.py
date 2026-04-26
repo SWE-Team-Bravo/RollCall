@@ -105,7 +105,11 @@ def edit_cadet(cadet):
         if check:
             before_cadet = dict(cadet)
             current_user = get_current_user()
-            actor_email = str(current_user.get("email", "") or "").strip() if current_user else None
+            actor_email = (
+                str(current_user.get("email", "") or "").strip()
+                if current_user
+                else None
+            )
 
             if user_doc is not None:
                 user_updates, errors = build_profile_updates(
@@ -148,7 +152,9 @@ def edit_cadet(cadet):
                 )
 
             after_cadet = get_cadet_by_id(cadet_id)
-            target_label = f"{new_first} {new_last}".strip() or (user_doc.get("email") if user_doc else "Cadet")
+            target_label = f"{new_first} {new_last}".strip() or (
+                user_doc.get("email") if user_doc else "Cadet"
+            )
             log_data_change(
                 source="cadet_management",
                 action="update",

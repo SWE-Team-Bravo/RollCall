@@ -12,7 +12,7 @@ DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0]
 def _coerce_page_size(value: Any, *, default: int = DEFAULT_PAGE_SIZE) -> int:
     try:
         page_size = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
     return page_size if page_size > 0 else default
 
@@ -20,7 +20,7 @@ def _coerce_page_size(value: Any, *, default: int = DEFAULT_PAGE_SIZE) -> int:
 def normalize_page(value: Any) -> int:
     try:
         page = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 1
     return max(page, 1)
 
@@ -33,7 +33,7 @@ def normalize_page_size(
 ) -> int:
     try:
         page_size = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
     return page_size if page_size in allowed else default
 

@@ -45,10 +45,12 @@ def build_event_bounds(
     start_date: date,
     end_date: date,
     tz_name: str = "UTC",
+    start_time: time = time.min,
+    end_time: time = time(23, 59, 59),
 ) -> tuple[datetime, datetime]:
     tz = ZoneInfo(tz_name)
-    local_start = datetime.combine(start_date, time.min, tzinfo=tz)
-    local_end = datetime.combine(end_date, time(23, 59, 59), tzinfo=tz)
+    local_start = datetime.combine(start_date, start_time, tzinfo=tz)
+    local_end = datetime.combine(end_date, end_time, tzinfo=tz)
     return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
 
 
@@ -126,14 +128,33 @@ def has_event_ended(
     return current_time > end_at
 
 
+def _format_event_dt(event: dict, field: str = "start_date") -> str:
+    """Return a human-readable datetime string in the event's local timezone."""
+    dt = event.get(field)
+    if not isinstance(dt, datetime):
+        return "—"
+    tz_name = event.get("timezone_name", "UTC")
+    try:
+        local = ensure_utc(dt).astimezone(ZoneInfo(tz_name))
+    except Exception:
+        local = ensure_utc(dt)
+    return local.strftime("%Y-%m-%d %H:%M %Z")
+
+
 def get_all_events(*, include_archived: bool = False) -> list[dict]:
     """Return all events sorted by start date descending."""
     db = get_db()
     if db is None:
         return []
-    events = list(db.events.find(_active_event_query(include_archived=include_archived)).sort("start_date", -1))
+    events = list(
+        db.events.find(_active_event_query(include_archived=include_archived)).sort(
+            "start_date", -1
+        )
+    )
     for e in events:
         e["_id"] = str(e["_id"])
+        e["_display_start"] = _format_event_dt(e, "start_date")
+        e["_display_end"] = _format_event_dt(e, "end_date")
     return events
 
 
@@ -144,6 +165,12 @@ def create_event(
     end_date: date,
     created_by_user_id: str,
     tz_name: str = "UTC",
+    geofence_enabled: bool = False,
+    geofence_lat: float | None = None,
+    geofence_lon: float | None = None,
+    geofence_radius_meters: int = 150,
+    start_time: time = time.min,
+    end_time: time = time(23, 59, 59),
     *,
     actor_user_id: str | ObjectId | None = None,
     actor_email: str | None = None,
@@ -154,7 +181,9 @@ def create_event(
     db = get_db()
     if db is None:
         return False
-    start_dt, end_dt = build_event_bounds(start_date, end_date, tz_name)
+    start_dt, end_dt = build_event_bounds(
+        start_date, end_date, tz_name, start_time, end_time
+    )
     event_doc = {
         "event_name": name,
         "event_type": event_type,
@@ -164,6 +193,10 @@ def create_event(
         "created_by_user_id": _coerce_object_id_or_raw(created_by_user_id),
         "archived": False,
         "created_at": datetime.now(timezone.utc),
+        "geofence_enabled": geofence_enabled,
+        "geofence_lat": geofence_lat if geofence_enabled else None,
+        "geofence_lon": geofence_lon if geofence_enabled else None,
+        "geofence_radius_meters": geofence_radius_meters if geofence_enabled else None,
     }
     result = db.events.insert_one(event_doc)
     inserted = db.events.find_one({"_id": result.inserted_id})
@@ -275,6 +308,12 @@ def update_event(
     start_date: date,
     end_date: date,
     tz_name: str = "UTC",
+    geofence_enabled: bool = False,
+    geofence_lat: float | None = None,
+    geofence_lon: float | None = None,
+    geofence_radius_meters: int = 150,
+    start_time: time = time.min,
+    end_time: time = time(23, 59, 59),
     *,
     actor_user_id: str | ObjectId | None = None,
     actor_email: str | None = None,
@@ -285,7 +324,9 @@ def update_event(
     db = get_db()
     if db is None:
         return False
-    start_dt, end_dt = build_event_bounds(start_date, end_date, tz_name)
+    start_dt, end_dt = build_event_bounds(
+        start_date, end_date, tz_name, start_time, end_time
+    )
     object_id = ObjectId(event_id)
     before = db.events.find_one({"_id": object_id})
     if before is None:
@@ -299,10 +340,16 @@ def update_event(
                 "start_date": start_dt,
                 "end_date": end_dt,
                 "timezone_name": tz_name,
+                "geofence_enabled": geofence_enabled,
+                "geofence_lat": geofence_lat if geofence_enabled else None,
+                "geofence_lon": geofence_lon if geofence_enabled else None,
+                "geofence_radius_meters": geofence_radius_meters
+                if geofence_enabled
+                else None,
             }
         },
     )
-    if result.modified_count == 1:
+    if result.matched_count == 1 and result.modified_count == 1:
         after = db.events.find_one({"_id": object_id})
         log_data_change(
             source="event_management",
@@ -315,4 +362,4 @@ def update_event(
             before=serialize_doc_for_audit(before),
             after=serialize_doc_for_audit(after),
         )
-    return result.modified_count == 1
+    return result.matched_count == 1

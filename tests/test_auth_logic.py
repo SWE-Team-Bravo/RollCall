@@ -56,7 +56,10 @@ def test_empty_docs_returns_empty_dicts():
 
 def test_disabled_users_are_excluded_from_credentials_but_in_raw():
     credentials, raw = build_credentials_from_docs(
-        [_doc(email="active@example.com"), _doc(email="disabled@example.com") | {"disabled": True}]
+        [
+            _doc(email="active@example.com"),
+            _doc(email="disabled@example.com") | {"disabled": True},
+        ]
     )
     assert "active@example.com" in credentials["usernames"]
     assert "disabled@example.com" not in credentials["usernames"]
