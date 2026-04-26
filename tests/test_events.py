@@ -139,7 +139,7 @@ class _FakeUpdateResult:
 
 
 class _FakeCursor(list):
-    def sort_records(self, field: str, direction: int):
+    def sort(self, field: str, direction: int, **kwargs):  # type: ignore[override]
         reverse = direction == -1
         return _FakeCursor(
             sorted(self, key=lambda doc: doc.get(field), reverse=reverse)
