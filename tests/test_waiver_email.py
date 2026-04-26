@@ -4,6 +4,9 @@ from email.message import Message
 import smtplib
 from unittest.mock import patch, MagicMock
 
+import pytest
+
+from services.email_templates import _DEFAULT_TEMPLATES
 from utils.waiver_email import (
     build_email,
     build_reminder_email,
@@ -12,6 +15,15 @@ from utils.waiver_email import (
     send_waiver_decision_email,
     send_waiver_reminder_email,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_templates():
+    with patch(
+        "utils.at_risk_email.get_email_template",
+        side_effect=lambda k: _DEFAULT_TEMPLATES[k],
+    ):
+        yield
 
 
 # ------------------ test build_email ---------------------

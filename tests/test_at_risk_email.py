@@ -1,6 +1,9 @@
 from unittest.mock import MagicMock, patch
 from email.mime.text import MIMEText
 
+import pytest
+
+from services.email_templates import _DEFAULT_TEMPLATES
 import utils.at_risk_email as m
 from utils.at_risk_email import (
     PT_ABSENCE_THRESHOLD,
@@ -17,6 +20,15 @@ from utils.at_risk_email import (
     build_email_for_student,
     send_to_student,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_templates():
+    with patch(
+        "utils.waiver_email.get_email_template",
+        side_effect=lambda k: _DEFAULT_TEMPLATES[k],
+    ):
+        yield
 
 
 def create_cadet(

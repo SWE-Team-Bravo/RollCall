@@ -59,6 +59,10 @@ else:
         "pages/12_Audit_Log.py",
         title="Audit Log",
     )
+    email_templates = st.Page(
+        "pages/13_Email_Templates.py",
+        title="Email Templates",
+    )
 
     if "view_role" not in st.session_state:
         st.session_state.view_role = roles
@@ -91,6 +95,7 @@ else:
         if "admin" in st.session_state.view_role:
             pages.append(user_management)
             pages.append(audit_log)
+            pages.append(email_templates)
     elif "flight_commander" in st.session_state.view_role:
         pages = [
             dashboard,

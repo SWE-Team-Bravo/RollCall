@@ -66,7 +66,9 @@ def _audit_user_change(
         target_collection="users",
         target_id=target_id,
         actor_user_id=actor_user.get("_id") if actor_user else None,
-        actor_email=str(actor_user.get("email", "") or "").strip() or None if actor_user else None,
+        actor_email=str(actor_user.get("email", "") or "").strip() or None
+        if actor_user
+        else None,
         actor_roles=list(actor_user.get("roles", [])) if actor_user else [],
         target_label=target_label,
         before=serialize_doc_for_audit(before),
@@ -101,6 +103,7 @@ def _render_edit_row(
         st.error("User no longer exists.")
         st.session_state["admin_users_editing"] = None
         st.rerun()
+    assert existing_user is not None
 
     new_first = cols[0].text_input(
         "First Name",

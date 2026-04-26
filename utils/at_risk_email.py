@@ -4,6 +4,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from services.email_templates import get_content, get_email_template
 from utils.db_schema_crud import (
     get_cadet_by_id,
     get_events_by_type,
@@ -154,23 +155,19 @@ def build_email(
     recipient_name: str = "",
 ) -> MIMEMultipart:
     pt_threshold, llab_threshold = get_absence_thresholds()
+    template = get_email_template("at_risk_cadre")
+    subject, body = get_content(
+        template,
+        recipient_name=f" {recipient_name}" if recipient_name else "",
+        pt_threshold=pt_threshold,
+        llab_threshold=llab_threshold,
+        table=build_table(cadets),
+    )
+
     msg = MIMEMultipart("alternative")
     msg["From"] = SENDER_EMAIL or ""
     msg["To"] = to_email
-    msg["Subject"] = "At-Risk Cadet Absence Report"
-
-    greeting = f"Hi {recipient_name}," if recipient_name else "Hi,"
-    table = build_table(cadets)
-
-    body = f"""
-    <html><body>
-        <p>{greeting}</p>
-        <p>The following cadets are one absence away from or have reached the absence thresholds
-        (PT: {pt_threshold}, LLAB: {llab_threshold}):</p>
-        {table}
-        <br>
-        <p>RollCall</p>
-    </body></html>"""
+    msg["Subject"] = subject
     msg.attach(MIMEText(body, "html"))
     return msg
 
@@ -181,35 +178,32 @@ def build_email_for_student(
     llab_absences: int,
 ) -> MIMEMultipart:
     pt_threshold, llab_threshold = get_absence_thresholds()
+    template = get_email_template("at_risk_student")
+
+    lines = []
+    if pt_absences == pt_threshold - 1:
+        lines.append(
+            f"You're one absence away from reaching the PT threshold. Absences: {pt_absences}/{pt_threshold}. Contact your cadre immediately."
+        )
+    elif pt_absences > pt_threshold - 1:
+        lines.append(
+            f"You have reached the PT threshold. Absences: {pt_absences}/{pt_threshold}. Contact your cadre immediately."
+        )
+    if llab_absences == llab_threshold - 1:
+        lines.append(
+            f"You're one absence away from reaching the LLAB threshold. Absences: {llab_absences}/{llab_threshold}. Contact your cadre immediately."
+        )
+    elif llab_absences > llab_threshold - 1:
+        lines.append(
+            f"You have reached the LLAB threshold. Absences: {llab_absences}/{llab_threshold}. Contact your cadre immediately."
+        )
+
+    subject, body = get_content(template, message="\n".join(lines))
+
     msg = MIMEMultipart("alternative")
     msg["From"] = SENDER_EMAIL or ""
     msg["To"] = to_email
-    msg["Subject"] = "At-Risk Alert"
-
-    body = "Hi,\n\n"
-
-    if pt_absences == pt_threshold - 1:
-        body += (
-            f"You're one absence away from reaching the absence threshold for "
-            f"PT. Absences: {pt_absences}/{pt_threshold}. Contact your cadre immediately."
-        )
-    elif pt_absences > pt_threshold - 1:
-        body += (
-            f"You have reached the absence threshold for "
-            f"PT. Absences: {pt_absences}/{pt_threshold}. Contact your cadre immediately."
-        )
-    if llab_absences == llab_threshold - 1:
-        body += (
-            f"You're one absence away from reaching the absence threshold for "
-            f"LLAB. Absences: {llab_absences}/{llab_threshold}. Contact your cadre immediately."
-        )
-    elif llab_absences > llab_threshold - 1:
-        body += (
-            f"You have reached the absence threshold for "
-            f"LLAB. Absences: {llab_absences}/{llab_threshold}. Contact your cadre immediately."
-        )
-
-    body += "\n\nRollCall"
+    msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
     return msg
 

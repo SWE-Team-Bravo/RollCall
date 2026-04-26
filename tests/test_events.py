@@ -139,9 +139,11 @@ class _FakeUpdateResult:
 
 
 class _FakeCursor(list):
-    def sort(self, field: str, direction: int):
+    def sort_records(self, field: str, direction: int):
         reverse = direction == -1
-        return _FakeCursor(sorted(self, key=lambda doc: doc.get(field), reverse=reverse))
+        return _FakeCursor(
+            sorted(self, key=lambda doc: doc.get(field), reverse=reverse)
+        )
 
 
 def _matches(doc: dict, query: dict) -> bool:
@@ -238,7 +240,9 @@ def test_archive_event_sets_archive_fields_and_logs_audit(monkeypatch):
     )
     logged: list[dict] = []
     monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
-    monkeypatch.setattr(events_service, "log_data_change", lambda **kwargs: logged.append(kwargs))
+    monkeypatch.setattr(
+        events_service, "log_data_change", lambda **kwargs: logged.append(kwargs)
+    )
 
     assert archive_event(
         str(event_id), actor_user_id=str(actor_id), actor_email="admin@example.com"
@@ -269,7 +273,9 @@ def test_restore_event_clears_archive_fields_and_logs_audit(monkeypatch):
     )
     logged: list[dict] = []
     monkeypatch.setattr(events_service, "get_db", lambda: fake_db)
-    monkeypatch.setattr(events_service, "log_data_change", lambda **kwargs: logged.append(kwargs))
+    monkeypatch.setattr(
+        events_service, "log_data_change", lambda **kwargs: logged.append(kwargs)
+    )
 
     assert restore_event(
         str(event_id), actor_user_id=str(actor_id), actor_email="admin@example.com"

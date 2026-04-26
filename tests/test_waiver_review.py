@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import cast
 from unittest.mock import patch
 
 import pandas as pd
@@ -181,7 +182,7 @@ def test_get_paginated_waiver_review_rows_paginates_fallback_rows():
     assert result["page"] == 2
     assert result["total_count"] == 30
     assert result["total_pages"] == 2
-    assert len(result["items"]) == 5
+    assert len(cast(list, result["items"])) == 5
 
 
 # ------------------------- test get_waiver_context -----------------------------------------
