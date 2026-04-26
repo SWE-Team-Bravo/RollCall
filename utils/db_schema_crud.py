@@ -46,6 +46,24 @@ def get_user_by_email(email: str) -> dict | None:
     return col.find_one({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
 
 
+def get_user_by_name(first_name: str, last_name: str) -> dict | None:
+    col = get_collection("users")
+    if col is None:
+        return None
+    return col.find_one(
+        {
+            "first_name": {
+                "$regex": f"^{re.escape(first_name)}$",
+                "$options": "i",
+            },
+            "last_name": {
+                "$regex": f"^{re.escape(last_name)}$",
+                "$options": "i",
+            },
+        }
+    )
+
+
 def get_users_by_role(role: str, *, include_disabled: bool = False) -> list[dict]:
     col = get_collection("users")
     if col is None:

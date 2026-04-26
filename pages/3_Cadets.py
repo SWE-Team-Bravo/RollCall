@@ -21,6 +21,7 @@ from services.cadets import (
     get_cadet_export_df,
     import_cadets_from_roster,
     parse_roster_xlsx,
+    analyze_roster_for_import,
     RANK_OPTIONS,
     RANK_TO_LEVEL,
 )
@@ -367,7 +368,7 @@ with tab_import:
 
     if "import_result" in st.session_state:
         result = st.session_state.pop("import_result")
-        if result["created"]:
+        if result.get("created"):
             st.success(f"Created {len(result['created'])} account(s).")
             rows = [
                 {
@@ -379,14 +380,22 @@ with tab_import:
                 for c in result["created"]
             ]
             st.dataframe(rows, hide_index=True, width="stretch")
-        if result["skipped"]:
-            st.info(f"Skipped {len(result['skipped'])} already-existing account(s).")
-        if result["errors"]:
+        if result.get("updated"):
+            st.success(f"Updated {len(result['updated'])} account(s).")
+            rows = [
+                {"Name": c["name"], "Email": c["email"], "Rank": c["rank"]}
+                for c in result["updated"]
+            ]
+            st.dataframe(rows, hide_index=True, width="stretch")
+        if result.get("skipped"):
+            st.info(f"Skipped {len(result['skipped'])} account(s).")
+        if result.get("errors"):
             st.error(f"{len(result['errors'])} error(s):")
             for err in result["errors"]:
                 st.write(f"- {err['name']} ({err['email']}): {err['reason']}")
 
-    uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"])
+    # ---- Step 1: Upload & preview ----
+    uploaded = st.file_uploader("Upload roster (.xlsx)", type=["xlsx"], key="roster_uploader")
     if uploaded:
         cadets, parse_errors = parse_roster_xlsx(uploaded)
         if parse_errors:
@@ -395,9 +404,140 @@ with tab_import:
         if not cadets:
             st.error("No valid cadets found in the roster file.")
         else:
-            st.info(f"Found {len(cadets)} cadet(s). Click Import to create accounts.")
-            if st.button("Import"):
+            # Analyze only once per upload and cache in session_state
+            if (
+                st.session_state.get("roster_upload_key") != uploaded.name
+                or "roster_preview" not in st.session_state
+            ):
+                st.session_state.roster_upload_key = uploaded.name
+                st.session_state.roster_preview = analyze_roster_for_import(cadets)
+                # Initialize per-row action keys to defaults
+                for i, r in enumerate(st.session_state.roster_preview):
+                    action_key = f"roster_action_{i}"
+                    if action_key not in st.session_state:
+                        ctype = r["conflict_type"]
+                        default = {
+                            "none": "Create",
+                            "email_exists": "Update",
+                            "name_exists": "Skip",
+                            "intra_file_duplicate": "Skip",
+                        }.get(ctype, "Skip")
+                        st.session_state[action_key] = default
+
+            preview = st.session_state.roster_preview
+
+            # Build display dataframe
+            conflict_labels = {
+                "none": "—",
+                "email_exists": "Email exists",
+                "name_exists": "Name exists",
+                "intra_file_duplicate": "Duplicate in file",
+            }
+            default_actions = {
+                "none": "Create",
+                "email_exists": "Update",
+                "name_exists": "Skip",
+                "intra_file_duplicate": "Skip",
+            }
+            valid_actions = {
+                "none": ["Create"],
+                "email_exists": ["Skip", "Update"],
+                "name_exists": ["Skip", "Update", "Create as New"],
+                "intra_file_duplicate": ["Skip"],
+            }
+
+            st.write(f"Found **{len(preview)}** cadet(s). Review the preview below before importing.")
+
+            # Conflict resolution: global defaults for each conflict type present
+            present_conflicts = {r["conflict_type"] for r in preview if r["conflict_type"] != "none"}
+            if present_conflicts:
+                st.divider()
+                st.write("**Conflict Resolution**")
+                st.caption(
+                    "- **Skip**: leave the existing record untouched.\n"
+                    "- **Update**: overwrite the existing user's name, email, and rank with the spreadsheet values.\n"
+                    "- **Create as New**: only available for name matches (different email). Creates a separate account."
+                )
+                cols = st.columns(len(present_conflicts))
+                for col, ctype in zip(cols, sorted(present_conflicts)):
+                    with col:
+                        label = f"For all {conflict_labels[ctype]}:"
+                        options = valid_actions[ctype]
+                        global_key = f"roster_global_{ctype}"
+                        # Derive global default from the first row of this type
+                        first_idx = next(
+                            i for i, r in enumerate(preview) if r["conflict_type"] == ctype
+                        )
+                        current_global = st.session_state.get(
+                            global_key, st.session_state.get(f"roster_action_{first_idx}", default_actions[ctype])
+                        )
+                        if current_global not in options:
+                            current_global = options[0]
+                        chosen = st.selectbox(
+                            label,
+                            options=options,
+                            index=options.index(current_global),
+                            key=global_key,
+                        )
+                        # Apply this global choice to every row of this type
+                        for i, r in enumerate(preview):
+                            if r["conflict_type"] == ctype:
+                                st.session_state[f"roster_action_{i}"] = chosen
+
+                # Optional per-row overrides, collapsed by default
+                with st.expander("Override individual rows"):
+                    for i, row in enumerate(preview):
+                        ctype = row["conflict_type"]
+                        if ctype == "none":
+                            continue
+                        label = f"{row['first_name']} {row['last_name']} ({row['email']})"
+                        options = valid_actions[ctype]
+                        default = st.session_state.get(
+                            f"roster_action_{i}", default_actions[ctype]
+                        )
+                        if default not in options:
+                            default = options[0]
+                        st.selectbox(
+                            label,
+                            options=options,
+                            index=options.index(default),
+                            key=f"roster_action_{i}",
+                        )
+
+            # Build preview table including resolved actions
+            preview_rows = []
+            for i, r in enumerate(preview):
+                ctype = r["conflict_type"]
+                action = st.session_state.get(
+                    f"roster_action_{i}", default_actions[ctype]
+                )
+                preview_rows.append(
+                    {
+                        "First Name": r["first_name"],
+                        "Last Name": r["last_name"],
+                        "Email": r["email"],
+                        "Rank": r["rank"],
+                        "Conflict": conflict_labels.get(ctype, "—"),
+                        "Action": action,
+                    }
+                )
+            preview_df = pd.DataFrame(preview_rows)
+            st.dataframe(preview_df, hide_index=True, width="stretch")
+
+            # ---- Step 2: Confirm import ----
+            st.divider()
+            if st.button("Confirm Import", type="primary"):
+                actions = [
+                    st.session_state.get(
+                        f"roster_action_{i}", default_actions[r["conflict_type"]]
+                    )
+                    for i, r in enumerate(preview)
+                ]
                 with st.spinner("Importing cadets..."):
-                    result = import_cadets_from_roster(cadets)
+                    result = import_cadets_from_roster(preview, actions)
                 st.session_state.import_result = result
+                # Clean up preview state so a fresh upload starts clean
+                for key in list(st.session_state.keys()):
+                    if key.startswith("roster_"):
+                        del st.session_state[key]
                 st.rerun()

@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 
 import openpyxl
 
-from services.cadets import CLASS_TO_RANK, import_cadets_from_roster, parse_roster_xlsx
+from services.cadets import (
+    CLASS_TO_RANK,
+    import_cadets_from_roster,
+    parse_roster_xlsx,
+    analyze_roster_for_import,
+)
 
 
 def _make_roster_xlsx(rows: list[dict]) -> io.BytesIO:
@@ -252,3 +257,129 @@ def test_import_returns_none_user_goes_to_errors(mock_create_user, mock_get_user
         ]
     )
     assert len(result["errors"]) == 1
+
+
+# -- analyze_roster_for_import tests
+
+
+@patch("services.cadets.get_user_by_email")
+@patch("services.cadets.get_user_by_name")
+@patch("utils.db_schema_crud.get_cadet_by_user_id")
+def test_analyze_flags_email_conflict(mock_get_cadet, mock_get_name, mock_get_email):
+    from bson import ObjectId
+
+    existing_id = ObjectId()
+    mock_get_email.return_value = {"_id": existing_id}
+    mock_get_cadet.return_value = {"_id": ObjectId(), "user_id": existing_id}
+    result = analyze_roster_for_import(
+        [{"first_name": "John", "last_name": "Doe", "email": "jdoe@kent.edu", "rank": "100"}]
+    )
+    assert len(result) == 1
+    assert result[0]["conflict_type"] == "email_exists"
+    assert result[0]["existing_user"]["_id"] == existing_id
+
+
+@patch("services.cadets.get_user_by_email")
+@patch("services.cadets.get_user_by_name")
+@patch("utils.db_schema_crud.get_cadet_by_user_id")
+def test_analyze_flags_name_conflict(mock_get_cadet, mock_get_name, mock_get_email):
+    from bson import ObjectId
+
+    mock_get_email.return_value = None
+    existing_id = ObjectId()
+    mock_get_name.return_value = {"_id": existing_id}
+    mock_get_cadet.return_value = None
+    result = analyze_roster_for_import(
+        [{"first_name": "Jane", "last_name": "Smith", "email": "jane@kent.edu", "rank": "200"}]
+    )
+    assert len(result) == 1
+    assert result[0]["conflict_type"] == "name_exists"
+    assert result[0]["existing_user"]["_id"] == existing_id
+
+
+def test_analyze_flags_intra_file_duplicate():
+    result = analyze_roster_for_import(
+        [
+            {"first_name": "A", "last_name": "B", "email": "dup@kent.edu", "rank": "100"},
+            {"first_name": "C", "last_name": "D", "email": "dup@kent.edu", "rank": "200"},
+        ]
+    )
+    assert result[0]["conflict_type"] == "intra_file_duplicate"
+    assert result[1]["conflict_type"] == "intra_file_duplicate"
+
+
+@patch("services.cadets.get_user_by_email")
+@patch("services.cadets.get_user_by_name")
+def test_analyze_no_conflict(mock_get_name, mock_get_email):
+    mock_get_email.return_value = None
+    mock_get_name.return_value = None
+    result = analyze_roster_for_import(
+        [{"first_name": "New", "last_name": "User", "email": "new@kent.edu", "rank": "100"}]
+    )
+    assert result[0]["conflict_type"] == "none"
+    assert result[0]["existing_user"] is None
+
+
+# -- import with explicit actions
+
+
+@patch("services.cadets.update_user")
+@patch("services.cadets.update_cadet")
+def test_import_update_existing(mock_update_cadet, mock_update_user):
+    from bson import ObjectId
+
+    existing_id = ObjectId()
+    cadet_id = ObjectId()
+    row = {
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "jdoe@kent.edu",
+        "rank": "200/250/500 (sophomore)",
+        "conflict_type": "email_exists",
+        "existing_user": {"_id": existing_id},
+        "existing_cadet": {"_id": cadet_id, "user_id": existing_id},
+    }
+    result = import_cadets_from_roster([row], actions=["Update"])
+    assert len(result["updated"]) == 1
+    assert result["updated"][0]["email"] == "jdoe@kent.edu"
+    mock_update_user.assert_called_once()
+    mock_update_cadet.assert_called_once()
+
+
+@patch("services.cadets.update_user")
+@patch("services.cadets.create_cadet")
+def test_import_update_existing_user_no_cadet(mock_create_cadet, mock_update_user):
+    from bson import ObjectId
+
+    existing_id = ObjectId()
+    row = {
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "jdoe@kent.edu",
+        "rank": "100/150 (freshman)",
+        "conflict_type": "email_exists",
+        "existing_user": {"_id": existing_id},
+        "existing_cadet": None,
+    }
+    result = import_cadets_from_roster([row], actions=["Update"])
+    assert len(result["updated"]) == 1
+    mock_create_cadet.assert_called_once()
+
+
+def test_import_skip_via_action():
+    from bson import ObjectId
+
+    existing_id = ObjectId()
+    row = {
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "jdoe@kent.edu",
+        "rank": "100/150 (freshman)",
+        "conflict_type": "email_exists",
+        "existing_user": {"_id": existing_id},
+        "existing_cadet": {"_id": ObjectId(), "user_id": existing_id},
+    }
+    result = import_cadets_from_roster([row], actions=["Skip"])
+    assert len(result["skipped"]) == 1
+    assert result["updated"] == []
+    assert result["created"] == []
