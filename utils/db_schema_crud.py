@@ -494,6 +494,79 @@ def delete_attendance_record(record_id: str | ObjectId) -> DeleteResult | None:
     return col.delete_one({"_id": ObjectId(record_id)})
 
 
+def get_cadet_absence_stats() -> list[dict]:
+    col = get_collection("attendance_records")
+    if col is None:
+        return []
+
+    pipeline = [
+        {"$match": {"status": "absent"}},
+        {
+            "$lookup": {
+                "from": "events",
+                "localField": "event_id",
+                "foreignField": "_id",
+                "as": "event",
+            }
+        },
+        {"$unwind": "$event"},
+        {"$match": {"event.event_type": {"$in": ["pt", "lab"]}}},
+        {
+            "$lookup": {
+                "from": "waivers",
+                "localField": "_id",
+                "foreignField": "attendance_record_id",
+                "as": "waiver",
+            }
+        },
+        {
+            "$unwind": {
+                "path": "$waiver",
+                "preserveNullAndEmptyArrays": True,
+            }
+        },
+        {
+            "$match": {
+                "$or": [
+                    {"waiver": None},
+                    {"waiver.status": {"$ne": "approved"}},
+                ]
+            }
+        },
+        {
+            "$group": {
+                "_id": "$cadet_id",
+                "pt_absences": {
+                    "$sum": {"$cond": [{"$eq": ["$event.event_type", "pt"]}, 1, 0]}
+                },
+                "llab_absences": {
+                    "$sum": {"$cond": [{"$eq": ["$event.event_type", "lab"]}, 1, 0]}
+                },
+                "approved_waivers": {
+                    "$sum": {"$cond": [{"$eq": ["$waiver.status", "approved"]}, 1, 0]}
+                },
+                "pending_waivers": {
+                    "$sum": {"$cond": [{"$eq": ["$waiver.status", "pending"]}, 1, 0]}
+                },
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "cadet_id": "$_id",
+                "pt_absences": 1,
+                "llab_absences": 1,
+                "total_absences": {"$add": ["$pt_absences", "$llab_absences"]},
+                "approved_waivers": 1,
+                "pending_waivers": 1,
+            }
+        },
+        {"$sort": {"total_absences": -1}},
+    ]
+
+    return list(col.aggregate(pipeline))
+
+
 # -- Waivers
 
 

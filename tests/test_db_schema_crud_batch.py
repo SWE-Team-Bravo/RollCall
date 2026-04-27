@@ -2,6 +2,7 @@ from bson import ObjectId
 from unittest.mock import patch, MagicMock
 
 from utils.db_schema_crud import (
+    get_cadet_absence_stats,
     get_users_by_emails,
     get_users_by_names,
     get_cadets_by_user_ids_map,
@@ -186,3 +187,27 @@ class TestGetCadetsByUserIdsMap:
         assert "user_id" in query
         assert "$in" in query["user_id"]
         assert len(query["user_id"]["$in"]) == 2
+
+
+class TestGetCadetAbsenceStats:
+    @patch("utils.db_schema_crud.get_collection")
+    def test_pipeline_excludes_approved_waivers_from_absence_totals(
+        self, mock_get_col
+    ):
+        mock_col = MagicMock()
+        mock_get_col.return_value = mock_col
+        mock_col.aggregate.return_value = []
+
+        get_cadet_absence_stats()
+
+        pipeline = mock_col.aggregate.call_args[0][0]
+        group_index = next(
+            index for index, stage in enumerate(pipeline) if "$group" in stage
+        )
+        pre_group_stages = pipeline[:group_index]
+
+        assert any(
+            {"waiver.status": {"$ne": "approved"}}
+            in stage.get("$match", {}).get("$or", [])
+            for stage in pre_group_stages
+        )
