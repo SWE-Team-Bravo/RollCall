@@ -61,17 +61,18 @@ cadet = create_cadet()
 
 
 def test_returns_cadet_above_pt_threshold():
-    pt_id = "evt_pt"
-    records = [{"status": "absent", "event_id": pt_id}] * PT_ABSENCE_THRESHOLD
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {
+                    "cadet_id": cadet["_id"],
+                    "pt_absences": PT_ABSENCE_THRESHOLD,
+                    "llab_absences": 0,
+                }
+            ],
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
-        patch("utils.at_risk_email.get_waivers_by_attendance_records", return_value=[]),
     ):
         result = get_at_risk_cadets()
         assert len(result) == 1
@@ -79,16 +80,18 @@ def test_returns_cadet_above_pt_threshold():
 
 
 def test_returns_cadet_above_llab_threshold():
-    llab_id = "evt_llab"
-    records = [{"status": "absent", "event_id": llab_id}] * LLAB_ABSENCE_THRESHOLD
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effect=lambda t: [{"_id": llab_id}] if t == "lab" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {
+                    "cadet_id": cadet["_id"],
+                    "pt_absences": 0,
+                    "llab_absences": LLAB_ABSENCE_THRESHOLD,
+                },
+            ],
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
     ):
         result = get_at_risk_cadets()
         assert len(result) == 1
@@ -96,30 +99,26 @@ def test_returns_cadet_above_llab_threshold():
 
 
 def test_return_only_at_risk_cadets():
-    pt_id = "evt_pt"
     safe_cadet = create_cadet(first_name="Safe", last_name="Cadet")
     safe_cadet["_id"] = "safe_cadet"
     at_risk_cadet = create_cadet(first_name="At", last_name="Risk")
     at_risk_cadet["_id"] = "at_risk_cadet"
 
-    attendance = {
-        safe_cadet["_id"]: [],
-        at_risk_cadet["_id"]: [{"status": "absent", "event_id": pt_id}]
-        * PT_ABSENCE_THRESHOLD,
-    }
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {"cadet_id": safe_cadet["_id"], "pt_absences": 0, "llab_absences": 0},
+                {
+                    "cadet_id": at_risk_cadet["_id"],
+                    "pt_absences": PT_ABSENCE_THRESHOLD,
+                    "llab_absences": 0,
+                },
+            ],
         ),
         patch(
             "utils.at_risk_email.get_all_cadets",
             return_value=[safe_cadet, at_risk_cadet],
-        ),
-        patch(
-            "utils.at_risk_email.get_attendance_by_cadet",
-            side_effect=lambda c_id: attendance[c_id],
         ),
     ):
         result = get_at_risk_cadets()
@@ -128,74 +127,54 @@ def test_return_only_at_risk_cadets():
 
 
 def test_no_cadet_below_thresholds():
-    pt_id = "evt_pt"
-    records = [{"status": "absent", "event_id": pt_id}] * (PT_ABSENCE_THRESHOLD - 2)
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {
+                    "cadet_id": cadet["_id"],
+                    "pt_absences": PT_ABSENCE_THRESHOLD - 2,
+                    "llab_absences": 0,
+                },
+            ],
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
     ):
         result = get_at_risk_cadets()
         assert result == []
 
 
 def test_approved_waiver_absence_does_not_count_for_at_risk():
-    pt_id = "evt_pt"
-    records = [
-        {"_id": f"rec{i}", "status": "absent", "event_id": pt_id}
-        for i in range(PT_ABSENCE_THRESHOLD - 1)
-    ]
-    waivers = [
-        {
-            "attendance_record_id": records[0]["_id"],
-            "status": "approved",
-        }
-    ]
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {
+                    "cadet_id": cadet["_id"],
+                    "pt_absences": PT_ABSENCE_THRESHOLD - 2,
+                    "llab_absences": 0,
+                },
+            ],
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
-        patch(
-            "utils.at_risk_email.get_waivers_by_attendance_records",
-            return_value=waivers,
-        ),
     ):
         result = get_at_risk_cadets()
         assert result == []
 
 
 def test_pending_waiver_absence_still_counts_for_at_risk():
-    pt_id = "evt_pt"
-    records = [
-        {"_id": f"rec{i}", "status": "absent", "event_id": pt_id}
-        for i in range(PT_ABSENCE_THRESHOLD - 1)
-    ]
-    waivers = [
-        {
-            "attendance_record_id": records[0]["_id"],
-            "status": "pending",
-        }
-    ]
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effect=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {
+                    "cadet_id": cadet["_id"],
+                    "pt_absences": PT_ABSENCE_THRESHOLD - 1,
+                    "llab_absences": 0,
+                },
+            ],
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
-        patch(
-            "utils.at_risk_email.get_waivers_by_attendance_records",
-            return_value=waivers,
-        ),
     ):
         result = get_at_risk_cadets()
         assert len(result) == 1
@@ -203,16 +182,14 @@ def test_pending_waiver_absence_still_counts_for_at_risk():
 
 
 def test_no_present_records():
-    pt_id = "evt_pt"
-    records = [{"status": "present", "event_id": pt_id}] * PT_ABSENCE_THRESHOLD
-
     with (
         patch(
-            "utils.at_risk_email.get_events_by_type",
-            side_effects=lambda t: [{"_id": pt_id}] if t == "pt" else [],
+            "utils.at_risk_email.get_cadet_absence_stats",
+            return_value=[
+                {"cadet_id": cadet["_id"], "pt_absences": 0, "llab_absences": 0},
+            ],
         ),
         patch("utils.at_risk_email.get_all_cadets", return_value=[cadet]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=records),
     ):
         result = get_at_risk_cadets()
         assert result == []
@@ -220,9 +197,8 @@ def test_no_present_records():
 
 def test_empty_cadets():
     with (
-        patch("utils.at_risk_email.get_events_by_type", return_value=[]),
+        patch("utils.at_risk_email.get_cadet_absence_stats", return_value=[]),
         patch("utils.at_risk_email.get_all_cadets", return_value=[]),
-        patch("utils.at_risk_email.get_attendance_by_cadet", return_value=[]),
     ):
         result = get_at_risk_cadets()
         assert result == []
