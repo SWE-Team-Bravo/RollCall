@@ -14,6 +14,7 @@ import requests
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -23,7 +24,7 @@ _STREAMLIT = str(
 )
 
 URL = "http://localhost:15085"
-EVENT_MGMT_URL = f"{URL}/Event_Management_CRUD"
+EVENT_MGMT_URL = f"{URL}/Event_Management"
 
 pytestmark = pytest.mark.e2e
 
@@ -130,6 +131,13 @@ def _login_as_admin(browser):
 
 def _go_to_event_management(browser):
     _login_as_admin(browser)
+    _wait(
+        "login.complete",
+        browser,
+        15,
+        lambda d: d.find_element(By.XPATH, "//button[.//*[contains(text(), 'Logout')]]"),
+        "logout button not found after login",
+    )
     browser.get(EVENT_MGMT_URL)
     _wait(
         "nav.event_mgmt",
@@ -152,7 +160,15 @@ def _open_generate_expander(browser):
         "Generate Semester Schedule expander not found",
     )
     expander.click()
-    sleep(0.5)
+    _wait(
+        "expander.content_ready",
+        browser,
+        10,
+        EC.element_to_be_clickable(
+            (By.XPATH, "//button[.//*[contains(text(), 'Preview Schedule')]]")
+        ),
+        "Preview Schedule button not clickable after opening expander",
+    )
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
