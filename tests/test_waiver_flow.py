@@ -154,6 +154,7 @@ def test_sickness_first_waiver_auto_approved():
         ),
         patch("services.waivers.update_waiver") as mock_update,
         patch("services.waivers.create_waiver_approval") as mock_approval,
+        patch("services.waivers.distribute_excused_status"),
     ):
         auto_approved = apply_sickness_auto_approval("w1", "user1")
 

@@ -27,7 +27,14 @@ def create_indexes() -> None:
             IndexModel([("event_type", ASCENDING)], name="event_type"),
             IndexModel([("archived", ASCENDING)], name="archived"),
             IndexModel([("created_by_user_id", ASCENDING)], name="created_by_user_id"),
-            IndexModel([("start_date", ASCENDING)], name="start_date"),
+            IndexModel(
+                [
+                    ("archived", ASCENDING),
+                    ("event_type", ASCENDING),
+                    ("start_date", ASCENDING),
+                ],
+                name="archived_event_type_start_date",
+            ),
         ]
     )
 
