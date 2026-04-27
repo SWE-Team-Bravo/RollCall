@@ -24,7 +24,7 @@ _STREAMLIT = str(
 )
 
 URL = "http://localhost:15085"
-EVENT_MGMT_URL = f"{URL}/Event_Management"
+EVENT_MGMT_URL = f"{URL}/Event_Management_CRUD"
 
 pytestmark = pytest.mark.e2e
 
