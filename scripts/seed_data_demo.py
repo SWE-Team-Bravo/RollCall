@@ -18,6 +18,11 @@ import bcrypt
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from services.cadets import RANK_TO_LEVEL
+from utils.audit_log import (
+    log_attendance_modification,
+    log_checkin_attempt,
+    log_data_change,
+)
 from utils.create_indexes import create_indexes
 from utils.db import get_db
 
@@ -702,6 +707,415 @@ def _generate_semester_events() -> list[dict]:
     return events
 
 
+def _seed_audit_log(
+    *,
+    db,
+    user_id_by_key: dict[str, object],
+    cadet_id_by_key: dict[str, object],
+    user_doc_by_key: dict[str, dict],
+    cadet_doc_by_key: dict[str, dict],
+    event_docs: list[dict],
+    flight_id_by_name: dict[str, object],
+    attendance_audit_rows: list[dict],
+    waiver_audit_rows: list[dict],
+) -> int:
+    audit_count = 0
+
+    admin_id = user_id_by_key["admin"]
+    admin_email = user_doc_by_key["admin"]["email"]
+    cadre_id = user_id_by_key["henderson"]
+
+    for key in ["admin", "henderson", "fc.alpha", "tyler.brooks"]:
+        log_data_change(
+            source="user_management",
+            action="create",
+            target_collection="users",
+            target_id=user_id_by_key[key],
+            actor_user_id=admin_id,
+            actor_email=admin_email,
+            actor_roles=["admin"],
+            target_label=user_doc_by_key[key]["name"],
+            before=None,
+            after=user_doc_by_key[key],
+            now=NOW - timedelta(days=85),
+        )
+        audit_count += 1
+
+    for event_doc in event_docs[:3]:
+        log_data_change(
+            source="event_management",
+            action="create",
+            target_collection="events",
+            target_id=event_doc["_id"],
+            actor_user_id=event_doc["created_by_user_id"],
+            actor_email="",
+            actor_roles=["cadre"],
+            target_label=event_doc["event_name"],
+            before=None,
+            after=event_doc,
+            now=event_doc["created_at"],
+        )
+        audit_count += 1
+
+    event_to_update = event_docs[0]
+    event_before = dict(event_to_update)
+    event_to_update["event_name"] = f"{event_to_update['event_name']} - Leadership Focus"
+    event_to_update["geofence_enabled"] = True
+    event_to_update["geofence_lat"] = 40.7128
+    event_to_update["geofence_lon"] = -74.0060
+    event_to_update["geofence_radius_meters"] = 125
+    db["events"].update_one(
+        {"_id": event_to_update["_id"]},
+        {
+            "$set": {
+                "event_name": event_to_update["event_name"],
+                "geofence_enabled": True,
+                "geofence_lat": event_to_update["geofence_lat"],
+                "geofence_lon": event_to_update["geofence_lon"],
+                "geofence_radius_meters": event_to_update["geofence_radius_meters"],
+            }
+        },
+    )
+    log_data_change(
+        source="event_management",
+        action="update",
+        target_collection="events",
+        target_id=event_to_update["_id"],
+        actor_user_id=user_id_by_key["torres"],
+        actor_email=user_doc_by_key["torres"]["email"],
+        actor_roles=["cadre"],
+        target_label=event_to_update["event_name"],
+        before=event_before,
+        after=event_to_update,
+        now=NOW - timedelta(days=20),
+    )
+    audit_count += 1
+
+    event_to_archive = next(doc for doc in event_docs if doc["start_date"].date() >= TODAY)
+    archived_before = dict(event_to_archive)
+    event_to_archive["archived"] = True
+    event_to_archive["archived_at"] = NOW - timedelta(days=3)
+    event_to_archive["archived_by_user_id"] = user_id_by_key["henderson"]
+    db["events"].update_one(
+        {"_id": event_to_archive["_id"]},
+        {
+            "$set": {
+                "archived": True,
+                "archived_at": event_to_archive["archived_at"],
+                "archived_by_user_id": event_to_archive["archived_by_user_id"],
+            }
+        },
+    )
+    log_data_change(
+        source="event_management",
+        action="archive",
+        target_collection="events",
+        target_id=event_to_archive["_id"],
+        actor_user_id=user_id_by_key["henderson"],
+        actor_email=user_doc_by_key["henderson"]["email"],
+        actor_roles=["cadre"],
+        target_label=event_to_archive["event_name"],
+        before=archived_before,
+        after=event_to_archive,
+        now=event_to_archive["archived_at"],
+    )
+    audit_count += 1
+
+    disabled_key = "fc.foxtrot"
+    disabled_before = dict(user_doc_by_key[disabled_key])
+    disabled_after = {
+        **disabled_before,
+        "disabled": True,
+        "disabled_at": NOW - timedelta(days=14),
+        "disabled_by_user_id": str(admin_id),
+        "disabled_reason": "Disabled by admin",
+    }
+    db["users"].update_one(
+        {"_id": user_id_by_key[disabled_key]},
+        {
+            "$set": {
+                "disabled": True,
+                "disabled_at": disabled_after["disabled_at"],
+                "disabled_by_user_id": admin_id,
+                "disabled_reason": "Disabled by admin",
+            }
+        },
+    )
+    user_doc_by_key[disabled_key] = disabled_after
+    log_data_change(
+        source="user_management",
+        action="disable",
+        target_collection="users",
+        target_id=user_id_by_key[disabled_key],
+        actor_user_id=admin_id,
+        actor_email=admin_email,
+        actor_roles=["admin"],
+        target_label=disabled_after["email"],
+        before=disabled_before,
+        after=disabled_after,
+        now=disabled_after["disabled_at"],
+    )
+    audit_count += 1
+
+    reset_target = user_doc_by_key["fc.bravo"]
+    reset_after = {
+        **reset_target,
+        "password_hash": _hash("temporary-demo-password"),
+        "updated_at": NOW - timedelta(days=9),
+    }
+    log_data_change(
+        source="user_management",
+        action="reset_password",
+        target_collection="users",
+        target_id=user_id_by_key["fc.bravo"],
+        actor_user_id=admin_id,
+        actor_email=admin_email,
+        actor_roles=["admin"],
+        target_label=reset_target["email"],
+        before=reset_target,
+        after=reset_after,
+        now=NOW - timedelta(days=9),
+        metadata={"temp_password": "temporary-demo-password"},
+    )
+    audit_count += 1
+
+    cadet_key = "brian.lopez"
+    cadet_before = dict(cadet_doc_by_key[cadet_key])
+    cadet_after = {
+        **cadet_before,
+        "rank": "200",
+        "level": RANK_TO_LEVEL["200"],
+        "updated_at": NOW - timedelta(days=16),
+    }
+    db["cadets"].update_one(
+        {"_id": cadet_id_by_key[cadet_key]},
+        {
+            "$set": {
+                "rank": cadet_after["rank"],
+                "level": cadet_after["level"],
+                "updated_at": cadet_after["updated_at"],
+            }
+        },
+    )
+    cadet_doc_by_key[cadet_key] = cadet_after
+    log_data_change(
+        source="cadet_management",
+        action="update",
+        target_collection="cadets",
+        target_id=cadet_id_by_key[cadet_key],
+        actor_user_id=user_id_by_key["washington"],
+        actor_email=user_doc_by_key["washington"]["email"],
+        actor_roles=["cadre"],
+        target_label=f"{cadet_after['first_name']} {cadet_after['last_name']}",
+        before=cadet_before,
+        after=cadet_after,
+        now=cadet_after["updated_at"],
+        metadata={"workflow": "demo_seed"},
+    )
+    audit_count += 1
+
+    reassigned_key = "cameron.adams"
+    reassigned_before = dict(cadet_doc_by_key[reassigned_key])
+    reassigned_after = {
+        **reassigned_before,
+        "flight_id": flight_id_by_name["Delta Flight"],
+    }
+    db["cadets"].update_one(
+        {"_id": cadet_id_by_key[reassigned_key]},
+        {"$set": {"flight_id": flight_id_by_name["Delta Flight"]}},
+    )
+    cadet_doc_by_key[reassigned_key] = reassigned_after
+    log_data_change(
+        source="flight_management",
+        action="assign",
+        target_collection="flights",
+        target_id=flight_id_by_name["Delta Flight"],
+        actor_user_id=user_id_by_key["henderson"],
+        actor_email=user_doc_by_key["henderson"]["email"],
+        actor_roles=["cadre"],
+        target_label="Delta Flight",
+        now=NOW - timedelta(days=11),
+        metadata={
+            "affected_cadets": [
+                {
+                    "cadet_id": str(cadet_id_by_key[reassigned_key]),
+                    "cadet_name": "Cameron Adams",
+                    "previous_flight_id": str(reassigned_before.get("flight_id") or ""),
+                }
+            ],
+            "assigned_count": 1,
+            "reassigned_count": 1,
+            "errors": [],
+        },
+    )
+    audit_count += 1
+
+    config_before = db["event_config"].find_one({}) or {}
+    config_after = {
+        **config_before,
+        "checkin_window": 15,
+        "waiver_reminder_days": 2,
+        "default_timezone": "America/Chicago",
+    }
+    db["event_config"].update_one(
+        {},
+        {
+            "$set": {
+                "checkin_window": config_after["checkin_window"],
+                "waiver_reminder_days": config_after["waiver_reminder_days"],
+                "default_timezone": config_after["default_timezone"],
+            }
+        },
+    )
+    log_data_change(
+        source="event_config",
+        action="update",
+        target_collection="event_config",
+        target_id="global",
+        actor_user_id=user_id_by_key["admin"],
+        actor_email=admin_email,
+        actor_roles=["admin"],
+        target_label="Event Schedule Configuration",
+        before=config_before,
+        after=config_after,
+        now=NOW - timedelta(days=7),
+    )
+    audit_count += 1
+
+    code_event = next(doc for doc in event_docs if doc["start_date"].date() >= TODAY and not doc.get("archived"))
+    active_code_doc = {
+        "code": "482915",
+        "event_id": code_event["_id"],
+        "event_type": code_event["event_type"],
+        "event_date": code_event["start_date"].date().isoformat(),
+        "created_by_user_id": user_id_by_key["henderson"],
+        "created_at": NOW - timedelta(hours=6),
+        "expires_at": code_event["start_date"] - timedelta(minutes=10),
+        "active": True,
+    }
+    active_code_result = db["event_codes"].insert_one(active_code_doc)
+    active_code_doc["_id"] = active_code_result.inserted_id
+    log_data_change(
+        source="event_codes",
+        action="generate_code",
+        target_collection="event_codes",
+        target_id=active_code_doc["_id"],
+        actor_user_id=user_id_by_key["henderson"],
+        actor_email=user_doc_by_key["henderson"]["email"],
+        actor_roles=["cadre"],
+        target_label=code_event["event_name"],
+        now=active_code_doc["created_at"],
+        metadata={
+            "event_id": str(code_event["_id"]),
+            "event_type": code_event["event_type"],
+            "expires_at": active_code_doc["expires_at"].isoformat(),
+        },
+    )
+    audit_count += 1
+
+    old_code_event = next(doc for doc in event_docs if doc["start_date"].date() < TODAY)
+    inactive_code_doc = {
+        "code": "173204",
+        "event_id": old_code_event["_id"],
+        "event_type": old_code_event["event_type"],
+        "event_date": old_code_event["start_date"].date().isoformat(),
+        "created_by_user_id": user_id_by_key["torres"],
+        "created_at": NOW - timedelta(days=6, hours=4),
+        "expires_at": old_code_event["start_date"] - timedelta(minutes=5),
+        "active": False,
+    }
+    inactive_code_result = db["event_codes"].insert_one(inactive_code_doc)
+    inactive_code_doc["_id"] = inactive_code_result.inserted_id
+    log_data_change(
+        source="event_codes",
+        action="generate_code",
+        target_collection="event_codes",
+        target_id=inactive_code_doc["_id"],
+        actor_user_id=user_id_by_key["torres"],
+        actor_email=user_doc_by_key["torres"]["email"],
+        actor_roles=["cadre"],
+        target_label=old_code_event["event_name"],
+        now=inactive_code_doc["created_at"],
+        metadata={
+            "event_id": str(old_code_event["_id"]),
+            "event_type": old_code_event["event_type"],
+            "expires_at": inactive_code_doc["expires_at"].isoformat(),
+        },
+    )
+    audit_count += 1
+    log_data_change(
+        source="event_codes",
+        action="deactivate_code",
+        target_collection="event_codes",
+        target_id=inactive_code_doc["_id"],
+        actor_user_id=user_id_by_key["torres"],
+        actor_email=user_doc_by_key["torres"]["email"],
+        actor_roles=["cadre"],
+        target_label=f"Event Code {inactive_code_doc['_id']}",
+        now=NOW - timedelta(days=6, hours=2),
+    )
+    audit_count += 1
+
+    for row in attendance_audit_rows[:3]:
+        log_attendance_modification(
+            event_id=row["event_id"],
+            cadet_id=row["cadet_id"],
+            user_id=cadre_id,
+            outcome="applied",
+            old_status=row["old_status"],
+            new_status=row["new_status"],
+            now=row["created_at"],
+            metadata={"recorded_by_roles": ["cadre"]},
+        )
+        audit_count += 1
+
+    for row in attendance_audit_rows[:2]:
+        cadet_key = row["cadet_key"]
+        log_checkin_attempt(
+            cadet_id=cadet_id_by_key[cadet_key],
+            outcome="success",
+            event_id=row["event_id"],
+            user_id=user_id_by_key[cadet_key],
+            source="attendance_submission",
+            now=row["created_at"] - timedelta(minutes=20),
+            metadata={"method": "manual_demo_seed"},
+        )
+        audit_count += 1
+
+    if attendance_audit_rows:
+        sample = attendance_audit_rows[0]
+        log_checkin_attempt(
+            cadet_id=sample["cadet_id"],
+            outcome="invalid_code",
+            event_id=sample["event_id"],
+            user_id=user_id_by_key[sample["cadet_key"]],
+            source="attendance_submission",
+            now=sample["created_at"] - timedelta(minutes=25),
+            metadata={"method": "manual_demo_seed"},
+        )
+        audit_count += 1
+
+    for row in waiver_audit_rows[:4]:
+        action = "approve" if row["status"] == "approved" else "deny"
+        log_data_change(
+            source="waiver_review",
+            action=action,
+            target_collection="waivers",
+            target_id=row["waiver_id"],
+            actor_user_id=row["approver_id"],
+            actor_email="",
+            actor_roles=["cadre"],
+            target_label=f"Waiver for {cadet_doc_by_key[row['cadet_key']]['first_name']} {cadet_doc_by_key[row['cadet_key']]['last_name']}",
+            before={"status": "pending", "waiver_type": row["waiver_type"]},
+            after={"status": row["status"], "waiver_type": row["waiver_type"]},
+            now=row["created_at"],
+            metadata={"waiver_id": str(row["waiver_id"]), "decision_comments": row["comments"]},
+        )
+        audit_count += 1
+
+    return audit_count
+
+
 def populate() -> None:
     db = get_db()
     if db is None:
@@ -709,6 +1123,9 @@ def populate() -> None:
         sys.exit(1)
 
     for col_name in [
+        "audit_log",
+        "event_codes",
+        "event_config",
         "users",
         "cadets",
         "events",
@@ -721,31 +1138,46 @@ def populate() -> None:
         db.drop_collection(col_name)
     print("Cleared collections.")
 
+    db["event_config"].insert_one(
+        {
+            "pt_days": ["Monday", "Tuesday", "Thursday"],
+            "llab_days": ["Friday"],
+            "pt_threshold": 9,
+            "llab_threshold": 2,
+            "checkin_window": 20,
+            "waiver_reminder_days": 3,
+            "email_enabled": True,
+            "default_timezone": "America/New_York",
+        }
+    )
+
     user_id_by_key: dict[str, object] = {}
+    user_doc_by_key: dict[str, dict] = {}
 
     all_user_defs = ADMIN_USERS + CADRE_USERS + FC_USERS
     for flight_cadets in CADETS_BY_FLIGHT.values():
         all_user_defs = all_user_defs + flight_cadets
 
     for key, first, last, email, roles, _ in all_user_defs:
-        result = db["users"].insert_one(
-            {
-                "first_name": first,
-                "last_name": last,
-                "name": f"{first} {last}",
-                "email": email,
-                "password": PASSWORD,
-                "password_hash": PASSWORD,
-                "roles": roles,
-                "disabled": False,
-                "created_at": NOW,
-            }
-        )
+        user_doc = {
+            "first_name": first,
+            "last_name": last,
+            "name": f"{first} {last}",
+            "email": email,
+            "password": PASSWORD,
+            "password_hash": PASSWORD,
+            "roles": roles,
+            "disabled": False,
+            "created_at": NOW,
+        }
+        result = db["users"].insert_one(user_doc)
         user_id_by_key[key] = result.inserted_id
+        user_doc_by_key[key] = {**user_doc, "_id": str(result.inserted_id)}
 
     print(f"Inserted {len(all_user_defs)} users.")
 
     cadet_id_by_key: dict[str, object] = {}
+    cadet_doc_by_key: dict[str, dict] = {}
 
     all_cadet_defs = FC_USERS[:]
     for flight_cadets in CADETS_BY_FLIGHT.values():
@@ -753,17 +1185,17 @@ def populate() -> None:
 
     for key, first, last, email, _, rank in all_cadet_defs:
         assert rank is not None
-        result = db["cadets"].insert_one(
-            {
-                "user_id": user_id_by_key[key],
-                "rank": rank,
-                "level": RANK_TO_LEVEL[rank],
-                "first_name": first,
-                "last_name": last,
-                "email": email,
-            }
-        )
+        cadet_doc = {
+            "user_id": user_id_by_key[key],
+            "rank": rank,
+            "level": RANK_TO_LEVEL[rank],
+            "first_name": first,
+            "last_name": last,
+            "email": email,
+        }
+        result = db["cadets"].insert_one(cadet_doc)
         cadet_id_by_key[key] = result.inserted_id
+        cadet_doc_by_key[key] = {**cadet_doc, "_id": str(result.inserted_id)}
 
     print(f"Inserted {len(all_cadet_defs)} cadet profiles.")
 
@@ -796,6 +1228,7 @@ def populate() -> None:
     creator_cycle = ["henderson", "torres", "washington"]
 
     event_meta: list[tuple] = []
+    event_docs: list[dict] = []
     pt_idx = 0
     lab_idx = 0
 
@@ -805,16 +1238,23 @@ def populate() -> None:
         start_dt = datetime.combine(ev["date"], time(hour, 0), tzinfo=timezone.utc)
         duration = timedelta(hours=1.5 if ev["type"] == "pt" else 2.0)
 
-        result = db["events"].insert_one(
-            {
-                "event_name": ev["name"],
-                "event_type": ev["type"],
-                "start_date": start_dt,
-                "end_date": start_dt + duration,
-                "created_by_user_id": user_id_by_key[creator_cycle[i % 3]],
-                "created_at": NOW,
-            }
-        )
+        event_doc = {
+            "event_name": ev["name"],
+            "event_type": ev["type"],
+            "start_date": start_dt,
+            "end_date": start_dt + duration,
+            "timezone_name": "UTC",
+            "created_by_user_id": user_id_by_key[creator_cycle[i % 3]],
+            "archived": False,
+            "created_at": NOW,
+            "geofence_enabled": False,
+            "geofence_lat": None,
+            "geofence_lon": None,
+            "geofence_radius_meters": None,
+        }
+        result = db["events"].insert_one(event_doc)
+        event_doc["_id"] = result.inserted_id
+        event_docs.append(event_doc)
 
         cur_idx = pt_idx if ev["type"] == "pt" else lab_idx
         event_meta.append((result.inserted_id, ev["type"], is_past, cur_idx))
@@ -836,6 +1276,7 @@ def populate() -> None:
     cadre_recorder_id = user_id_by_key["henderson"]
 
     absent_records: list[tuple] = []
+    attendance_audit_rows: list[dict] = []
     rec_count = 0
 
     for event_id, event_type, is_past, type_idx in event_meta:
@@ -863,11 +1304,34 @@ def populate() -> None:
                     )
                 )
 
+    for record_id, cadet_key, _, _, in absent_records[:3]:
+        new_status = "excused" if len(attendance_audit_rows) < 2 else "present"
+        audit_time = NOW - timedelta(days=8 - len(attendance_audit_rows), hours=2)
+        db["attendance_records"].update_one(
+            {"_id": record_id},
+            {"$set": {"status": new_status, "updated_at": audit_time}},
+        )
+        event_id = db["attendance_records"].find_one({"_id": record_id}, {"event_id": 1})[
+            "event_id"
+        ]
+        attendance_audit_rows.append(
+            {
+                "record_id": record_id,
+                "cadet_key": cadet_key,
+                "cadet_id": cadet_id_by_key[cadet_key],
+                "event_id": event_id,
+                "old_status": "absent",
+                "new_status": new_status,
+                "created_at": audit_time,
+            }
+        )
+
     absence_count = len(absent_records)
     print(f"Inserted {rec_count} attendance records ({absence_count} absences).")
 
     waiver_count = 0
     approval_count = 0
+    waiver_audit_rows: list[dict] = []
 
     had_sickness_waiver: set[str] = set()
 
@@ -958,8 +1422,33 @@ def populate() -> None:
                 }
             )
             approval_count += 1
+            waiver_audit_rows.append(
+                {
+                    "waiver_id": waiver_id,
+                    "cadet_key": cadet_key,
+                    "status": status,
+                    "waiver_type": wtype,
+                    "approver_id": user_id_by_key[approver_key],
+                    "comments": comments,
+                    "created_at": NOW
+                    - timedelta(days=max(0, days_ago_submitted - 1)),
+                }
+            )
 
     print(f"Inserted {waiver_count} waivers, {approval_count} approvals.")
+
+    audit_count = _seed_audit_log(
+        db=db,
+        user_id_by_key=user_id_by_key,
+        cadet_id_by_key=cadet_id_by_key,
+        user_doc_by_key=user_doc_by_key,
+        cadet_doc_by_key=cadet_doc_by_key,
+        event_docs=event_docs,
+        flight_id_by_name=flight_id_by_name,
+        attendance_audit_rows=attendance_audit_rows,
+        waiver_audit_rows=waiver_audit_rows,
+    )
+    print(f"Inserted {audit_count} audit log entries.")
 
     create_indexes()
     print("Indexes created.")
