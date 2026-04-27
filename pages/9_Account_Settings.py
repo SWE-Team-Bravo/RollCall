@@ -220,8 +220,6 @@ with st.form("change_password_form"):
                             "Failed to sync password hash in session state"
                         )
 
-                st.session_state["logout"] = False
-
                 authenticator = st.session_state.get("authenticator")
                 if authenticator is not None:
                     try:

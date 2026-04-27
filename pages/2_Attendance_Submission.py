@@ -149,6 +149,7 @@ if len(code_clean) == 6:
                         if _has_coords:
                             cadet_lat = _coords.get("latitude")
                             cadet_lon = _coords.get("longitude")
+
                         if cadet_lat is not None and cadet_lon is not None:
                             within, warning = is_within_geofence(
                                 event, cadet_lat, cadet_lon

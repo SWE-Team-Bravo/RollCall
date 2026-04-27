@@ -198,10 +198,13 @@ def analyze_roster_for_import(cadets_data: list[dict]) -> list[dict]:
     """
     from collections import Counter
 
-    email_counts: dict[str, int] = Counter(c["email"].lower().strip() for c in cadets_data)
+    email_counts: dict[str, int] = Counter(
+        c["email"].lower().strip() for c in cadets_data
+    )
 
     non_dup_emails = [
-        e for e in {c["email"].lower().strip() for c in cadets_data}
+        e
+        for e in {c["email"].lower().strip() for c in cadets_data}
         if email_counts.get(e, 0) <= 1
     ]
     users_by_email: dict[str, dict] = get_users_by_emails(non_dup_emails)
@@ -211,7 +214,9 @@ def analyze_roster_for_import(cadets_data: list[dict]) -> list[dict]:
         email = c["email"].lower().strip()
         if email not in users_by_email and email_counts.get(email, 0) <= 1:
             name_lookup_keys.add((c["first_name"], c["last_name"]))
-    users_by_name: dict[tuple[str, str], dict] = get_users_by_names(list(name_lookup_keys))
+    users_by_name: dict[tuple[str, str], dict] = get_users_by_names(
+        list(name_lookup_keys)
+    )
 
     all_matched_user_ids = []
     for c in cadets_data:
@@ -312,7 +317,9 @@ def _log_roster_import_change(
         target_collection=target_collection,
         target_id=target_id,
         actor_user_id=actor_user.get("_id") if actor_user else None,
-        actor_email=str(actor_user.get("email", "") or "").strip() or None if actor_user else None,
+        actor_email=str(actor_user.get("email", "") or "").strip() or None
+        if actor_user
+        else None,
         actor_roles=list(actor_user.get("roles", [])) if actor_user else [],
         target_label=target_label,
         before=serialize_doc_for_audit(before),
@@ -339,7 +346,9 @@ def import_cadets_from_roster(
     for i, cadet in enumerate(cadets_data):
         # Backward-compatible: raw dicts without analysis get the old behavior
         if "conflict_type" not in cadet:
-            from utils.db_schema_crud import get_cadet_by_user_id as _get_cadet_by_user_id
+            from utils.db_schema_crud import (
+                get_cadet_by_user_id as _get_cadet_by_user_id,
+            )
 
             email = cadet["email"]
             first_name = cadet["first_name"]

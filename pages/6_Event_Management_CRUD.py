@@ -15,13 +15,16 @@ from services.event_config import (
 )
 from services.events import (
     archive_event,
+    bulk_create_events,
     create_event,
     get_all_events,
     get_timezone_options,
+    preview_semester_schedule,
     restore_event,
     update_event,
 )
 from utils.auth import require_role, get_current_user_doc
+from utils.st_helpers import require
 
 require_role("admin", "cadre")
 
@@ -39,6 +42,14 @@ if "restore_event_success" not in st.session_state:
     st.session_state.restore_event_success = None
 if "edit_geofence_init_id" not in st.session_state:
     st.session_state.edit_geofence_init_id = None
+if "gen_holidays" not in st.session_state:
+    st.session_state.gen_holidays = []
+if "gen_preview" not in st.session_state:
+    st.session_state.gen_preview = None
+if "gen_preview_params" not in st.session_state:
+    st.session_state.gen_preview_params = None
+if "gen_schedule_success" not in st.session_state:
+    st.session_state.gen_schedule_success = None
 
 st.title("Event Management")
 
@@ -177,112 +188,386 @@ with st.expander("Event Schedule Configuration", expanded=False):
 st.divider()
 
 # =============================================================================
+# SECTION 1b — Generate Semester Schedule
+# =============================================================================
+
+with st.expander("Generate Semester Schedule", expanded=False):
+    st.markdown(
+        "Bulk-create PT and LLAB events for a full semester. "
+        "Events are named automatically (e.g. *PT Mon Aug 25 2025*)."
+    )
+
+    import pandas as _pd
+
+    _pt_days = config.get("pt_days", ["Monday", "Tuesday", "Thursday"])
+    _llab_days = config.get("llab_days", ["Friday"])
+
+    # ── Date range picker ─────────────────────────────────────────────────────
+    _today = date.today()
+    _gen_range = st.date_input(
+        "Semester date range",
+        value=(_today, _today),
+        min_value=_today,
+        help="Select the first and last day of the semester.",
+        key="gen_date_range",
+    )
+
+    # st.date_input with a tuple value returns a tuple; guard partial selection
+    if isinstance(_gen_range, (list, tuple)) and len(_gen_range) == 2:
+        _gen_start: date | None = _gen_range[0]  # type: ignore
+        _gen_end: date | None = _gen_range[1]  # type: ignore
+        _range_complete = True
+    else:
+        _gen_start = None
+        _gen_end = None
+        _range_complete = False
+
+    st.divider()
+
+    # ── Times ─────────────────────────────────────────────────────────────────
+    gc1, gc2 = st.columns(2)
+    with gc1:
+        st.caption("PT event times")
+        gen_pt_start = st.time_input(
+            "PT Start Time", value=time(6, 0), key="gen_pt_start"
+        )
+        gen_pt_end = st.time_input("PT End Time", value=time(7, 0), key="gen_pt_end")
+    with gc2:
+        st.caption("LLAB event times")
+        gen_llab_start = st.time_input(
+            "LLAB Start Time", value=time(6, 0), key="gen_llab_start"
+        )
+        gen_llab_end = st.time_input(
+            "LLAB End Time", value=time(9, 0), key="gen_llab_end"
+        )
+
+    gen_tz = st.selectbox(
+        "Timezone", TZ_OPTIONS, index=_configured_tz_index, key="gen_tz"
+    )
+
+    st.divider()
+
+    # ── Holiday / break picker ────────────────────────────────────────────────
+    st.markdown("**Holidays / breaks to skip**")
+    st.caption(
+        "Add individual dates that should be skipped (e.g. federal holidays, spring break days)."
+    )
+
+    _add_holiday = st.date_input(
+        "Add a date to skip",
+        value=None,
+        key="gen_holiday_picker",
+    )
+    hc1, hc2 = st.columns([1, 3])
+    if hc1.button("Add date", key="gen_add_holiday"):
+        if _add_holiday and _add_holiday not in st.session_state.gen_holidays:
+            st.session_state.gen_holidays.append(_add_holiday)
+            st.session_state.gen_preview = None
+            st.rerun()
+
+    if st.session_state.gen_holidays:
+        _sorted_holidays = sorted(st.session_state.gen_holidays)
+        for _hd in _sorted_holidays:
+            hrow1, hrow2 = st.columns([3, 1])
+            hrow1.write(_hd.strftime("%A, %B %d %Y"))
+            if hrow2.button("Remove", key=f"gen_rm_{_hd}"):
+                st.session_state.gen_holidays.remove(_hd)
+                st.session_state.gen_preview = None
+                st.rerun()
+    else:
+        st.caption("No holidays added.")
+
+    st.divider()
+
+    gen_use_geofence = st.checkbox(
+        "Enable geofence check-in verification for all semester events",
+        key="gen_use_geofence",
+    )
+    if gen_use_geofence:
+        st.caption(
+            "Click the map to set the geofence center. All events in this semester will share this location."
+        )
+        _glat = st.session_state.get("gen_geofence_lat")
+        _glon = st.session_state.get("gen_geofence_lon")
+        _grad = st.session_state.get("gen_geofence_radius", 150)
+        _ghas_pin = _glat is not None and _glon is not None
+        _gcenter: list[float] = (
+            [cast(float, _glat), cast(float, _glon)]
+            if _ghas_pin
+            else [41.1548, -81.3414]
+        )
+        _gzoom = 16 if _ghas_pin else 15
+        _gm = folium.Map(location=_gcenter, zoom_start=_gzoom)
+        if _ghas_pin:
+            _gloc: list[float] = [cast(float, _glat), cast(float, _glon)]
+            folium.Circle(
+                location=_gloc,
+                radius=_grad,
+                color="#0066cc",
+                fill=True,
+                fill_opacity=0.2,
+            ).add_to(_gm)
+            folium.Marker(_gloc, tooltip="Geofence center").add_to(_gm)
+        _gmap_data = st_folium(_gm, width=None, height=400, key="gen_geofence_map")
+        if _gmap_data and _gmap_data.get("last_clicked"):
+            _new_glat = _gmap_data["last_clicked"]["lat"]
+            _new_glon = _gmap_data["last_clicked"]["lng"]
+            if _new_glat != _glat or _new_glon != _glon:
+                st.session_state.gen_geofence_lat = _new_glat
+                st.session_state.gen_geofence_lon = _new_glon
+                st.rerun()
+        if _glat is not None:
+            st.caption(f"Center: {_glat:.6f}, {_glon:.6f}")
+        else:
+            st.caption("No location selected yet — click the map.")
+        st.number_input(
+            "Radius (meters)",
+            min_value=50,
+            max_value=1000,
+            value=_grad,
+            step=25,
+            key="gen_geofence_radius",
+        )
+
+    st.divider()
+
+    _cur_params = {
+        "range": (_gen_start, _gen_end),
+        "pt_start": gen_pt_start,
+        "pt_end": gen_pt_end,
+        "llab_start": gen_llab_start,
+        "llab_end": gen_llab_end,
+        "holidays": tuple(sorted(st.session_state.gen_holidays)),
+    }
+    if (
+        st.session_state.gen_preview is not None
+        and st.session_state.gen_preview_params != _cur_params
+    ):
+        st.session_state.gen_preview = None
+        st.session_state.gen_preview_params = None
+        st.rerun()
+
+    # ── Preview ───────────────────────────────────────────────────────────────
+    if st.button(
+        "Preview Schedule", key="gen_preview_btn", disabled=not _range_complete
+    ):
+        if _gen_start and _gen_end and _gen_end >= _gen_start:
+            if gen_pt_end <= gen_pt_start:
+                st.error("PT end time must be after PT start time.")
+            elif gen_llab_end <= gen_llab_start:
+                st.error("LLAB end time must be after LLAB start time.")
+            else:
+                st.session_state.gen_preview = preview_semester_schedule(
+                    _gen_start,
+                    _gen_end,
+                    _pt_days,
+                    _llab_days,
+                    st.session_state.gen_holidays,
+                )
+                st.session_state.gen_preview_params = _cur_params
+        else:
+            st.error("Select a valid date range first.")
+
+    if st.session_state.gen_preview is not None:
+        _preview = st.session_state.gen_preview
+        if not _preview:
+            st.info(
+                "No events would be created for this range with the current schedule configuration."
+            )
+        else:
+            _pt_count = sum(1 for e in _preview if e["type"] == "PT")
+            _llab_count = sum(1 for e in _preview if e["type"] == "LLAB")
+            st.success(
+                f"**{len(_preview)} events** will be created: "
+                f"{_pt_count} PT · {_llab_count} LLAB"
+            )
+            _preview_df = _pd.DataFrame(
+                [
+                    {
+                        "Date": e["date"].strftime("%Y-%m-%d"),
+                        "Day": e["day"],
+                        "Type": e["type"],
+                    }
+                    for e in _preview
+                ]
+            )
+            st.dataframe(_preview_df, hide_index=True, width="stretch")
+
+            # ── Generate button ───────────────────────────────────────────────
+            st.warning(
+                "This will create all events shown above. This cannot be undone in bulk."
+            )
+            if st.button("Generate Schedule", key="gen_confirm_btn", type="primary"):
+                _creator_id = (
+                    str(current_user_doc["_id"]) if current_user_doc else "unknown"
+                )
+                _start = require(_gen_start, "Select a valid date range first.")
+                _end = require(_gen_end, "Select a valid date range first.")
+                _gen_geo = st.session_state.get("gen_use_geofence", False)
+                _created, _skipped = bulk_create_events(
+                    _start,
+                    _end,
+                    _pt_days,
+                    _llab_days,
+                    gen_pt_start,
+                    gen_pt_end,
+                    gen_llab_start,
+                    gen_llab_end,
+                    gen_tz,
+                    st.session_state.gen_holidays,
+                    _creator_id,
+                    geofence_enabled=_gen_geo,
+                    geofence_lat=st.session_state.get("gen_geofence_lat")
+                    if _gen_geo
+                    else None,
+                    geofence_lon=st.session_state.get("gen_geofence_lon")
+                    if _gen_geo
+                    else None,
+                    geofence_radius_meters=int(
+                        st.session_state.get("gen_geofence_radius", 150)
+                    ),
+                    actor_user_id=current_user_doc.get("_id")
+                    if current_user_doc
+                    else None,
+                    actor_email=current_user_doc.get("email")
+                    if current_user_doc
+                    else None,
+                )
+                st.session_state.gen_preview = None
+                st.session_state.gen_preview_params = None
+                st.session_state.gen_holidays = []
+                st.session_state.gen_geofence_lat = None
+                st.session_state.gen_geofence_lon = None
+                st.session_state.gen_schedule_success = (
+                    f"Created {_created} events ({_skipped} holiday dates skipped)."
+                )
+                st.rerun()
+
+    if st.session_state.gen_schedule_success:
+        st.success(st.session_state.gen_schedule_success)
+        st.session_state.gen_schedule_success = None
+
+st.divider()
+
+# =============================================================================
 # SECTION 2 — Create New Event
 # =============================================================================
 
-st.subheader("Create New Event")
-
-# ── Geofence picker (must live outside st.form so the map widget works) ───────
-create_use_geofence = st.checkbox(
-    "Enable geofence check-in verification", key="create_use_geofence"
-)
-if create_use_geofence:
-    st.caption(
-        "Click the map to set the geofence center. Cadets outside this radius will be warned but not blocked."
+with st.expander("Create One-Off Event", expanded=False):
+    # ── Geofence picker (must live outside st.form so the map widget works) ──
+    create_use_geofence = st.checkbox(
+        "Enable geofence check-in verification", key="create_use_geofence"
     )
-    _clat = st.session_state.get("create_geofence_lat")
-    _clon = st.session_state.get("create_geofence_lon")
-    _crad = st.session_state.get("create_geofence_radius", 150)
-    _has_pin = _clat is not None and _clon is not None
-    _center: list[float] = (
-        [cast(float, _clat), cast(float, _clon)] if _has_pin else [41.1548, -81.3414]
-    )
-    _zoom = 16 if _has_pin else 15
-    _m = folium.Map(location=_center, zoom_start=_zoom)
-    if _has_pin:
-        _loc: list[float] = [cast(float, _clat), cast(float, _clon)]
-        folium.Circle(
-            location=_loc, radius=_crad, color="#0066cc", fill=True, fill_opacity=0.2
-        ).add_to(_m)
-        folium.Marker(_loc, tooltip="Geofence center").add_to(_m)
-    _map_data = st_folium(_m, width=None, height=400, key="create_geofence_map")
-    if _map_data and _map_data.get("last_clicked"):
-        _new_lat = _map_data["last_clicked"]["lat"]
-        _new_lon = _map_data["last_clicked"]["lng"]
-        if _new_lat != _clat or _new_lon != _clon:
-            st.session_state.create_geofence_lat = _new_lat
-            st.session_state.create_geofence_lon = _new_lon
-            st.rerun()
-    if _clat is not None:
-        st.caption(f"Center: {_clat:.6f}, {_clon:.6f}")
-    else:
-        st.caption("No location selected yet — click the map.")
-    st.number_input(
-        "Radius (meters)",
-        min_value=50,
-        max_value=1000,
-        value=_crad,
-        step=25,
-        key="create_geofence_radius",
-    )
-
-with st.form("create_event_form"):
-    event_name = st.text_input("Event Name", placeholder="e.g. Week 3 PT")
-
-    c1, c2 = st.columns(2)
-    start_date = c1.date_input("Start Date", value=date.today())
-    start_time = c1.time_input("Start Time", value=time(6, 0))
-    end_date = c2.date_input("End Date", value=date.today())
-    end_time = c2.time_input("End Time", value=time(7, 0))
-    tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=_configured_tz_index)
-
-    auto_type = infer_event_type(start_date, config)
-    type_options = ["pt", "lab"]
-    default_index = type_options.index(auto_type) if auto_type in type_options else 0
-
-    event_type = st.selectbox(
-        "Event Type",
-        type_options,
-        index=default_index,
-        help="Auto-filled based on the day's schedule. You can override it.",
-    )
-
-    submitted = st.form_submit_button("Create Event")
-
-if submitted:
-    if not event_name.strip():
-        st.error("Event name cannot be empty.")
-    elif end_date < start_date:
-        st.error("End date cannot be before start date.")
-    else:
-        creator_id = str(current_user_doc["_id"]) if current_user_doc else "unknown"
-        _geo_enabled = st.session_state.get("create_use_geofence", False)
-        if create_event(
-            event_name.strip(),
-            event_type,
-            start_date,
-            end_date,
-            creator_id,
-            tz_name,
-            _geo_enabled,
-            st.session_state.get("create_geofence_lat") if _geo_enabled else None,
-            st.session_state.get("create_geofence_lon") if _geo_enabled else None,
-            int(st.session_state.get("create_geofence_radius", 150)),
-            start_time,
-            end_time,
-            actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
-            actor_email=current_user_doc.get("email") if current_user_doc else None,
-        ):
-            st.session_state.create_event_success = (
-                f"Event '{event_name.strip()}' created successfully!"
-            )
-            st.rerun()
+    if create_use_geofence:
+        st.caption(
+            "Click the map to set the geofence center. Cadets outside this radius will be warned but not blocked."
+        )
+        _clat = st.session_state.get("create_geofence_lat")
+        _clon = st.session_state.get("create_geofence_lon")
+        _crad = st.session_state.get("create_geofence_radius", 150)
+        _has_pin = _clat is not None and _clon is not None
+        _center: list[float] = (
+            [cast(float, _clat), cast(float, _clon)]
+            if _has_pin
+            else [41.1548, -81.3414]
+        )
+        _zoom = 16 if _has_pin else 15
+        _m = folium.Map(location=_center, zoom_start=_zoom)
+        if _has_pin:
+            _loc: list[float] = [cast(float, _clat), cast(float, _clon)]
+            folium.Circle(
+                location=_loc,
+                radius=_crad,
+                color="#0066cc",
+                fill=True,
+                fill_opacity=0.2,
+            ).add_to(_m)
+            folium.Marker(_loc, tooltip="Geofence center").add_to(_m)
+        _map_data = st_folium(_m, width=None, height=400, key="create_geofence_map")
+        if _map_data and _map_data.get("last_clicked"):
+            _new_lat = _map_data["last_clicked"]["lat"]
+            _new_lon = _map_data["last_clicked"]["lng"]
+            if _new_lat != _clat or _new_lon != _clon:
+                st.session_state.create_geofence_lat = _new_lat
+                st.session_state.create_geofence_lon = _new_lon
+                st.rerun()
+        if _clat is not None:
+            st.caption(f"Center: {_clat:.6f}, {_clon:.6f}")
         else:
-            st.error("Database unavailable — could not create event.")
+            st.caption("No location selected yet — click the map.")
+        st.number_input(
+            "Radius (meters)",
+            min_value=50,
+            max_value=1000,
+            value=_crad,
+            step=25,
+            key="create_geofence_radius",
+        )
 
-if st.session_state.create_event_success:
-    st.success(st.session_state.create_event_success)
-    st.session_state.create_event_success = None
+    with st.form("create_event_form"):
+        event_name = st.text_input("Event Name", placeholder="e.g. Week 3 PT")
+
+        c1, c2 = st.columns(2)
+        start_date = c1.date_input(
+            "Start Date", value=date.today(), min_value=date.today()
+        )
+        start_time = c1.time_input("Start Time", value=time(6, 0))
+        end_date = c2.date_input("End Date", value=date.today(), min_value=date.today())
+        end_time = c2.time_input("End Time", value=time(7, 0))
+        tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=_configured_tz_index)
+
+        auto_type = infer_event_type(start_date, config)
+        type_options = ["pt", "lab"]
+        default_index = (
+            type_options.index(auto_type) if auto_type in type_options else 0
+        )
+
+        event_type = st.selectbox(
+            "Event Type",
+            type_options,
+            index=default_index,
+            help="Auto-filled based on the day's schedule. You can override it.",
+        )
+
+        submitted = st.form_submit_button("Create Event")
+
+    if submitted:
+        if not event_name.strip():
+            st.error("Event name cannot be empty.")
+        elif end_date < start_date:
+            st.error("End date cannot be before start date.")
+        elif end_date == start_date and end_time <= start_time:
+            st.error("End time must be after start time.")
+        else:
+            creator_id = str(current_user_doc["_id"]) if current_user_doc else "unknown"
+            _geo_enabled = st.session_state.get("create_use_geofence", False)
+            if create_event(
+                event_name.strip(),
+                event_type,
+                start_date,
+                end_date,
+                creator_id,
+                tz_name,
+                _geo_enabled,
+                st.session_state.get("create_geofence_lat") if _geo_enabled else None,
+                st.session_state.get("create_geofence_lon") if _geo_enabled else None,
+                int(st.session_state.get("create_geofence_radius", 150)),
+                start_time,
+                end_time,
+                actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
+                actor_email=current_user_doc.get("email") if current_user_doc else None,
+            ):
+                st.session_state.create_event_success = (
+                    f"Event '{event_name.strip()}' created successfully!"
+                )
+                st.rerun()
+            else:
+                st.error("Database unavailable — could not create event.")
+
+    if st.session_state.create_event_success:
+        st.success(st.session_state.create_event_success)
+        st.session_state.create_event_success = None
+
 if st.session_state.edit_event_success:
     st.success(st.session_state.edit_event_success)
     st.session_state.edit_event_success = None

@@ -1,14 +1,9 @@
-from unittest.mock import patch, MagicMock
-from bson import ObjectId
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
 import pytest
+from bson import ObjectId
 
-from utils.db_schema_crud import (
-    create_flight,
-    unassign_cadet_from_flight,
-    assign_cadet_to_flight,
-    unassign_all_cadets_from_flight,
-)
 from services.cadets import assign_cadet_to_flight as assign_cadet_to_flight_service
 from services.flight_management import (
     assign_selected_cadets_to_flight,
@@ -18,11 +13,17 @@ from services.flight_management import (
     get_flight_commander_details,
     get_flight_management_cadet_rows,
     get_flight_member_table,
-    get_selectable_member_ids,
-    has_selected_assigned_cadets,
     get_member_selection_table,
+    get_selectable_member_ids,
     get_selected_cadet_ids,
+    has_selected_assigned_cadets,
     unassign_selected_cadets,
+)
+from utils.db_schema_crud import (
+    assign_cadet_to_flight,
+    create_flight,
+    unassign_all_cadets_from_flight,
+    unassign_cadet_from_flight,
 )
 
 
@@ -407,7 +408,9 @@ def test_get_flight_management_cadet_rows_excludes_commanders_and_adds_flight_in
 
 
 def test_get_cadet_rows_by_id_returns_lookup_map():
-    rows = [{"cadet_id": "cadet-1", "name": "Taylor Smith"}]
+    rows: list[dict[str, str | bool]] = [
+        {"cadet_id": "cadet-1", "name": "Taylor Smith"}
+    ]
 
     rows_by_id = get_cadet_rows_by_id(rows)
 
@@ -551,7 +554,7 @@ def test_get_assignment_table_show_assigned_includes_other_flights_without_searc
 
 
 def test_has_selected_assigned_cadets_detects_reassignment():
-    rows_by_id = {
+    rows_by_id: dict[str, dict[str, str | bool]] = {
         "cadet-1": {"is_assigned": False},
         "cadet-2": {"is_assigned": True},
     }
@@ -685,11 +688,13 @@ def test_get_selected_cadet_ids_handles_pandas_bool_values():
     assert selected_ids == ["cadet-1", "cadet-2"]
 
 
+@patch("services.flight_management.log_data_change")
 @patch("services.flight_management.assign_cadet_to_flight")
 @patch("services.flight_management.unassign_cadet_from_flight")
 def test_assign_selected_cadets_to_flight_returns_partial_warning(
     mock_unassign_cadet_from_flight,
     mock_assign_cadet_to_flight,
+    _mock_log,
 ):
     mock_assign_cadet_to_flight.side_effect = [None, ValueError("Database unavailable")]
 
@@ -716,8 +721,11 @@ def test_assign_selected_cadets_to_flight_warns_when_nothing_selected():
     assert message == "Select at least one cadet."
 
 
+@patch("services.flight_management.log_data_change")
 @patch("services.flight_management.unassign_cadet_from_flight")
-def test_unassign_selected_cadets_returns_success(mock_unassign_cadet_from_flight):
+def test_unassign_selected_cadets_returns_success(
+    mock_unassign_cadet_from_flight, _mock_log
+):
     level, message = unassign_selected_cadets(
         ["cadet-1"], {"cadet-1": {"name": "Jordan Lee"}}
     )

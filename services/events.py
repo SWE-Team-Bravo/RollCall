@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, available_timezones
 
@@ -213,6 +213,108 @@ def create_event(
         metadata={"event_type": event_type},
     )
     return True
+
+
+def bulk_create_events(
+    semester_start: date,
+    semester_end: date,
+    pt_days: list[str],
+    llab_days: list[str],
+    pt_start_time: time,
+    pt_end_time: time,
+    llab_start_time: time,
+    llab_end_time: time,
+    tz_name: str,
+    skip_dates: list[date],
+    created_by_user_id: str,
+    *,
+    geofence_enabled: bool = False,
+    geofence_lat: float | None = None,
+    geofence_lon: float | None = None,
+    geofence_radius_meters: int = 150,
+    actor_user_id: str | ObjectId | None = None,
+    actor_email: str | None = None,
+) -> tuple[int, int]:
+    """Bulk-create PT and LLAB events for a semester date range.
+
+    Returns (created_count, skipped_count).
+    """
+    skip_set = set(skip_dates)
+    created = 0
+    skipped = 0
+    current = semester_start
+    while current <= semester_end:
+        day_name = current.strftime("%A")
+        if day_name in pt_days:
+            if current in skip_set:
+                skipped += 1
+            else:
+                label = current.strftime("%a %b %d %Y")
+                ok = create_event(
+                    f"PT {label}",
+                    "pt",
+                    current,
+                    current,
+                    created_by_user_id,
+                    tz_name,
+                    geofence_enabled,
+                    geofence_lat,
+                    geofence_lon,
+                    geofence_radius_meters,
+                    start_time=pt_start_time,
+                    end_time=pt_end_time,
+                    actor_user_id=actor_user_id,
+                    actor_email=actor_email,
+                )
+                if ok:
+                    created += 1
+        elif day_name in llab_days:
+            if current in skip_set:
+                skipped += 1
+            else:
+                label = current.strftime("%a %b %d %Y")
+                ok = create_event(
+                    f"LLAB {label}",
+                    "lab",
+                    current,
+                    current,
+                    created_by_user_id,
+                    tz_name,
+                    geofence_enabled,
+                    geofence_lat,
+                    geofence_lon,
+                    geofence_radius_meters,
+                    start_time=llab_start_time,
+                    end_time=llab_end_time,
+                    actor_user_id=actor_user_id,
+                    actor_email=actor_email,
+                )
+                if ok:
+                    created += 1
+        current += timedelta(days=1)
+    return created, skipped
+
+
+def preview_semester_schedule(
+    semester_start: date,
+    semester_end: date,
+    pt_days: list[str],
+    llab_days: list[str],
+    skip_dates: list[date],
+) -> list[dict]:
+    """Return a list of events that would be created (no DB writes)."""
+    skip_set = set(skip_dates)
+    events = []
+    current = semester_start
+    while current <= semester_end:
+        day_name = current.strftime("%A")
+        if current not in skip_set:
+            if day_name in pt_days:
+                events.append({"date": current, "type": "PT", "day": day_name})
+            elif day_name in llab_days:
+                events.append({"date": current, "type": "LLAB", "day": day_name})
+        current += timedelta(days=1)
+    return events
 
 
 def archive_event(

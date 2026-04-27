@@ -1,23 +1,23 @@
-from unittest.mock import MagicMock, patch
 from email.mime.text import MIMEText
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from services.email_templates import _DEFAULT_TEMPLATES
 import utils.at_risk_email as m
+from services.email_templates import _DEFAULT_TEMPLATES
 from utils.at_risk_email import (
-    PT_ABSENCE_THRESHOLD,
     LLAB_ABSENCE_THRESHOLD,
-    get_at_risk_cadets,
-    get_fc_flight_cadets,
+    PT_ABSENCE_THRESHOLD,
+    build_email,
+    build_email_for_student,
     build_rows,
     build_table,
-    build_email,
+    get_at_risk_cadets,
+    get_fc_flight_cadets,
+    send_at_risk_emails,
     send_email,
     send_to_cadre,
     send_to_flight_commander,
-    send_at_risk_emails,
-    build_email_for_student,
     send_to_student,
 )
 
@@ -25,7 +25,7 @@ from utils.at_risk_email import (
 @pytest.fixture(autouse=True)
 def mock_templates():
     with patch(
-        "utils.waiver_email.get_email_template",
+        "utils.at_risk_email.get_email_template",
         side_effect=lambda k: _DEFAULT_TEMPLATES[k],
     ):
         yield

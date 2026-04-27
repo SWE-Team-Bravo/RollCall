@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from email.message import Message
 import smtplib
-from unittest.mock import patch, MagicMock
+from email.message import Message
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,7 +20,7 @@ from utils.waiver_email import (
 @pytest.fixture(autouse=True)
 def mock_templates():
     with patch(
-        "utils.at_risk_email.get_email_template",
+        "utils.waiver_email.get_email_template",
         side_effect=lambda k: _DEFAULT_TEMPLATES[k],
     ):
         yield

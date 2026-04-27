@@ -9,7 +9,12 @@ from utils.db_schema_crud import (
 
 
 def _make_user(uid, first, last, email):
-    return {"_id": ObjectId(uid), "first_name": first, "last_name": last, "email": email}
+    return {
+        "_id": ObjectId(uid),
+        "first_name": first,
+        "last_name": last,
+        "email": email,
+    }
 
 
 def _make_cadet(cid, uid, rank="100"):

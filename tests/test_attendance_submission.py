@@ -1,16 +1,17 @@
 import os
-import pytest
 import subprocess
-import requests
-import requests.adapters
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import sleep, time
-from datetime import datetime, timedelta, timezone
+
+import pytest
+import requests
+import requests.adapters
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _VENV = _REPO_ROOT / ".venv"
@@ -144,7 +145,8 @@ def active_event():
     """Insert a wide-window PT event so the attendance page never hits st.stop()."""
     try:
         from pymongo import MongoClient
-        from config.settings import MONGODB_URI, MONGODB_DB
+
+        from config.settings import MONGODB_DB, MONGODB_URI
     except Exception:
         return  # no DB available — skip silently, tests will fail on their own
 
@@ -330,10 +332,12 @@ def test_invalid_code_shows_error(browser):
 
 # Test 11
 def test_checked_in_success_with_valid_code(browser):
-    from pymongo import MongoClient
-    from config.settings import MONGODB_URI, MONGODB_DB
     from datetime import datetime, timedelta, timezone
+
     from bson import ObjectId
+    from pymongo import MongoClient
+
+    from config.settings import MONGODB_DB, MONGODB_URI
 
     try:
         client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
