@@ -403,6 +403,12 @@ def _submit_standing_waiver(
         st.session_state.show_success = (
             "Standing waiver request submitted successfully!"
         )
+        for key in (
+            "waiver_standing_toggle",
+            "waiver_standing_range",
+            "waiver_standing_event_types",
+        ):
+            st.session_state.pop(key, None)
     st.rerun()
 
 
@@ -440,21 +446,64 @@ def waiver_form(
     today = datetime.now(timezone.utc).date()
     common_reasons = get_common_reasons()
 
+    standing_range = None
+    standing_event_types: list[str] = []
+    standing_error: str | None = None
+    standing_ready = False
+
+    if is_standing_mode:
+        standing_range = st.date_input(
+            "Standing waiver date range",
+            value=(today, today + timedelta(days=7)),
+            key="waiver_standing_range",
+            help="Inclusive start and end dates. Only PT/LLAB days in the range are covered.",
+        )
+        standing_event_types = st.multiselect(
+            "Event types covered",
+            options=["pt", "lab"],
+            default=["pt", "lab"],
+            format_func=lambda t: {"pt": "PT", "lab": "LLAB"}.get(t, t),
+            key="waiver_standing_event_types",
+        )
+
+        parsed_start, parsed_end, range_complete = parse_streamlit_date_range(
+            standing_range, today, today
+        )
+        if not range_complete:
+            st.info("Select an end date to preview the covered events.")
+        elif not standing_event_types:
+            standing_error = "Select at least one event type for the standing waiver."
+            st.error(standing_error)
+        else:
+            is_valid, why = validate_standing_waiver(
+                parsed_start, parsed_end, standing_event_types
+            )
+            if not is_valid:
+                standing_error = why
+                st.error(why)
+            else:
+                preview = compute_standing_waiver_dates(
+                    parsed_start, parsed_end, standing_event_types
+                )
+                st.caption(f"This waiver would cover {len(preview)} event(s).")
+                if preview:
+                    preview_rows = [
+                        {
+                            "Date": p["date"].strftime("%Y-%m-%d"),
+                            "Day": p["day"],
+                            "Type": p["type"],
+                        }
+                        for p in preview
+                    ]
+                    st.dataframe(
+                        pd.DataFrame(preview_rows),
+                        hide_index=True,
+                        width="stretch",
+                    )
+                standing_ready = True
+
     with st.form("waiver_form", clear_on_submit=True):
         if is_standing_mode:
-            standing_range = st.date_input(
-                "Standing waiver date range",
-                value=(today, today + timedelta(days=7)),
-                key="waiver_standing_range",
-                help="Inclusive start and end dates. Only PT/LLAB days in the range are covered.",
-            )
-            standing_event_types = st.multiselect(
-                "Event types covered",
-                options=["pt", "lab"],
-                default=["pt", "lab"],
-                format_func=lambda t: {"pt": "PT", "lab": "LLAB"}.get(t, t),
-                key="waiver_standing_event_types",
-            )
             label = ""
         else:
             label = st.selectbox(
@@ -462,8 +511,6 @@ def waiver_form(
                 options=list(record_labels.keys()),
                 index=default_index,
             )
-            standing_range = None
-            standing_event_types = []
 
         waiver_type = st.radio(
             "Waiver type",
@@ -513,47 +560,26 @@ def waiver_form(
         with col2:
             cancel = st.form_submit_button("Cancel", type="secondary")
 
-    if is_standing_mode and standing_range is not None:
-        parsed_start, parsed_end, range_complete = parse_streamlit_date_range(
-            standing_range, today, today
-        )
-        if range_complete:
-            preview = compute_standing_waiver_dates(
-                parsed_start, parsed_end, standing_event_types
-            )
-            st.caption(f"This waiver would cover {len(preview)} event(s).")
-            if preview:
-                preview_rows = [
-                    {
-                        "Date": p["date"].strftime("%Y-%m-%d"),
-                        "Day": p["day"],
-                        "Type": p["type"],
-                    }
-                    for p in preview
-                ]
-                st.dataframe(
-                    pd.DataFrame(preview_rows),
-                    hide_index=True,
-                    width="stretch",
-                )
-        else:
-            st.info("Select an end date to preview the covered events.")
-
     if submit:
         reason_text = _build_reason_text(common_reasons, selected_reason, extra_details)
         if not reason_text:
-            st.error("Please provide a reason for your waiver request.")
-        elif is_standing_mode:
-            parsed_start, parsed_end, range_complete = parse_streamlit_date_range(
-                standing_range, today, today
+            st.session_state.show_error = (
+                "Please provide a reason for your waiver request."
             )
-            if not range_complete:
-                st.error(
+            st.rerun()
+        elif is_standing_mode:
+            if standing_error:
+                st.session_state.show_error = standing_error
+                st.rerun()
+            elif not standing_ready:
+                st.session_state.show_error = (
                     "Select a complete start and end date for the standing waiver."
                 )
-            elif not standing_event_types:
-                st.error("Select at least one event type for the standing waiver.")
+                st.rerun()
             else:
+                parsed_start, parsed_end, _ = parse_streamlit_date_range(
+                    standing_range, today, today
+                )
                 _submit_standing_waiver(
                     user_id=user_id,
                     start=parsed_start,
@@ -591,13 +617,6 @@ if "show_success" not in st.session_state:
 if "show_error" not in st.session_state:
     st.session_state.show_error = None
 
-if st.session_state.show_success:
-    st.success(st.session_state.show_success)
-    st.session_state.show_success = None
-if st.session_state.show_error:
-    st.error(st.session_state.show_error)
-    st.session_state.show_error = None
-
 current_user = get_current_user()
 assert current_user is not None
 
@@ -625,3 +644,10 @@ with st.expander(
     "Submit New Waiver Request", expanded=st.session_state.waiver_record_id is not None
 ):
     waiver_form(str(user["_id"]), records, waivers_by_record_id, events_by_id)
+
+if st.session_state.show_success:
+    st.success(st.session_state.show_success)
+    st.session_state.show_success = None
+if st.session_state.show_error:
+    st.error(st.session_state.show_error)
+    st.session_state.show_error = None
