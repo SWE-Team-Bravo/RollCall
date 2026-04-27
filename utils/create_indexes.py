@@ -21,6 +21,8 @@ def create_indexes() -> None:
     _drop_if_exists(db["events"], "archived")
     _drop_if_exists(db["events"], "start_date")
     _drop_if_exists(db["waivers"], "submitted_by_user_id")
+    _drop_if_exists(db["waivers"], "attendance_record_id_unique")
+    _drop_if_exists(db["waivers"], "attendance_record_id_active_unique")
 
     db["users"].create_indexes(
         [
@@ -83,7 +85,8 @@ def create_indexes() -> None:
                 name="attendance_record_id_active_unique",
                 unique=True,
                 partialFilterExpression={
-                    "status": {"$in": ["pending", "approved", "denied", "auto_denied"]}
+                    "attendance_record_id": {"$type": "objectId"},
+                    "status": {"$in": ["pending", "approved", "denied", "auto_denied"]},
                 },
             ),
             IndexModel(
