@@ -213,6 +213,42 @@ def test_get_waiver_context_returns_none_if_no_record_id():
     assert result is None
 
 
+def test_get_waiver_context_returns_standing_waiver_context():
+    standing = {
+        "_id": "w_standing",
+        "is_standing": True,
+        "submitted_by_user_id": "user1",
+        "start_date": datetime(2026, 4, 27, tzinfo=timezone.utc),
+        "end_date": datetime(2026, 5, 3, tzinfo=timezone.utc),
+        "event_types": ["pt", "lab"],
+        "waiver_type": "non-medical",
+        "attachments": [],
+    }
+    with (
+        patch("services.waiver_review.get_cadet_by_user_id", return_value=CADET),
+        patch("services.waiver_review.get_user_by_id", return_value=USER),
+        patch("services.waiver_review.get_flight_by_id", return_value=FLIGHT),
+    ):
+        result = get_waiver_context(standing)
+    assert result is not None
+    assert result["cadet_name"] == "Tyler Brooks"
+    assert result["flight_name"] == "Alpha Flight"
+    assert result["event_type"] == "standing"
+    assert "Standing waiver" in result["event_name"]
+    assert "→" in result["event_date"]
+
+
+def test_get_waiver_context_standing_returns_none_when_submitter_missing():
+    standing = {
+        "_id": "w_standing",
+        "is_standing": True,
+        "start_date": datetime(2026, 4, 27, tzinfo=timezone.utc),
+        "end_date": datetime(2026, 5, 3, tzinfo=timezone.utc),
+    }
+    result = get_waiver_context(standing)
+    assert result is None
+
+
 def test_get_waiver_context_returns_none_if_record_missing():
     with patch("services.waiver_review.get_attendance_record_by_id", return_value=None):
         result = get_waiver_context(WAIVER)
@@ -344,6 +380,97 @@ def test_submit_decision_skips_email_if_no_cadet_email():
     ):
         submit_decision("w1", "approver1", "Approve", "", "", "PT", "2026-03-01")
         mock_email.assert_not_called()
+
+
+def test_submit_decision_approve_distributes_excused():
+    pending_waiver = {"_id": "w1", "status": "pending"}
+    with (
+        patch(
+            "services.waiver_review.get_waiver_by_id", return_value=pending_waiver
+        ),
+        patch("services.waiver_review.update_waiver", return_value=True),
+        patch("services.waiver_review.create_waiver_approval", return_value=True),
+        patch("services.waiver_review.send_waiver_decision_email"),
+        patch(
+            "services.waiver_review.distribute_excused_status", return_value=1
+        ) as mock_distribute,
+        patch("services.waiver_review.revert_excused_status") as mock_revert,
+    ):
+        submit_decision(
+            "w1", "approver1", "Approve", "", "tyler@test.com", "PT", "2026-03-01"
+        )
+
+    mock_distribute.assert_called_once()
+    assert mock_distribute.call_args[0][0] is pending_waiver
+    mock_revert.assert_not_called()
+
+
+def test_submit_decision_deny_does_not_distribute_when_was_pending():
+    pending_waiver = {"_id": "w1", "status": "pending"}
+    with (
+        patch(
+            "services.waiver_review.get_waiver_by_id", return_value=pending_waiver
+        ),
+        patch("services.waiver_review.update_waiver", return_value=True),
+        patch("services.waiver_review.create_waiver_approval", return_value=True),
+        patch("services.waiver_review.send_waiver_decision_email"),
+        patch(
+            "services.waiver_review.distribute_excused_status"
+        ) as mock_distribute,
+        patch("services.waiver_review.revert_excused_status") as mock_revert,
+    ):
+        submit_decision(
+            "w1", "approver1", "Deny", "x", "tyler@test.com", "PT", "2026-03-01"
+        )
+
+    mock_distribute.assert_not_called()
+    mock_revert.assert_not_called()
+
+
+def test_submit_decision_deny_reverts_when_previously_approved():
+    approved_waiver = {"_id": "w1", "status": "approved"}
+    with (
+        patch(
+            "services.waiver_review.get_waiver_by_id", return_value=approved_waiver
+        ),
+        patch("services.waiver_review.update_waiver", return_value=True),
+        patch("services.waiver_review.create_waiver_approval", return_value=True),
+        patch("services.waiver_review.send_waiver_decision_email"),
+        patch(
+            "services.waiver_review.distribute_excused_status"
+        ) as mock_distribute,
+        patch(
+            "services.waiver_review.revert_excused_status", return_value=1
+        ) as mock_revert,
+    ):
+        submit_decision(
+            "w1", "approver1", "Deny", "x", "tyler@test.com", "PT", "2026-03-01"
+        )
+
+    mock_revert.assert_called_once()
+    mock_distribute.assert_not_called()
+
+
+def test_submit_decision_approve_skips_distribute_when_already_approved():
+    approved_waiver = {"_id": "w1", "status": "approved"}
+    with (
+        patch(
+            "services.waiver_review.get_waiver_by_id", return_value=approved_waiver
+        ),
+        patch("services.waiver_review.update_waiver", return_value=True),
+        patch("services.waiver_review.create_waiver_approval", return_value=True),
+        patch("services.waiver_review.send_waiver_decision_email"),
+        patch(
+            "services.waiver_review.distribute_excused_status"
+        ) as mock_distribute,
+        patch("services.waiver_review.revert_excused_status") as mock_revert,
+    ):
+        submit_decision(
+            "w1", "approver1", "Approve", "", "tyler@test.com", "PT", "2026-03-01"
+        )
+
+    mock_distribute.assert_not_called()
+    mock_revert.assert_not_called()
 
 
 # -------------------test get_waiver_export_df ------------------------------------

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo, available_timezones
 from bson import ObjectId
 
 from utils.audit_log import log_data_change, serialize_doc_for_audit
+from utils.date_range import expand_event_dates
 from utils.db import get_db
 from utils.datetime_utils import ensure_utc
 
@@ -303,18 +304,9 @@ def preview_semester_schedule(
     skip_dates: list[date],
 ) -> list[dict]:
     """Return a list of events that would be created (no DB writes)."""
-    skip_set = set(skip_dates)
-    events = []
-    current = semester_start
-    while current <= semester_end:
-        day_name = current.strftime("%A")
-        if current not in skip_set:
-            if day_name in pt_days:
-                events.append({"date": current, "type": "PT", "day": day_name})
-            elif day_name in llab_days:
-                events.append({"date": current, "type": "LLAB", "day": day_name})
-        current += timedelta(days=1)
-    return events
+    return expand_event_dates(
+        semester_start, semester_end, pt_days, llab_days, skip_dates
+    )
 
 
 def archive_event(

@@ -1,13 +1,19 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import patch, MagicMock
 
+from bson import ObjectId
+
 from services.waivers import (
-    get_all_waivers_for_cadet,
+    apply_sickness_auto_approval,
+    compute_standing_waiver_dates,
+    distribute_excused_status,
     get_absent_records_without_waiver,
+    get_all_waivers_for_cadet,
     get_common_reasons,
     is_first_sickness_waiver,
-    apply_sickness_auto_approval,
     resubmit_auto_denied_waiver,
+    revert_excused_status,
+    validate_standing_waiver,
     withdraw_waiver,
 )
 
@@ -467,3 +473,337 @@ def test_apply_sickness_auto_approval_comment_mentions_auto():
         apply_sickness_auto_approval("w1", "user1")
         comments = mock_approval.call_args[1]["comments"]
         assert "auto" in comments.lower()
+
+
+# =============================================================================
+# compute_standing_waiver_dates / validate_standing_waiver
+# =============================================================================
+
+_PT_DAYS = ["Monday", "Tuesday", "Thursday"]
+_LLAB_DAYS = ["Friday"]
+_MON = date(2026, 4, 27)
+_FRI = date(2026, 5, 1)
+_SUN = date(2026, 5, 3)
+
+
+def _patched_event_config():
+    return patch(
+        "services.waivers.get_event_config",
+        return_value={"pt_days": _PT_DAYS, "llab_days": _LLAB_DAYS},
+    )
+
+
+def test_compute_standing_dates_default_event_types_returns_pt_and_llab():
+    with _patched_event_config():
+        result = compute_standing_waiver_dates(_MON, _SUN)
+    types = {r["type"] for r in result}
+    assert types == {"PT", "LLAB"}
+    assert len(result) == 4
+
+
+def test_compute_standing_dates_pt_only():
+    with _patched_event_config():
+        result = compute_standing_waiver_dates(_MON, _SUN, event_types=["pt"])
+    assert all(r["type"] == "PT" for r in result)
+    assert len(result) == 3
+
+
+def test_compute_standing_dates_lab_only():
+    with _patched_event_config():
+        result = compute_standing_waiver_dates(_MON, _SUN, event_types=["lab"])
+    assert all(r["type"] == "LLAB" for r in result)
+    assert len(result) == 1
+
+
+def test_validate_standing_rejects_end_before_start():
+    with _patched_event_config():
+        ok, why = validate_standing_waiver(_FRI, _MON)
+    assert ok is False
+    assert "End date" in why
+
+
+def test_validate_standing_rejects_cross_year():
+    with (
+        _patched_event_config(),
+        patch(
+            "services.waivers.datetime",
+            wraps=datetime,
+        ) as mock_dt,
+    ):
+        mock_dt.now.return_value = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        ok, why = validate_standing_waiver(date(2025, 12, 1), date(2025, 12, 7))
+    assert ok is False
+    assert "current year" in why
+
+
+def test_validate_standing_rejects_empty_range_with_no_eligible_days():
+    with (
+        _patched_event_config(),
+        patch(
+            "services.waivers.datetime",
+            wraps=datetime,
+        ) as mock_dt,
+    ):
+        mock_dt.now.return_value = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        ok, why = validate_standing_waiver(date(2026, 5, 2), date(2026, 5, 3))
+    assert ok is False
+    assert "PT" in why or "LLAB" in why
+
+
+def test_validate_standing_accepts_valid_range():
+    with (
+        _patched_event_config(),
+        patch(
+            "services.waivers.datetime",
+            wraps=datetime,
+        ) as mock_dt,
+    ):
+        mock_dt.now.return_value = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        ok, why = validate_standing_waiver(_MON, _SUN)
+    assert ok is True
+    assert why == ""
+
+
+# =============================================================================
+# distribute_excused_status (singular waiver)
+# =============================================================================
+
+
+def test_distribute_singular_flips_absent_to_excused():
+    waiver = {
+        "_id": "w1",
+        "is_standing": False,
+        "attendance_record_id": ObjectId("a" * 24),
+    }
+    record = {
+        "_id": ObjectId("a" * 24),
+        "cadet_id": ObjectId("b" * 24),
+        "event_id": ObjectId("c" * 24),
+        "status": "absent",
+    }
+
+    with (
+        patch(
+            "services.waivers.get_attendance_record_by_id", return_value=record
+        ),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+        patch("services.waivers.log_attendance_modification") as mock_log,
+    ):
+        n = distribute_excused_status(waiver, ObjectId("d" * 24))
+
+    assert n == 1
+    assert mock_upsert.call_args.kwargs["status"] == "excused"
+    assert mock_log.call_args.kwargs["new_status"] == "excused"
+
+
+def test_distribute_singular_skips_present_record():
+    waiver = {
+        "_id": "w1",
+        "is_standing": False,
+        "attendance_record_id": ObjectId("a" * 24),
+    }
+    record = {
+        "_id": ObjectId("a" * 24),
+        "cadet_id": ObjectId("b" * 24),
+        "event_id": ObjectId("c" * 24),
+        "status": "present",
+    }
+
+    with (
+        patch(
+            "services.waivers.get_attendance_record_by_id", return_value=record
+        ),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+        patch("services.waivers.log_attendance_modification") as mock_log,
+    ):
+        n = distribute_excused_status(waiver, ObjectId("d" * 24))
+
+    assert n == 0
+    mock_upsert.assert_not_called()
+    mock_log.assert_not_called()
+
+
+def test_distribute_singular_returns_zero_when_record_missing():
+    waiver = {
+        "_id": "w1",
+        "is_standing": False,
+        "attendance_record_id": ObjectId("a" * 24),
+    }
+
+    with (
+        patch("services.waivers.get_attendance_record_by_id", return_value=None),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+    ):
+        n = distribute_excused_status(waiver, ObjectId("d" * 24))
+
+    assert n == 0
+    mock_upsert.assert_not_called()
+
+
+# =============================================================================
+# distribute_excused_status (standing waiver)
+# =============================================================================
+
+
+def _standing_waiver(event_types=None):
+    return {
+        "_id": ObjectId("e" * 24),
+        "is_standing": True,
+        "submitted_by_user_id": ObjectId("f" * 24),
+        "start_date": datetime(2026, 4, 27, tzinfo=timezone.utc),
+        "end_date": datetime(2026, 5, 3, 23, 59, 59, tzinfo=timezone.utc),
+        "event_types": event_types or ["pt", "lab"],
+    }
+
+
+def test_distribute_standing_excuses_all_absent_records_in_range():
+    cadet_id = ObjectId("b" * 24)
+    cadet = {"_id": cadet_id, "user_id": ObjectId("f" * 24)}
+    event_a = {"_id": ObjectId("c" * 24), "event_type": "pt"}
+    event_b = {"_id": ObjectId("d" * 24), "event_type": "lab"}
+    record_a = {
+        "_id": ObjectId("1" * 24),
+        "cadet_id": cadet_id,
+        "event_id": event_a["_id"],
+        "status": "absent",
+    }
+    record_b = {
+        "_id": ObjectId("2" * 24),
+        "cadet_id": cadet_id,
+        "event_id": event_b["_id"],
+        "status": "absent",
+    }
+
+    with (
+        patch("services.waivers.get_cadet_by_user_id", return_value=cadet),
+        patch(
+            "services.waivers.get_events_by_date_range",
+            return_value=[event_a, event_b],
+        ),
+        patch(
+            "services.waivers.get_attendance_record_by_event_cadet",
+            side_effect=[record_a, record_b],
+        ),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+        patch("services.waivers.log_attendance_modification"),
+    ):
+        n = distribute_excused_status(_standing_waiver(), ObjectId("d" * 24))
+
+    assert n == 2
+    assert mock_upsert.call_count == 2
+
+
+def test_distribute_standing_skips_records_already_present():
+    cadet_id = ObjectId("b" * 24)
+    cadet = {"_id": cadet_id, "user_id": ObjectId("f" * 24)}
+    event = {"_id": ObjectId("c" * 24), "event_type": "pt"}
+    record = {
+        "_id": ObjectId("1" * 24),
+        "cadet_id": cadet_id,
+        "event_id": event["_id"],
+        "status": "present",
+    }
+
+    with (
+        patch("services.waivers.get_cadet_by_user_id", return_value=cadet),
+        patch(
+            "services.waivers.get_events_by_date_range",
+            return_value=[event],
+        ),
+        patch(
+            "services.waivers.get_attendance_record_by_event_cadet",
+            return_value=record,
+        ),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+        patch("services.waivers.log_attendance_modification"),
+    ):
+        n = distribute_excused_status(_standing_waiver(), ObjectId("d" * 24))
+
+    assert n == 0
+    mock_upsert.assert_not_called()
+
+
+def test_distribute_standing_returns_zero_when_no_cadet():
+    with (
+        patch("services.waivers.get_cadet_by_user_id", return_value=None),
+        patch("services.waivers.get_events_by_date_range") as mock_events,
+    ):
+        n = distribute_excused_status(_standing_waiver(), ObjectId("d" * 24))
+
+    assert n == 0
+    mock_events.assert_not_called()
+
+
+def test_distribute_standing_passes_event_types_filter():
+    cadet = {"_id": ObjectId("b" * 24), "user_id": ObjectId("f" * 24)}
+
+    with (
+        patch("services.waivers.get_cadet_by_user_id", return_value=cadet),
+        patch(
+            "services.waivers.get_events_by_date_range", return_value=[]
+        ) as mock_events,
+        patch("services.waivers.get_attendance_record_by_event_cadet"),
+        patch("services.waivers.upsert_attendance_record"),
+        patch("services.waivers.log_attendance_modification"),
+    ):
+        distribute_excused_status(
+            _standing_waiver(event_types=["pt"]), ObjectId("d" * 24)
+        )
+
+    assert mock_events.call_args.kwargs["event_types"] == ["pt"]
+
+
+# =============================================================================
+# revert_excused_status
+# =============================================================================
+
+
+def test_revert_singular_flips_excused_back_to_absent():
+    waiver = {
+        "_id": "w1",
+        "is_standing": False,
+        "attendance_record_id": ObjectId("a" * 24),
+    }
+    record = {
+        "_id": ObjectId("a" * 24),
+        "cadet_id": ObjectId("b" * 24),
+        "event_id": ObjectId("c" * 24),
+        "status": "excused",
+    }
+
+    with (
+        patch(
+            "services.waivers.get_attendance_record_by_id", return_value=record
+        ),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+        patch("services.waivers.log_attendance_modification"),
+    ):
+        n = revert_excused_status(waiver, ObjectId("d" * 24))
+
+    assert n == 1
+    assert mock_upsert.call_args.kwargs["status"] == "absent"
+
+
+def test_revert_singular_leaves_present_alone():
+    waiver = {
+        "_id": "w1",
+        "is_standing": False,
+        "attendance_record_id": ObjectId("a" * 24),
+    }
+    record = {
+        "_id": ObjectId("a" * 24),
+        "cadet_id": ObjectId("b" * 24),
+        "event_id": ObjectId("c" * 24),
+        "status": "present",
+    }
+
+    with (
+        patch(
+            "services.waivers.get_attendance_record_by_id", return_value=record
+        ),
+        patch("services.waivers.upsert_attendance_record") as mock_upsert,
+    ):
+        n = revert_excused_status(waiver, ObjectId("d" * 24))
+
+    assert n == 0
+    mock_upsert.assert_not_called()

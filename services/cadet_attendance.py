@@ -1,27 +1,60 @@
 from datetime import datetime, timezone
 
+from utils.datetime_utils import ensure_utc
 from utils.db_schema_crud import (
     get_attendance_by_cadet,
     get_events_by_ids,
-    get_waivers_by_attendance_records,
     get_flight_by_id,
+    get_standing_waivers_by_user,
+    get_waivers_by_attendance_records,
 )
 from utils.attendance_status import get_effective_attendance_status
 from services.attendance_merge import merge_attendance_records
 
 
-def load_attendance_db(cadet_id: str) -> tuple[list[dict], list[dict], list[dict]]:
+def load_attendance_db(
+    cadet_id: str, user_id=None
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     records = get_attendance_by_cadet(cadet_id)
     if not records:
-        return [], [], []
+        return [], [], [], []
 
     event_ids = list({r["event_id"] for r in records})
     record_ids = [r["_id"] for r in records]
 
     events = get_events_by_ids(event_ids)
     waivers = get_waivers_by_attendance_records(record_ids)
+    standing_waivers = (
+        get_standing_waivers_by_user(user_id) if user_id is not None else []
+    )
 
-    return records, events, waivers
+    return records, events, waivers, standing_waivers
+
+
+def _covering_standing_waiver(
+    event: dict, standing_waivers: list[dict]
+) -> dict | None:
+    """Return the approved standing waiver that covers this event, if any."""
+    start = event.get("start_date")
+    if not isinstance(start, datetime):
+        return None
+    start = ensure_utc(start)
+    event_type = (event.get("event_type") or "").lower()
+
+    for waiver in standing_waivers:
+        if (waiver.get("status") or "").lower() != "approved":
+            continue
+        w_start = waiver.get("start_date")
+        w_end = waiver.get("end_date")
+        if not (isinstance(w_start, datetime) and isinstance(w_end, datetime)):
+            continue
+        if not (ensure_utc(w_start) <= start <= ensure_utc(w_end)):
+            continue
+        types = {t.lower() for t in (waiver.get("event_types") or ["pt", "lab"])}
+        if event_type and event_type not in types:
+            continue
+        return waiver
+    return None
 
 
 def load_cadet_flights(cadet: dict) -> list[dict]:
@@ -48,10 +81,12 @@ def cadet_attendance(
     records: list[dict],
     events: list[dict],
     waivers: list[dict],
+    standing_waivers: list[dict] | None = None,
 ) -> list[dict]:
     records = merge_attendance_records(records, key_fields=("event_id", "cadet_id"))
     event_map = {e["_id"]: e for e in events}
     waiver_map = {w["attendance_record_id"]: w for w in waivers}
+    standing = standing_waivers or []
 
     rows = []
     for record in records:
@@ -62,6 +97,10 @@ def cadet_attendance(
             continue
 
         waiver_status = (waiver.get("status") or "").lower() if waiver else None
+        if waiver_status is None and standing:
+            covering = _covering_standing_waiver(event, standing)
+            if covering is not None:
+                waiver_status = "approved"
         status = get_effective_attendance_status(
             record.get("status") or "—",
             waiver_status,

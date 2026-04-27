@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -9,20 +9,24 @@ from services.admin_users import confirm_destructive_action
 from services.waivers import (
     WAIVER_STATUS_BADGE,
     apply_sickness_auto_approval,
+    compute_standing_waiver_dates,
     get_absent_records_without_waiver,
     get_common_reasons,
     resolve_cadre_only,
     resubmit_auto_denied_waiver,
+    validate_standing_waiver,
     withdraw_waiver,
 )
 from utils.auth import get_current_user, require_role
 from utils.auth_logic import user_has_any_role
+from utils.date_range import parse_streamlit_date_range
 from utils.db_schema_crud import (
     create_waiver,
     get_approvals_by_waiver,
     get_attendance_by_cadet,
     get_cadet_by_user_id,
     get_event_by_id,
+    get_standing_waivers_by_user,
     get_user_by_email,
     get_waiver_by_attendance_record,
     get_waiver_by_id,
@@ -35,7 +39,9 @@ STATUS_BADGE = WAIVER_STATUS_BADGE
 require_role("cadet")
 
 
-def load_waiver_data(cadet_id) -> tuple[list[dict], dict, list[dict], dict]:
+def load_waiver_data(
+    cadet_id, user_id
+) -> tuple[list[dict], dict, list[dict], dict]:
     records = get_attendance_by_cadet(cadet_id)
     waivers_by_record_id = {}
     all_waivers: list[dict] = []
@@ -57,6 +63,8 @@ def load_waiver_data(cadet_id) -> tuple[list[dict], dict, list[dict], dict]:
             if event:
                 events_by_id[event_id] = event
 
+    all_waivers.extend(get_standing_waivers_by_user(user_id))
+
     return records, waivers_by_record_id, all_waivers, events_by_id
 
 
@@ -70,13 +78,31 @@ def show_waivers(
 
     waivers = []
     for w in all_waivers:
+        entry = dict(w)
+        if w.get("is_standing"):
+            start = w.get("start_date")
+            end = w.get("end_date")
+            start_str = (
+                start.strftime("%Y-%m-%d")
+                if isinstance(start, datetime)
+                else "Unknown"
+            )
+            end_str = (
+                end.strftime("%Y-%m-%d")
+                if isinstance(end, datetime)
+                else "Unknown"
+            )
+            entry["_event_name"] = "Standing waiver"
+            entry["_event_date"] = f"{start_str} → {end_str}"
+            waivers.append(entry)
+            continue
+
         record = next(
             (r for r in records if r["_id"] == w.get("attendance_record_id")), None
         )
         if record is None:
             continue
         event = events_by_id.get(record.get("event_id"))
-        entry = dict(w)
         entry["_event_name"] = event.get("event_name") if event else "Unknown event"
         entry["_event_date"] = (
             event.get("start_date").strftime("%Y-%m-%d")
@@ -118,56 +144,11 @@ def show_waivers(
             value=(default_start, today),
         )
 
-    # Streamlit returns a single date while the user is mid-selecting a range.
-    start_date: date = default_start
-    end_date: date = today
-
-    if isinstance(date_value, date):
-        start_date = date_value
-        end_date = today
+    start_date, end_date, range_complete = parse_streamlit_date_range(
+        date_value, default_start, today
+    )
+    if not range_complete:
         st.info("Select an end date to complete the range (using today for now).")
-    elif isinstance(date_value, tuple):
-        match date_value:
-            case (start, end):
-                start_date = start
-                end_date = end
-            case (start,):
-                start_date = start
-                end_date = today
-                st.info(
-                    "Select an end date to complete the range (using today for now)."
-                )
-            case _:
-                start_date = default_start
-                end_date = today
-                st.info(
-                    "Select an end date to complete the range (using today for now)."
-                )
-    elif isinstance(date_value, list):
-        match tuple(date_value):
-            case (start, end):
-                start_date = start
-                end_date = end
-            case (start,):
-                start_date = start
-                end_date = today
-                st.info(
-                    "Select an end date to complete the range (using today for now)."
-                )
-            case _:
-                start_date = default_start
-                end_date = today
-                st.info(
-                    "Select an end date to complete the range (using today for now)."
-                )
-    else:
-        start_date = default_start
-        end_date = today
-        st.info("Select an end date to complete the range (using today for now).")
-
-    if start_date > end_date:
-        # Be forgiving for mid-selection / accidental reversal.
-        start_date, end_date = end_date, start_date
 
     with filter_col3:
         search = st.text_input("Search (event)", value="")
@@ -314,6 +295,121 @@ def dropdown_row(record: dict, events_by_id: dict) -> str:
     return str(record["_id"])
 
 
+def _build_attachments(uploaded_file) -> list[dict]:
+    if uploaded_file is None:
+        return []
+    return [
+        {
+            "filename": uploaded_file.name,
+            "content_type": uploaded_file.type or "application/octet-stream",
+            "data": uploaded_file.read(),
+        }
+    ]
+
+
+def _build_reason_text(common_reasons: list[str], selected_reason: str, extra: str) -> str:
+    if selected_reason == common_reasons[-1]:
+        return extra.strip()
+    return f"{selected_reason}. {extra}".strip(". ")
+
+
+def _submit_singular_waiver(
+    *,
+    user_id: str,
+    selected_record: dict,
+    reason_text: str,
+    waiver_type: str,
+    cadre_only: bool,
+    attachments: list[dict],
+):
+    existing = get_waiver_by_attendance_record(selected_record["_id"])
+    if (
+        existing
+        and (existing.get("status") or "").lower() == "denied"
+        and bool(existing.get("auto_denied"))
+    ):
+        became_pending, why = resubmit_auto_denied_waiver(
+            existing, selected_record["_id"], reason_text
+        )
+        if not became_pending:
+            st.session_state.show_error = (
+                f"Waiver is still invalid and was auto-denied again: {why}"
+            )
+        else:
+            st.session_state.show_success = (
+                "Waiver request submitted successfully!"
+            )
+        st.rerun()
+
+    result = create_waiver(
+        attendance_record_id=selected_record["_id"],
+        reason=reason_text,
+        status="pending",
+        submitted_by_user_id=user_id,
+        waiver_type=waiver_type,
+        cadre_only=cadre_only,
+        attachments=attachments,
+    )
+    if not result:
+        st.session_state.show_error = "Failed to submit waiver. Please try again."
+        st.rerun()
+        return
+
+    created = get_waiver_by_id(result.inserted_id)
+    created_status = (created.get("status") if created else "") or ""
+    if created_status.lower() == "denied":
+        st.session_state.show_error = (
+            "Waiver was auto-denied. See notes under your waiver status."
+        )
+    else:
+        if waiver_type == "sickness":
+            apply_sickness_auto_approval(result.inserted_id, user_id)
+        st.session_state.show_success = "Waiver request submitted successfully!"
+    st.rerun()
+
+
+def _submit_standing_waiver(
+    *,
+    user_id: str,
+    start: date,
+    end: date,
+    event_types: list[str],
+    reason_text: str,
+    waiver_type: str,
+    cadre_only: bool,
+    attachments: list[dict],
+):
+    is_valid, why = validate_standing_waiver(start, end, event_types)
+    if not is_valid:
+        st.session_state.show_error = f"Standing waiver invalid: {why}"
+        st.rerun()
+        return
+
+    start_dt = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end, time.max, tzinfo=timezone.utc)
+
+    result = create_waiver(
+        attendance_record_id=None,
+        reason=reason_text,
+        status="pending",
+        submitted_by_user_id=user_id,
+        waiver_type=waiver_type,
+        cadre_only=cadre_only,
+        attachments=attachments,
+        is_standing=True,
+        start_date=start_dt,
+        end_date=end_dt,
+        event_types=event_types,
+    )
+    if not result:
+        st.session_state.show_error = "Failed to submit waiver. Please try again."
+    else:
+        if waiver_type == "sickness":
+            apply_sickness_auto_approval(result.inserted_id, user_id)
+        st.session_state.show_success = "Standing waiver request submitted successfully!"
+    st.rerun()
+
+
 def waiver_form(
     user_id: str,
     records: list[dict],
@@ -324,27 +420,54 @@ def waiver_form(
     st.session_state.waiver_record_id = None
 
     absent_records = get_absent_records_without_waiver(records, waivers_by_record_id)
-    if not absent_records:
+    is_standing_mode = st.toggle(
+        "Standing waiver (covers a date range)",
+        value=False,
+        key="waiver_standing_toggle",
+        help="Use a standing waiver when you'll be absent for an extended span of PT/LLAB days.",
+    )
+
+    if not is_standing_mode and not absent_records:
         st.info("You don't have any absent records to submit a waiver for.")
         return
 
-    record_labels = {dropdown_row(r, events_by_id): r for r in absent_records}
-
+    record_labels: dict[str, dict] = {}
     default_index = 0
-    if record_id:
-        for i, record in enumerate(absent_records):
-            if str(record["_id"]) == record_id:
-                default_index = i
-                break
+    if not is_standing_mode:
+        record_labels = {dropdown_row(r, events_by_id): r for r in absent_records}
+        if record_id:
+            for i, record in enumerate(absent_records):
+                if str(record["_id"]) == record_id:
+                    default_index = i
+                    break
 
+    today = datetime.now(timezone.utc).date()
     common_reasons = get_common_reasons()
 
     with st.form("waiver_form", clear_on_submit=True):
-        label = st.selectbox(
-            "Select Absent Event",
-            options=list(record_labels.keys()),
-            index=default_index,
-        )
+        if is_standing_mode:
+            standing_range = st.date_input(
+                "Standing waiver date range",
+                value=(today, today + timedelta(days=7)),
+                key="waiver_standing_range",
+                help="Inclusive start and end dates. Only PT/LLAB days in the range are covered.",
+            )
+            standing_event_types = st.multiselect(
+                "Event types covered",
+                options=["pt", "lab"],
+                default=["pt", "lab"],
+                format_func=lambda t: {"pt": "PT", "lab": "LLAB"}.get(t, t),
+                key="waiver_standing_event_types",
+            )
+            label = ""
+        else:
+            label = st.selectbox(
+                "Select Absent Event",
+                options=list(record_labels.keys()),
+                index=default_index,
+            )
+            standing_range = None
+            standing_event_types = []
 
         waiver_type = st.radio(
             "Waiver type",
@@ -394,75 +517,64 @@ def waiver_form(
         with col2:
             cancel = st.form_submit_button("Cancel", type="secondary")
 
-    if submit:
-        reason_text = (
-            extra_details.strip()
-            if selected_reason == common_reasons[-1]
-            else f"{selected_reason}. {extra_details}".strip(". ")
+    if is_standing_mode and standing_range is not None:
+        parsed_start, parsed_end, range_complete = parse_streamlit_date_range(
+            standing_range, today, today
         )
+        if range_complete:
+            preview = compute_standing_waiver_dates(
+                parsed_start, parsed_end, standing_event_types
+            )
+            st.caption(f"This waiver would cover {len(preview)} event(s).")
+            if preview:
+                preview_rows = [
+                    {
+                        "Date": p["date"].strftime("%Y-%m-%d"),
+                        "Day": p["day"],
+                        "Type": p["type"],
+                    }
+                    for p in preview
+                ]
+                st.dataframe(
+                    pd.DataFrame(preview_rows),
+                    hide_index=True,
+                    width="stretch",
+                )
+        else:
+            st.info("Select an end date to preview the covered events.")
+
+    if submit:
+        reason_text = _build_reason_text(common_reasons, selected_reason, extra_details)
         if not reason_text:
             st.error("Please provide a reason for your waiver request.")
-        else:
-            selected_record = record_labels[label]
-            existing = get_waiver_by_attendance_record(selected_record["_id"])
-
-            attachments = []
-            if uploaded_file is not None:
-                attachments = [
-                    {
-                        "filename": uploaded_file.name,
-                        "content_type": uploaded_file.type
-                        or "application/octet-stream",
-                        "data": uploaded_file.read(),
-                    }
-                ]
-
-            if (
-                existing
-                and (existing.get("status") or "").lower() == "denied"
-                and bool(existing.get("auto_denied"))
-            ):
-                became_pending, why = resubmit_auto_denied_waiver(
-                    existing, selected_record["_id"], reason_text
-                )
-                if not became_pending:
-                    st.error(
-                        f"Waiver is still invalid and was auto-denied again: {why}"
-                    )
-                else:
-                    st.session_state.show_success = (
-                        "Waiver request submitted successfully!"
-                    )
-                st.rerun()
-
+        elif is_standing_mode:
+            parsed_start, parsed_end, range_complete = parse_streamlit_date_range(
+                standing_range, today, today
+            )
+            if not range_complete:
+                st.error("Select a complete start and end date for the standing waiver.")
+            elif not standing_event_types:
+                st.error("Select at least one event type for the standing waiver.")
             else:
-                result = create_waiver(
-                    attendance_record_id=selected_record["_id"],
-                    reason=reason_text,
-                    status="pending",
-                    submitted_by_user_id=user_id,
+                _submit_standing_waiver(
+                    user_id=user_id,
+                    start=parsed_start,
+                    end=parsed_end,
+                    event_types=standing_event_types,
+                    reason_text=reason_text,
                     waiver_type=waiver_type,
                     cadre_only=cadre_only,
-                    attachments=attachments,
+                    attachments=_build_attachments(uploaded_file),
                 )
-
-                if result:
-                    created = get_waiver_by_id(result.inserted_id)
-                    created_status = (created.get("status") if created else "") or ""
-                    if created_status.lower() == "denied":
-                        st.session_state.show_error = "Waiver was auto-denied. See notes under your waiver status."
-                    else:
-                        if waiver_type == "sickness":
-                            apply_sickness_auto_approval(result.inserted_id, user_id)
-                        st.session_state.show_success = (
-                            "Waiver request submitted successfully!"
-                        )
-                    st.rerun()
-                else:
-                    st.session_state.show_error = (
-                        "Failed to submit waiver. Please try again."
-                    )
-                    st.rerun()
+        else:
+            _submit_singular_waiver(
+                user_id=user_id,
+                selected_record=record_labels[label],
+                reason_text=reason_text,
+                waiver_type=waiver_type,
+                cadre_only=cadre_only,
+                attachments=_build_attachments(uploaded_file),
+            )
 
     if cancel:
         st.switch_page("pages/8_Cadet_Attendance.py")
@@ -506,7 +618,7 @@ if not cadet:
     cadet = get_temp_cadet()
 
 records, waivers_by_record_id, all_waivers, events_by_id = load_waiver_data(
-    cadet["_id"]
+    cadet["_id"], user["_id"]
 )
 show_waivers(records, all_waivers, events_by_id)
 

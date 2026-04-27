@@ -302,3 +302,79 @@ def test_get_cadet_flight_label_flights_empty():
     cadet = {"flight_id": "flight1"}
     flights = []
     assert get_cadet_flight_label(cadet, flights) == "—"
+
+
+# ---------------- standing waiver coverage ------------------
+
+
+def _standing_waiver(start_offset: int, end_offset: int, event_types=None, status="approved"):
+    return {
+        "_id": "ws1",
+        "is_standing": True,
+        "status": status,
+        "start_date": _dt(start_offset),
+        "end_date": _dt(end_offset),
+        "event_types": event_types or ["pt", "lab"],
+    }
+
+
+def test_standing_waiver_marks_record_as_excused():
+    records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
+    events = [
+        {"_id": "evt1", "event_name": "LLAB Week 2", "event_type": "lab", "start_date": _dt(2)}
+    ]
+    standing = [_standing_waiver(start_offset=5, end_offset=0)]
+
+    rows = cadet_attendance(records, events, [], standing_waivers=standing)
+
+    assert rows[0]["waiver_status"] == "approved"
+    assert rows[0]["status"] == "waived"
+
+
+def test_standing_waiver_outside_range_does_not_apply():
+    records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
+    events = [
+        {"_id": "evt1", "event_name": "PT", "event_type": "pt", "start_date": _dt(20)}
+    ]
+    standing = [_standing_waiver(start_offset=5, end_offset=0)]
+
+    rows = cadet_attendance(records, events, [], standing_waivers=standing)
+
+    assert rows[0]["waiver_status"] is None
+
+
+def test_standing_waiver_event_type_mismatch_does_not_apply():
+    records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
+    events = [
+        {"_id": "evt1", "event_name": "PT", "event_type": "pt", "start_date": _dt(2)}
+    ]
+    standing = [_standing_waiver(start_offset=5, end_offset=0, event_types=["lab"])]
+
+    rows = cadet_attendance(records, events, [], standing_waivers=standing)
+
+    assert rows[0]["waiver_status"] is None
+
+
+def test_pending_standing_waiver_does_not_excuse():
+    records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
+    events = [
+        {"_id": "evt1", "event_name": "PT", "event_type": "pt", "start_date": _dt(2)}
+    ]
+    standing = [_standing_waiver(start_offset=5, end_offset=0, status="pending")]
+
+    rows = cadet_attendance(records, events, [], standing_waivers=standing)
+
+    assert rows[0]["waiver_status"] is None
+
+
+def test_singular_waiver_takes_precedence_over_standing():
+    records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
+    events = [
+        {"_id": "evt1", "event_name": "PT", "event_type": "pt", "start_date": _dt(2)}
+    ]
+    waivers = [{"_id": "w1", "attendance_record_id": "rec1", "status": "denied"}]
+    standing = [_standing_waiver(start_offset=5, end_offset=0)]
+
+    rows = cadet_attendance(records, events, waivers, standing_waivers=standing)
+
+    assert rows[0]["waiver_status"] == "denied"

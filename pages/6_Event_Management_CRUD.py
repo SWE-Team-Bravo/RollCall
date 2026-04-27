@@ -24,6 +24,7 @@ from services.events import (
     update_event,
 )
 from utils.auth import require_role, get_current_user_doc
+from utils.date_range import parse_streamlit_date_range
 from utils.st_helpers import require
 
 require_role("admin", "cadre")
@@ -212,15 +213,11 @@ with st.expander("Generate Semester Schedule", expanded=False):
         key="gen_date_range",
     )
 
-    # st.date_input with a tuple value returns a tuple; guard partial selection
-    if isinstance(_gen_range, (list, tuple)) and len(_gen_range) == 2:
-        _gen_start: date | None = _gen_range[0]  # type: ignore
-        _gen_end: date | None = _gen_range[1]  # type: ignore
-        _range_complete = True
-    else:
-        _gen_start = None
-        _gen_end = None
-        _range_complete = False
+    _parsed_start, _parsed_end, _range_complete = parse_streamlit_date_range(
+        _gen_range, _today, _today
+    )
+    _gen_start: date | None = _parsed_start if _range_complete else None
+    _gen_end: date | None = _parsed_end if _range_complete else None
 
     st.divider()
 
