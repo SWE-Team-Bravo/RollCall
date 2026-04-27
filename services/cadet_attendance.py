@@ -31,9 +31,7 @@ def load_attendance_db(
     return records, events, waivers, standing_waivers
 
 
-def _covering_standing_waiver(
-    event: dict, standing_waivers: list[dict]
-) -> dict | None:
+def _covering_standing_waiver(event: dict, standing_waivers: list[dict]) -> dict | None:
     """Return the approved standing waiver that covers this event, if any."""
     start = event.get("start_date")
     if not isinstance(start, datetime):

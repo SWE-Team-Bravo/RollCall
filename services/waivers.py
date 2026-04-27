@@ -394,8 +394,10 @@ def _resolve_standing_target(
     submitter_id = waiver.get("submitted_by_user_id")
     start = waiver.get("start_date")
     end = waiver.get("end_date")
-    if submitter_id is None or not isinstance(start, datetime) or not isinstance(
-        end, datetime
+    if (
+        submitter_id is None
+        or not isinstance(start, datetime)
+        or not isinstance(end, datetime)
     ):
         return None
     cadet = get_cadet_by_user_id(submitter_id)

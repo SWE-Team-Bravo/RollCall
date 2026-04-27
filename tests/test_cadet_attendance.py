@@ -307,7 +307,9 @@ def test_get_cadet_flight_label_flights_empty():
 # ---------------- standing waiver coverage ------------------
 
 
-def _standing_waiver(start_offset: int, end_offset: int, event_types=None, status="approved"):
+def _standing_waiver(
+    start_offset: int, end_offset: int, event_types=None, status="approved"
+):
     return {
         "_id": "ws1",
         "is_standing": True,
@@ -321,7 +323,12 @@ def _standing_waiver(start_offset: int, end_offset: int, event_types=None, statu
 def test_standing_waiver_marks_record_as_excused():
     records = [{"_id": "rec1", "event_id": "evt1", "status": "absent"}]
     events = [
-        {"_id": "evt1", "event_name": "LLAB Week 2", "event_type": "lab", "start_date": _dt(2)}
+        {
+            "_id": "evt1",
+            "event_name": "LLAB Week 2",
+            "event_type": "lab",
+            "start_date": _dt(2),
+        }
     ]
     standing = [_standing_waiver(start_offset=5, end_offset=0)]
 

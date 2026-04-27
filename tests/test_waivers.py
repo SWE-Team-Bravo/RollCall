@@ -583,9 +583,7 @@ def test_distribute_singular_flips_absent_to_excused():
     }
 
     with (
-        patch(
-            "services.waivers.get_attendance_record_by_id", return_value=record
-        ),
+        patch("services.waivers.get_attendance_record_by_id", return_value=record),
         patch("services.waivers.upsert_attendance_record") as mock_upsert,
         patch("services.waivers.log_attendance_modification") as mock_log,
     ):
@@ -610,9 +608,7 @@ def test_distribute_singular_skips_present_record():
     }
 
     with (
-        patch(
-            "services.waivers.get_attendance_record_by_id", return_value=record
-        ),
+        patch("services.waivers.get_attendance_record_by_id", return_value=record),
         patch("services.waivers.upsert_attendance_record") as mock_upsert,
         patch("services.waivers.log_attendance_modification") as mock_log,
     ):
@@ -772,9 +768,7 @@ def test_revert_singular_flips_excused_back_to_absent():
     }
 
     with (
-        patch(
-            "services.waivers.get_attendance_record_by_id", return_value=record
-        ),
+        patch("services.waivers.get_attendance_record_by_id", return_value=record),
         patch("services.waivers.upsert_attendance_record") as mock_upsert,
         patch("services.waivers.log_attendance_modification"),
     ):
@@ -798,9 +792,7 @@ def test_revert_singular_leaves_present_alone():
     }
 
     with (
-        patch(
-            "services.waivers.get_attendance_record_by_id", return_value=record
-        ),
+        patch("services.waivers.get_attendance_record_by_id", return_value=record),
         patch("services.waivers.upsert_attendance_record") as mock_upsert,
     ):
         n = revert_excused_status(waiver, ObjectId("d" * 24))

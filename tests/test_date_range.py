@@ -141,14 +141,10 @@ def test_none_returns_defaults_incomplete() -> None:
 
 
 def test_empty_tuple_returns_defaults_incomplete() -> None:
-    start, end, complete = parse_streamlit_date_range(
-        (), _DEFAULT_START, _DEFAULT_END
-    )
+    start, end, complete = parse_streamlit_date_range((), _DEFAULT_START, _DEFAULT_END)
     assert (start, end, complete) == (_DEFAULT_START, _DEFAULT_END, False)
 
 
 def test_two_week_range_gives_eight_events() -> None:
-    result = expand_event_dates(
-        _MON, _MON + timedelta(days=13), _PT_DAYS, _LLAB_DAYS
-    )
+    result = expand_event_dates(_MON, _MON + timedelta(days=13), _PT_DAYS, _LLAB_DAYS)
     assert len(result) == 8
