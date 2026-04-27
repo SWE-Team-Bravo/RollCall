@@ -9,12 +9,12 @@ import subprocess
 from pathlib import Path
 from time import sleep, time
 
-import pytest  # type: ignore
+import pytest
 import requests
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _VENV = _REPO_ROOT / ".venv"

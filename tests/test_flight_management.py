@@ -1,14 +1,9 @@
-from unittest.mock import patch, MagicMock
-from bson import ObjectId
-import pandas as pd
-import pytest  # type: ignore
+from unittest.mock import MagicMock, patch
 
-from utils.db_schema_crud import (
-    create_flight,
-    unassign_cadet_from_flight,
-    assign_cadet_to_flight,
-    unassign_all_cadets_from_flight,
-)
+import pandas as pd
+import pytest
+from bson import ObjectId
+
 from services.cadets import assign_cadet_to_flight as assign_cadet_to_flight_service
 from services.flight_management import (
     assign_selected_cadets_to_flight,
@@ -18,11 +13,17 @@ from services.flight_management import (
     get_flight_commander_details,
     get_flight_management_cadet_rows,
     get_flight_member_table,
-    get_selectable_member_ids,
-    has_selected_assigned_cadets,
     get_member_selection_table,
+    get_selectable_member_ids,
     get_selected_cadet_ids,
+    has_selected_assigned_cadets,
     unassign_selected_cadets,
+)
+from utils.db_schema_crud import (
+    assign_cadet_to_flight,
+    create_flight,
+    unassign_all_cadets_from_flight,
+    unassign_cadet_from_flight,
 )
 
 
