@@ -526,6 +526,14 @@ def get_cadet_absence_stats() -> list[dict]:
             }
         },
         {
+            "$match": {
+                "$or": [
+                    {"waiver": None},
+                    {"waiver.status": {"$ne": "approved"}},
+                ]
+            }
+        },
+        {
             "$group": {
                 "_id": "$cadet_id",
                 "pt_absences": {
