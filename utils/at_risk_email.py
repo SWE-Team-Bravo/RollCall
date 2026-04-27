@@ -1,6 +1,4 @@
-import logging
 import os
-import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -17,6 +15,7 @@ from utils.db_schema_crud import (
     get_cadet_absence_stats,
 )
 from utils.names import format_full_name
+from utils.email_utils import send_with_retry
 from services.event_config import get_absence_thresholds, is_email_enabled
 
 
@@ -177,14 +176,7 @@ def send_email(to_email: str, msg: MIMEMultipart) -> bool:
     if not SENDER_EMAIL or not SENDER_PASSWORD:
         return False
 
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-        return True
-    except Exception:
-        logging.exception("Failed to send email to %s", to_email)
-        return False
+    return send_with_retry(SENDER_EMAIL, SENDER_PASSWORD, to_email, msg)
 
 
 def send_to_student(
@@ -210,16 +202,11 @@ def send_to_student(
         if last_pt == pt_absences and last_llab == llab_absences:
             return False
 
-    try:
-        msg = build_email_for_student(to_email, pt_absences, llab_absences)
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+    msg = build_email_for_student(to_email, pt_absences, llab_absences)
+    if send_with_retry(SENDER_EMAIL, SENDER_PASSWORD, to_email, msg):
         set_at_risk_email_sent(cadet_id, pt_absences, llab_absences)
         return True
-    except Exception:
-        logging.exception("Failed to send at-risk email to %s", to_email)
-        return False
+    return False
 
 
 def send_to_cadre(at_risk: list[dict], sent: int, failed: int) -> tuple[int, int]:

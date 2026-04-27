@@ -147,7 +147,7 @@ if pending_items:
                     )
                     if w is None:
                         continue
-                    ok, _ = submit_decision(
+                    ok, msg = submit_decision(
                         waiver_id=w["waiver_id"],
                         approver_id=approver_id,
                         decision=bulk_decision,
@@ -158,6 +158,8 @@ if pending_items:
                     )
                     if ok:
                         success_count += 1
+                        if msg:
+                            st.warning(msg)
                     else:
                         fail_count += 1
                 st.success(f"Applied to {success_count} waiver(s).")
@@ -224,6 +226,8 @@ for w in cast(list, paginated_rows["items"]):
                     )
                     if success:
                         st.success("Saved.")
+                        if err:
+                            st.warning(err)
                         st.rerun()
                     else:
                         st.error(err)

@@ -462,7 +462,7 @@ def submit_decision(
     )
 
     if cadet_email:
-        send_waiver_decision_email(
+        email_sent = send_waiver_decision_email(
             waiver_id=str(waiver_id),
             to_email=cadet_email,
             event_name=event_name or "Unknown event",
@@ -470,6 +470,11 @@ def submit_decision(
             status=new_status,
             comments=comments or "Approved.",
         )
+        if not email_sent:
+            return (
+                True,
+                f"Waiver {new_status}, but notification email to {cadet_email} could not be sent.",
+            )
 
     return True, ""
 
