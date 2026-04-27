@@ -7,18 +7,15 @@ from email.mime.text import MIMEText
 from services.email_templates import get_content, get_email_template
 from utils.db_schema_crud import (
     get_cadet_by_id,
-    get_events_by_type,
     get_all_cadets,
-    get_attendance_by_cadet,
-    get_waivers_by_attendance_records,
     get_flight_by_id,
     get_users_by_role,
     get_cadet_by_user_id,
     get_flight_by_commander,
     set_at_risk_email_sent,
     get_user_by_id,
+    get_cadet_absence_stats,
 )
-from utils.attendance_status import get_effective_attendance_status
 from utils.names import format_full_name
 from services.event_config import get_absence_thresholds, is_email_enabled
 
@@ -31,49 +28,15 @@ PT_ABSENCE_THRESHOLD, LLAB_ABSENCE_THRESHOLD = get_absence_thresholds()
 
 def get_at_risk_cadets() -> list[dict]:
     pt_threshold, llab_threshold = get_absence_thresholds()
-    pt_events_ids = {e["_id"] for e in get_events_by_type("pt")}
-    llab_events_ids = {e["_id"] for e in get_events_by_type("lab")}
 
+    stats = {s["cadet_id"]: s for s in get_cadet_absence_stats()}
     cadets = get_all_cadets()
-    records_by_cadet_id = {
-        cadet["_id"]: get_attendance_by_cadet(cadet["_id"]) for cadet in cadets
-    }
-    all_record_ids = [
-        record["_id"]
-        for records in records_by_cadet_id.values()
-        for record in records
-        if record.get("_id") is not None
-    ]
-    waivers_by_record_id = {
-        waiver["attendance_record_id"]: waiver
-        for waiver in get_waivers_by_attendance_records(all_record_ids)
-        if waiver.get("attendance_record_id") is not None
-    }
 
     at_risk = []
     for cadet in cadets:
-        records = records_by_cadet_id[cadet["_id"]]
-
-        pt_absences = sum(
-            1
-            for r in records
-            if get_effective_attendance_status(
-                r.get("status"),
-                waivers_by_record_id.get(r.get("_id"), {}).get("status"),
-            )
-            == "absent"
-            and r.get("event_id") in pt_events_ids
-        )
-        llab_absences = sum(
-            1
-            for r in records
-            if get_effective_attendance_status(
-                r.get("status"),
-                waivers_by_record_id.get(r.get("_id"), {}).get("status"),
-            )
-            == "absent"
-            and r.get("event_id") in llab_events_ids
-        )
+        s = stats.get(cadet["_id"], {"pt_absences": 0, "llab_absences": 0})
+        pt_absences = s["pt_absences"]
+        llab_absences = s["llab_absences"]
 
         if pt_absences >= pt_threshold - 1 or llab_absences >= llab_threshold - 1:
             at_risk.append(
