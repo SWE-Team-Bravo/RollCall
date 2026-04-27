@@ -1,12 +1,26 @@
 from pymongo import ASCENDING, IndexModel
+from pymongo.errors import OperationFailure
 
 from utils.db import get_db
+
+
+def _drop_if_exists(collection, index_name: str) -> None:
+    try:
+        collection.drop_index(index_name)
+    except OperationFailure:
+        pass
 
 
 def create_indexes() -> None:
     db = get_db()
     if db is None:
         raise ConnectionError("Could not connect to MongoDB")
+
+    # Drop indexes superseded by compound replacements.
+    _drop_if_exists(db["events"], "event_type")
+    _drop_if_exists(db["events"], "archived")
+    _drop_if_exists(db["events"], "start_date")
+    _drop_if_exists(db["waivers"], "submitted_by_user_id")
 
     db["users"].create_indexes(
         [
@@ -24,8 +38,6 @@ def create_indexes() -> None:
 
     db["events"].create_indexes(
         [
-            IndexModel([("event_type", ASCENDING)], name="event_type"),
-            IndexModel([("archived", ASCENDING)], name="archived"),
             IndexModel([("created_by_user_id", ASCENDING)], name="created_by_user_id"),
             IndexModel(
                 [
@@ -75,7 +87,11 @@ def create_indexes() -> None:
                 },
             ),
             IndexModel(
-                [("submitted_by_user_id", ASCENDING)], name="submitted_by_user_id"
+                [
+                    ("submitted_by_user_id", ASCENDING),
+                    ("is_standing", ASCENDING),
+                ],
+                name="submitted_by_user_id_is_standing",
             ),
             IndexModel([("status", ASCENDING)], name="status"),
         ]
