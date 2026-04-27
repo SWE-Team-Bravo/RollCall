@@ -391,7 +391,7 @@ with st.expander("Generate Semester Schedule", expanded=False):
                     for e in _preview
                 ]
             )
-            st.dataframe(_preview_df, hide_index=True, use_container_width=True)
+            st.dataframe(_preview_df, hide_index=True, width="stretch")
 
             # ── Generate button ───────────────────────────────────────────────
             st.warning(
