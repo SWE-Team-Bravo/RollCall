@@ -24,9 +24,15 @@ from utils.at_risk_email import (
 
 @pytest.fixture(autouse=True)
 def mock_templates():
-    with patch(
-        "utils.waiver_email.get_email_template",
-        side_effect=lambda k: _DEFAULT_TEMPLATES[k],
+    with (
+        patch(
+            "utils.waiver_email.get_email_template",
+            side_effect=lambda k: _DEFAULT_TEMPLATES[k],
+        ),
+        patch(
+            "utils.at_risk_email.get_email_template",
+            side_effect=lambda k: _DEFAULT_TEMPLATES[k],
+        ),
     ):
         yield
 
