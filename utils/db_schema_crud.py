@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
+from pymongo import UpdateOne
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
 
 from utils.db import get_collection
@@ -458,6 +459,69 @@ def get_attendance_record_by_event_cadet(
             "cadet_id": ObjectId(cadet_id),
         }
     )
+
+
+def get_attendance_records_for_cadet_in_events(
+    event_ids: list[str | ObjectId],
+    cadet_id: str | ObjectId,
+) -> list[dict]:
+    """Bulk fetch attendance records for one cadet across many events.
+
+    Served by the `(event_id, cadet_id)` compound index on attendance_records.
+    """
+    col = get_collection("attendance_records")
+    if col is None or not event_ids:
+        return []
+    return list(
+        col.find(
+            {
+                "event_id": {"$in": [ObjectId(e_id) for e_id in event_ids]},
+                "cadet_id": ObjectId(cadet_id),
+            }
+        )
+    )
+
+
+def bulk_upsert_attendance_status(
+    updates: list[dict],
+) -> int:
+    """Apply many attendance status changes in a single round-trip.
+
+    Each update dict must contain: event_id, cadet_id, status,
+    recorded_by_user_id, and optionally recorded_by_roles. Returns the
+    number of upserted-or-modified documents.
+    """
+    col = get_collection("attendance_records")
+    if col is None or not updates:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    ops: list[UpdateOne] = []
+    for u in updates:
+        set_doc: dict[str, Any] = {
+            "status": u["status"],
+            "recorded_by_user_id": ObjectId(u["recorded_by_user_id"]),
+            "updated_at": now,
+        }
+        roles = u.get("recorded_by_roles")
+        if roles is not None:
+            set_doc["recorded_by_roles"] = list(roles)
+        ops.append(
+            UpdateOne(
+                {
+                    "event_id": ObjectId(u["event_id"]),
+                    "cadet_id": ObjectId(u["cadet_id"]),
+                },
+                {
+                    "$set": set_doc,
+                    "$setOnInsert": {"created_at": now},
+                },
+                upsert=True,
+            )
+        )
+
+    result = col.bulk_write(ops, ordered=False)
+    return (result.modified_count or 0) + (result.upserted_count or 0)
 
 
 def upsert_attendance_record(

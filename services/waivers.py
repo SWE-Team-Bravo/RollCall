@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from bson import ObjectId
 
@@ -7,9 +7,10 @@ from utils.audit_log import log_attendance_modification
 from utils.date_range import expand_event_dates
 from utils.datetime_utils import ensure_utc
 from utils.db_schema_crud import (
+    bulk_upsert_attendance_status,
     create_waiver_approval,
-    get_attendance_record_by_event_cadet,
     get_attendance_record_by_id,
+    get_attendance_records_for_cadet_in_events,
     get_cadet_by_user_id,
     get_events_by_date_range,
     get_sickness_waivers_by_user,
@@ -18,6 +19,8 @@ from utils.db_schema_crud import (
     upsert_attendance_record,
     validate_waiver,
 )
+
+MAX_STANDING_WAIVER_WEEKS = 16
 
 COMMON_REASONS = [
     "Military Orders",
@@ -51,7 +54,11 @@ def is_first_sickness_waiver(user_id) -> bool:
 
 
 def apply_sickness_auto_approval(waiver_id, user_id) -> bool:
-    """Auto-approve a sickness waiver if it is the cadet's first. Returns True if approved."""
+    """Auto-approve a sickness waiver if it is the cadet's first. Returns True if approved.
+
+    On approval, also flips covered attendance records to excused so the
+    persisted state matches what cadre approval would produce.
+    """
     waiver = get_waiver_by_id(waiver_id)
     if not waiver:
         return False
@@ -72,6 +79,9 @@ def apply_sickness_auto_approval(waiver_id, user_id) -> bool:
         decision="approved",
         comments="Auto-approved: first sickness waiver.",
     )
+
+    approved_waiver = get_waiver_by_id(waiver_id) or {**waiver, "status": "approved"}
+    distribute_excused_status(approved_waiver, user_id)
     return True
 
 
@@ -238,9 +248,11 @@ def validate_standing_waiver(
     if end < start:
         return False, "End date must be on or after start date."
 
-    today = datetime.now(timezone.utc).date()
-    if start.year != today.year or end.year != today.year:
-        return False, "Standing waiver dates must be in the current year."
+    if (end - start) > timedelta(weeks=MAX_STANDING_WAIVER_WEEKS):
+        return (
+            False,
+            f"Standing waivers cannot exceed {MAX_STANDING_WAIVER_WEEKS} weeks.",
+        )
 
     covered = compute_standing_waiver_dates(start, end, event_types)
     if not covered:
@@ -411,7 +423,15 @@ def _resolve_standing_target(
     )
 
 
-def _distribute_standing(waiver: dict, actor_user_id: str | ObjectId) -> int:
+def _bulk_transition_standing(
+    waiver: dict,
+    actor_user_id: str | ObjectId,
+    *,
+    from_status: str,
+    to_status: str,
+    audit_reason: str,
+) -> int:
+    """Shared bulk path: fetch all records once, write all transitions once."""
     target = _resolve_standing_target(waiver)
     if target is None:
         return 0
@@ -419,43 +439,61 @@ def _distribute_standing(waiver: dict, actor_user_id: str | ObjectId) -> int:
     waiver_id = waiver["_id"]
 
     events = get_events_by_date_range(start, end, event_types=event_types)
-    updated = 0
-    for event in events:
-        event_id = ObjectId(event["_id"])
-        record = get_attendance_record_by_event_cadet(event_id, cadet_id)
-        if record is None:
-            continue
-        if _set_attendance_excused(
-            record=record,
+    if not events:
+        return 0
+
+    event_ids = [ObjectId(e["_id"]) for e in events]
+    records = get_attendance_records_for_cadet_in_events(event_ids, cadet_id)
+    transitions = [
+        r for r in records if (r.get("status") or "").lower() == from_status
+    ]
+    if not transitions:
+        return 0
+
+    bulk_upsert_attendance_status(
+        [
+            {
+                "event_id": ObjectId(r["event_id"]),
+                "cadet_id": cadet_id,
+                "status": to_status,
+                "recorded_by_user_id": actor_user_id,
+                "recorded_by_roles": ["system"],
+            }
+            for r in transitions
+        ]
+    )
+    for r in transitions:
+        log_attendance_modification(
+            event_id=ObjectId(r["event_id"]),
             cadet_id=cadet_id,
-            event_id=event_id,
-            actor_user_id=actor_user_id,
-            waiver_id=waiver_id,
-        ):
-            updated += 1
-    return updated
+            user_id=actor_user_id,
+            outcome="applied",
+            old_status=from_status,
+            new_status=to_status,
+            source=_DISTRIBUTE_AUDIT_SOURCE,
+            metadata={
+                "waiver_id": str(waiver_id),
+                "reason": audit_reason,
+            },
+        )
+    return len(transitions)
+
+
+def _distribute_standing(waiver: dict, actor_user_id: str | ObjectId) -> int:
+    return _bulk_transition_standing(
+        waiver,
+        actor_user_id,
+        from_status="absent",
+        to_status="excused",
+        audit_reason="waiver_approved",
+    )
 
 
 def _revert_standing(waiver: dict, actor_user_id: str | ObjectId) -> int:
-    target = _resolve_standing_target(waiver)
-    if target is None:
-        return 0
-    cadet_id, start, end, event_types = target
-    waiver_id = waiver["_id"]
-
-    events = get_events_by_date_range(start, end, event_types=event_types)
-    reverted = 0
-    for event in events:
-        event_id = ObjectId(event["_id"])
-        record = get_attendance_record_by_event_cadet(event_id, cadet_id)
-        if record is None:
-            continue
-        if _set_attendance_absent(
-            record=record,
-            cadet_id=cadet_id,
-            event_id=event_id,
-            actor_user_id=actor_user_id,
-            waiver_id=waiver_id,
-        ):
-            reverted += 1
-    return reverted
+    return _bulk_transition_standing(
+        waiver,
+        actor_user_id,
+        from_status="excused",
+        to_status="absent",
+        audit_reason="waiver_denied",
+    )
