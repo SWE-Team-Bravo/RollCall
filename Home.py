@@ -111,10 +111,23 @@ else:
     else:
         pages = []
 
-    pages.append(account_settings)
+    if user.get("force_password_change"):
+        st.warning(
+            "You must change your temporary password before continuing.",
+        )
+        pages = [account_settings]
+    else:
+        pages.append(account_settings)
 
     if not pages:
         pages = [login]
+
+    redirect_after_password_reset = st.session_state.pop(
+        "post_password_reset_redirect", None
+    )
+    if redirect_after_password_reset == "attendance_submission":
+        target_page = attendance if attendance in pages else pages[0]
+        st.switch_page(target_page)
 
     pg = st.navigation(pages)
 

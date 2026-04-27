@@ -7,6 +7,8 @@ from urllib.parse import quote
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from services.event_config import is_email_enabled
+
 
 def _get_sender_credentials() -> tuple[str | None, str | None]:
     sender_email = os.getenv("EMAIL_ADDRESS")
@@ -63,14 +65,23 @@ def send_password_reset_email(*, to_email: str, token: str) -> bool:
     return _send_message(to_email, msg)
 
 
-def send_temporary_password_email(*, to_email: str, temporary_password: str) -> bool:
+def send_temporary_password_email(
+    *,
+    to_email: str,
+    temporary_password: str,
+    subject: str | None = None,
+    body: str | None = None,
+) -> bool:
+    if not is_email_enabled():
+        return False
+
     msg = MIMEMultipart("alternative")
     sender_email, _ = _get_sender_credentials()
     msg["From"] = sender_email or ""
     msg["To"] = to_email
-    msg["Subject"] = "RollCall Temporary Password"
+    msg["Subject"] = subject or "RollCall Temporary Password"
 
-    body = (
+    email_body = body or (
         "Hi,\n\n"
         "An admin has reset your password. "
         "Use the temporary password below to log in, then change it in Account Settings:\n\n"
@@ -78,5 +89,5 @@ def send_temporary_password_email(*, to_email: str, temporary_password: str) -> 
         "RollCall"
     )
 
-    msg.attach(MIMEText(body, "plain"))
+    msg.attach(MIMEText(email_body, "plain"))
     return _send_message(to_email, msg)

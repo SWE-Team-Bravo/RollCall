@@ -22,6 +22,10 @@ _DEFAULT_TEMPLATES = {
         "subject": "RollCall — Test Email",
         "body": "This is a test email from RollCall. SMTP is configured correctly.",
     },
+    "roster_temp_password": {
+        "subject": "RollCall — Your Temporary Password",
+        "body": "Hi,\n\nYour RollCall account has been created. Use the temporary password below to log in, then change it in Account Settings:\n\n{temporary_password}\n\nRollCall",
+    },
 }
 
 

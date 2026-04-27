@@ -14,6 +14,7 @@ TEMPLATE_LABELS = {
     "at_risk_cadre": "At-Risk Report (cadre/FC)",
     "at_risk_student": "At-Risk Alert (cadet)",
     "test_email": "Test Email",
+    "roster_temp_password": "Temporary Password",
 }
 
 TEMPLATE_VARIABLES = {
@@ -22,6 +23,7 @@ TEMPLATE_VARIABLES = {
     "at_risk_cadre": "{recipient_name}, {pt_threshold}, {llab_threshold}, {table}",
     "at_risk_student": "{message}",
     "test_email": "no variables",
+    "roster_temp_password": "{temporary_password}",
 }
 
 

@@ -598,6 +598,7 @@ else:
                     st.error("User no longer exists.")
                 else:
                     updates, temp_pw = build_password_updates()
+                    updates["force_password_change"] = True
                     before_user = dict(existing_user)
                     result = update_user(existing_user["_id"], updates)
                     if result is None:

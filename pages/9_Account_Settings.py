@@ -167,6 +167,7 @@ with st.form("change_password_form"):
             for field, msg in errors.items():
                 st.error(f"{field.replace('_', ' ').capitalize()}: {msg}")
         else:
+            updates["force_password_change"] = False
             result = update_user(user_doc["_id"], updates)
             if result is None:
                 st.error("Failed to update password (database unavailable).")
@@ -213,6 +214,7 @@ with st.form("change_password_form"):
                         raw["usernames"][email]["password_hash"] = updates[
                             "password_hash"
                         ]
+                        raw["usernames"][email]["force_password_change"] = False
                     except Exception:
                         logging.exception(
                             "Failed to sync password hash in session state"
@@ -230,3 +232,9 @@ with st.form("change_password_form"):
                         )
 
                 st.success("Password updated successfully.")
+
+                if user_doc.get("force_password_change"):
+                    st.session_state["post_password_reset_redirect"] = (
+                        "attendance_submission"
+                    )
+                    st.rerun()
