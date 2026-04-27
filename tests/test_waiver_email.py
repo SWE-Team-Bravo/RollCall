@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from email.message import Message
 import smtplib
-from unittest.mock import patch, MagicMock
+from email.message import Message
+from unittest.mock import MagicMock, patch
 
-import pytest  # type: ignore
+import pytest
 
 from services.email_templates import _DEFAULT_TEMPLATES
 from utils.waiver_email import (

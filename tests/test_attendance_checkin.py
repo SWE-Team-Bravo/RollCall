@@ -1,15 +1,15 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-import pytest  # type: ignore
+import pytest
 
 from services.attendance import (
+    _haversine_meters,
     is_already_checked_in,
     is_within_checkin_window,
     is_within_geofence,
-    _haversine_meters,
 )
 from services.event_config import get_checkin_window_minutes
-from datetime import datetime, timedelta, timezone
 
 
 def create_event(start_offset_minutes: int) -> dict:
