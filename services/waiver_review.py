@@ -12,6 +12,7 @@ from utils.db_schema_crud import (
     get_all_waivers,
     get_attendance_record_by_id,
     get_cadet_by_id,
+    get_cadet_by_user_id,
     get_event_by_id,
     get_flight_by_id,
     get_user_by_id,
@@ -19,6 +20,7 @@ from utils.db_schema_crud import (
     update_waiver,
 )
 
+from services.waivers import distribute_excused_status, revert_excused_status
 from utils.audit_log import log_data_change
 from utils.names import format_full_name
 from utils.pagination import build_pagination_metadata, paginate_list
@@ -92,16 +94,47 @@ def _waiver_review_base_pipeline(
                     "as": "attendance_record",
                 }
             },
-            {"$unwind": "$attendance_record"},
+            {
+                "$unwind": {
+                    "path": "$attendance_record",
+                    "preserveNullAndEmptyArrays": True,
+                }
+            },
             {
                 "$lookup": {
                     "from": "cadets",
                     "localField": "attendance_record.cadet_id",
                     "foreignField": "_id",
-                    "as": "cadet",
+                    "as": "cadet_via_record",
                 }
             },
-            {"$unwind": "$cadet"},
+            {
+                "$unwind": {
+                    "path": "$cadet_via_record",
+                    "preserveNullAndEmptyArrays": True,
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "cadets",
+                    "localField": "submitted_by_user_id",
+                    "foreignField": "user_id",
+                    "as": "cadet_via_submitter",
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$cadet_via_submitter",
+                    "preserveNullAndEmptyArrays": True,
+                }
+            },
+            {
+                "$addFields": {
+                    "cadet": {
+                        "$ifNull": ["$cadet_via_record", "$cadet_via_submitter"]
+                    }
+                }
+            },
             {
                 "$lookup": {
                     "from": "users",
@@ -203,6 +236,21 @@ def _waiver_review_base_pipeline(
     return pipeline
 
 
+def _standing_event_label(doc: dict) -> tuple[str, str, str]:
+    """Return (event_name, event_date, event_type) for a standing waiver row."""
+    types = doc.get("event_types") or ["pt", "lab"]
+    type_label = "/".join(t.upper() if t == "pt" else "LLAB" for t in types)
+    start = doc.get("start_date")
+    end = doc.get("end_date")
+    start_str = _fmt_date(start)
+    end_str = _fmt_date(end)
+    return (
+        f"Standing waiver ({type_label})",
+        f"{start_str} → {end_str}",
+        "standing",
+    )
+
+
 def _waiver_review_rows_from_docs(docs: list[dict]) -> list[dict]:
     rows: list[dict] = []
     for doc in docs:
@@ -217,6 +265,13 @@ def _waiver_review_rows_from_docs(docs: list[dict]) -> list[dict]:
             last = str(cadet.get("last_name", "") or "").strip()
             cadet_name = f"{first} {last}".strip() or "Unknown cadet"
 
+        if doc.get("is_standing"):
+            event_name, event_date, event_type = _standing_event_label(doc)
+        else:
+            event_name = str(event.get("event_name") or "Unknown event")
+            event_date = _fmt_date(event.get("start_date"))
+            event_type = (event.get("event_type") or "") or "unknown"
+
         rows.append(
             {
                 "waiver_id": doc.get("_id"),
@@ -227,10 +282,11 @@ def _waiver_review_rows_from_docs(docs: list[dict]) -> list[dict]:
                 "cadet_name": cadet_name,
                 "cadet_email": str(cadet_user.get("email") or cadet.get("email") or ""),
                 "flight_name": str(flight.get("name") or "Unassigned"),
-                "event_name": str(event.get("event_name") or "Unknown event"),
-                "event_date": _fmt_date(event.get("start_date")),
-                "event_type": (event.get("event_type") or "") or "unknown",
+                "event_name": event_name,
+                "event_date": event_date,
+                "event_type": event_type,
                 "cadre_only": bool(doc.get("cadre_only", False)),
+                "is_standing": bool(doc.get("is_standing", False)),
             }
         )
     return rows
@@ -276,6 +332,7 @@ def _fallback_waiver_review_rows(
                 "event_name": ctx["event_name"],
                 "event_date": ctx["event_date"],
                 "event_type": ctx["event_type"],
+                "is_standing": bool(waiver.get("is_standing", False)),
                 "cadre_only": ctx["cadre_only"],
             }
         )
@@ -358,11 +415,50 @@ def get_paginated_waiver_review_rows(
     return {**pagination, "items": _waiver_review_rows_from_docs(docs)}
 
 
+def _flight_name_for_cadet(cadet: dict | None) -> str:
+    if cadet is None:
+        return "Unassigned"
+    cadet_flight_id = cadet.get("flight_id")
+    if cadet_flight_id is None:
+        return "Unassigned"
+    flight = get_flight_by_id(cadet_flight_id)
+    return flight.get("name", "Unassigned") if flight else "Unassigned"
+
+
+def _standing_waiver_context(waiver: dict) -> dict | None:
+    submitter_id = waiver.get("submitted_by_user_id")
+    if submitter_id is None:
+        return None
+
+    cadet = get_cadet_by_user_id(submitter_id)
+    user = get_user_by_id(submitter_id) if submitter_id is not None else None
+
+    types = waiver.get("event_types") or ["pt", "lab"]
+    type_label = "/".join(t.upper() if t == "pt" else "LLAB" for t in types)
+    start_str = _fmt_date(waiver.get("start_date"))
+    end_str = _fmt_date(waiver.get("end_date"))
+
+    return {
+        "cadet_name": format_full_name(user, "Unknown cadet"),
+        "cadet_email": user.get("email") if user else "",
+        "flight_name": _flight_name_for_cadet(cadet),
+        "event_name": f"Standing waiver ({type_label})",
+        "event_date": f"{start_str} → {end_str}",
+        "event_type": "standing",
+        "waiver_type": waiver.get("waiver_type") or "non-medical",
+        "attachments": waiver.get("attachments") or [],
+        "cadre_only": bool(waiver.get("cadre_only", False)),
+    }
+
+
 def get_waiver_context(waiver: dict) -> dict | None:
     """
     For a single waiver, fetch and return all related data.
     Returns None if any required data is missing.
     """
+    if waiver.get("is_standing"):
+        return _standing_waiver_context(waiver)
+
     attendance_record_id = waiver.get("attendance_record_id")
     if attendance_record_id is None:
         return None
@@ -387,20 +483,12 @@ def get_waiver_context(waiver: dict) -> dict | None:
         if user_id is not None:
             user = get_user_by_id(user_id)
 
-    flight_name = "Unassigned"
-    if cadet is not None:
-        cadet_flight_id = cadet.get("flight_id")
-        if cadet_flight_id is not None:
-            flight = get_flight_by_id(cadet_flight_id)
-            if flight:
-                flight_name = flight.get("name", "Unassigned")
-
     cadet_name = format_full_name(user, "Unknown cadet")
 
     return {
         "cadet_name": cadet_name,
         "cadet_email": user.get("email") if user else "",
-        "flight_name": flight_name,
+        "flight_name": _flight_name_for_cadet(cadet),
         "event_name": event.get("event_name") if event else "Unknown event",
         "event_date": _fmt_date(event.get("start_date") if event else None),
         "event_type": (event.get("event_type") if event else "") or "unknown",
@@ -460,6 +548,13 @@ def submit_decision(
             "waiver_id": str(waiver_id),
         },
     )
+
+    if before_waiver is not None:
+        was_approved = (before_status or "").lower() == "approved"
+        if new_status == "approved" and not was_approved:
+            distribute_excused_status(before_waiver, approver_id)
+        elif new_status == "denied" and was_approved:
+            revert_excused_status(before_waiver, approver_id)
 
     if cadet_email:
         email_sent = send_waiver_decision_email(

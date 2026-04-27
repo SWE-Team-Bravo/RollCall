@@ -305,6 +305,25 @@ def get_events_by_ids(event_ids: list[str | ObjectId]) -> list[dict]:
     return list(col.find({"_id": {"$in": object_ids}}))
 
 
+def get_events_by_date_range(
+    start: datetime,
+    end: datetime,
+    *,
+    event_types: list[str] | None = None,
+    include_archived: bool = False,
+) -> list[dict]:
+    """Return events whose start_date falls within [start, end] inclusive."""
+    col = get_collection("events")
+    if col is None:
+        return []
+    query: dict = {"start_date": {"$gte": start, "$lte": end}}
+    if event_types:
+        query["event_type"] = {"$in": list(event_types)}
+    if not include_archived:
+        query["archived"] = {"$ne": True}
+    return list(col.find(query))
+
+
 def update_event(event_id: str | ObjectId, updates: dict) -> UpdateResult | None:
     col = get_collection("events")
     if col is None:
@@ -571,27 +590,24 @@ def get_cadet_absence_stats() -> list[dict]:
 
 
 def create_waiver(
-    attendance_record_id: str | ObjectId,
+    attendance_record_id: str | ObjectId | None,
     reason: str,
     status: str,
     submitted_by_user_id: str | ObjectId,
     waiver_type: str = "non-medical",
     cadre_only: bool = False,
     attachments: list | None = None,
+    *,
+    is_standing: bool = False,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    event_types: list[str] | None = None,
 ) -> InsertOneResult | None:
     col = get_collection("waivers")
     if col is None:
         return None
 
-    existing_withdrawn = col.find_one(
-        {
-            "attendance_record_id": ObjectId(attendance_record_id),
-            "status": "withdrawn",
-        }
-    )
-
     doc: dict = {
-        "attendance_record_id": ObjectId(attendance_record_id),
         "reason": reason,
         "status": status,
         "submitted_by_user_id": ObjectId(submitted_by_user_id),
@@ -601,12 +617,32 @@ def create_waiver(
         "created_at": datetime.now(timezone.utc),
     }
 
+    if is_standing:
+        doc["is_standing"] = True
+        doc["attendance_record_id"] = None
+        doc["start_date"] = start_date
+        doc["end_date"] = end_date
+        doc["event_types"] = list(event_types or ["pt", "lab"])
+        return col.insert_one(doc)
+
+    if attendance_record_id is None:
+        return None
+
+    attendance_oid = ObjectId(attendance_record_id)
+    existing_withdrawn = col.find_one(
+        {
+            "attendance_record_id": attendance_oid,
+            "status": "withdrawn",
+        }
+    )
+
+    doc["attendance_record_id"] = attendance_oid
     if existing_withdrawn:
         doc["previous_waiver_id"] = existing_withdrawn["_id"]
 
     result = col.insert_one(doc)
 
-    is_valid, why = validate_waiver(ObjectId(attendance_record_id))
+    is_valid, why = validate_waiver(attendance_oid)
     if not is_valid:
         col.update_one(
             {"_id": result.inserted_id},
@@ -667,6 +703,20 @@ def get_sickness_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
                 "submitted_by_user_id": ObjectId(user_id),
                 "waiver_type": "sickness",
                 "status": {"$in": ["approved", "pending"]},
+            }
+        )
+    )
+
+
+def get_standing_waivers_by_user(user_id: str | ObjectId) -> list[dict]:
+    col = get_collection("waivers")
+    if col is None:
+        return []
+    return list(
+        col.find(
+            {
+                "submitted_by_user_id": ObjectId(user_id),
+                "is_standing": True,
             }
         )
     )

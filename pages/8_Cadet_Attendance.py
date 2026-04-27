@@ -225,8 +225,10 @@ if not cadet:
         st.stop()
     cadet = get_temp_cadet()
 
-records, events, waivers = load_attendance_db(cadet["_id"])
-rows = cadet_attendance(records, events, waivers)
+records, events, waivers, standing_waivers = load_attendance_db(
+    cadet["_id"], user["_id"]
+)
+rows = cadet_attendance(records, events, waivers, standing_waivers)
 
 show_header(cadet, current_user)
 
