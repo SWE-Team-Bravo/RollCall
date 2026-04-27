@@ -16,3 +16,12 @@ dependencies = [
     "streamlit-folium>=0.26.0",
     "streamlit-js-eval>=1.0.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.12",
+    "selenium>=4.43.0",
+    "ty>=0.0.32",
+]
