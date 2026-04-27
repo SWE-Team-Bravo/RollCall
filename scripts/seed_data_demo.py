@@ -759,7 +759,9 @@ def _seed_audit_log(
 
     event_to_update = event_docs[0]
     event_before = dict(event_to_update)
-    event_to_update["event_name"] = f"{event_to_update['event_name']} - Leadership Focus"
+    event_to_update["event_name"] = (
+        f"{event_to_update['event_name']} - Leadership Focus"
+    )
     event_to_update["geofence_enabled"] = True
     event_to_update["geofence_lat"] = 40.7128
     event_to_update["geofence_lon"] = -74.0060
@@ -791,7 +793,9 @@ def _seed_audit_log(
     )
     audit_count += 1
 
-    event_to_archive = next(doc for doc in event_docs if doc["start_date"].date() >= TODAY)
+    event_to_archive = next(
+        doc for doc in event_docs if doc["start_date"].date() >= TODAY
+    )
     archived_before = dict(event_to_archive)
     event_to_archive["archived"] = True
     event_to_archive["archived_at"] = NOW - timedelta(days=3)
@@ -982,7 +986,11 @@ def _seed_audit_log(
     )
     audit_count += 1
 
-    code_event = next(doc for doc in event_docs if doc["start_date"].date() >= TODAY and not doc.get("archived"))
+    code_event = next(
+        doc
+        for doc in event_docs
+        if doc["start_date"].date() >= TODAY and not doc.get("archived")
+    )
     active_code_doc = {
         "code": "482915",
         "event_id": code_event["_id"],
@@ -1109,7 +1117,10 @@ def _seed_audit_log(
             before={"status": "pending", "waiver_type": row["waiver_type"]},
             after={"status": row["status"], "waiver_type": row["waiver_type"]},
             now=row["created_at"],
-            metadata={"waiver_id": str(row["waiver_id"]), "decision_comments": row["comments"]},
+            metadata={
+                "waiver_id": str(row["waiver_id"]),
+                "decision_comments": row["comments"],
+            },
         )
         audit_count += 1
 
@@ -1304,16 +1315,21 @@ def populate() -> None:
                     )
                 )
 
-    for record_id, cadet_key, _, _, in absent_records[:3]:
+    for (
+        record_id,
+        cadet_key,
+        _,
+        _,
+    ) in absent_records[:3]:
         new_status = "excused" if len(attendance_audit_rows) < 2 else "present"
         audit_time = NOW - timedelta(days=8 - len(attendance_audit_rows), hours=2)
         db["attendance_records"].update_one(
             {"_id": record_id},
             {"$set": {"status": new_status, "updated_at": audit_time}},
         )
-        event_id = db["attendance_records"].find_one({"_id": record_id}, {"event_id": 1})[
-            "event_id"
-        ]
+        event_id = db["attendance_records"].find_one(
+            {"_id": record_id}, {"event_id": 1}
+        )["event_id"]
         attendance_audit_rows.append(
             {
                 "record_id": record_id,
@@ -1430,8 +1446,7 @@ def populate() -> None:
                     "waiver_type": wtype,
                     "approver_id": user_id_by_key[approver_key],
                     "comments": comments,
-                    "created_at": NOW
-                    - timedelta(days=max(0, days_ago_submitted - 1)),
+                    "created_at": NOW - timedelta(days=max(0, days_ago_submitted - 1)),
                 }
             )
 

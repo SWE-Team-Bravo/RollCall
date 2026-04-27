@@ -130,9 +130,7 @@ def _waiver_review_base_pipeline(
             },
             {
                 "$addFields": {
-                    "cadet": {
-                        "$ifNull": ["$cadet_via_record", "$cadet_via_submitter"]
-                    }
+                    "cadet": {"$ifNull": ["$cadet_via_record", "$cadet_via_submitter"]}
                 }
             },
             {

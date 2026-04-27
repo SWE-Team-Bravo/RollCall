@@ -191,9 +191,7 @@ class TestGetCadetsByUserIdsMap:
 
 class TestGetCadetAbsenceStats:
     @patch("utils.db_schema_crud.get_collection")
-    def test_pipeline_excludes_approved_waivers_from_absence_totals(
-        self, mock_get_col
-    ):
+    def test_pipeline_excludes_approved_waivers_from_absence_totals(self, mock_get_col):
         mock_col = MagicMock()
         mock_get_col.return_value = mock_col
         mock_col.aggregate.return_value = []

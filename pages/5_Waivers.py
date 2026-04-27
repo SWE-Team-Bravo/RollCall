@@ -39,9 +39,7 @@ STATUS_BADGE = WAIVER_STATUS_BADGE
 require_role("cadet")
 
 
-def load_waiver_data(
-    cadet_id, user_id
-) -> tuple[list[dict], dict, list[dict], dict]:
+def load_waiver_data(cadet_id, user_id) -> tuple[list[dict], dict, list[dict], dict]:
     records = get_attendance_by_cadet(cadet_id)
     waivers_by_record_id = {}
     all_waivers: list[dict] = []
@@ -83,14 +81,10 @@ def show_waivers(
             start = w.get("start_date")
             end = w.get("end_date")
             start_str = (
-                start.strftime("%Y-%m-%d")
-                if isinstance(start, datetime)
-                else "Unknown"
+                start.strftime("%Y-%m-%d") if isinstance(start, datetime) else "Unknown"
             )
             end_str = (
-                end.strftime("%Y-%m-%d")
-                if isinstance(end, datetime)
-                else "Unknown"
+                end.strftime("%Y-%m-%d") if isinstance(end, datetime) else "Unknown"
             )
             entry["_event_name"] = "Standing waiver"
             entry["_event_date"] = f"{start_str} → {end_str}"
@@ -307,7 +301,9 @@ def _build_attachments(uploaded_file) -> list[dict]:
     ]
 
 
-def _build_reason_text(common_reasons: list[str], selected_reason: str, extra: str) -> str:
+def _build_reason_text(
+    common_reasons: list[str], selected_reason: str, extra: str
+) -> str:
     if selected_reason == common_reasons[-1]:
         return extra.strip()
     return f"{selected_reason}. {extra}".strip(". ")
@@ -336,9 +332,7 @@ def _submit_singular_waiver(
                 f"Waiver is still invalid and was auto-denied again: {why}"
             )
         else:
-            st.session_state.show_success = (
-                "Waiver request submitted successfully!"
-            )
+            st.session_state.show_success = "Waiver request submitted successfully!"
         st.rerun()
 
     result = create_waiver(
@@ -406,7 +400,9 @@ def _submit_standing_waiver(
     else:
         if waiver_type == "sickness":
             apply_sickness_auto_approval(result.inserted_id, user_id)
-        st.session_state.show_success = "Standing waiver request submitted successfully!"
+        st.session_state.show_success = (
+            "Standing waiver request submitted successfully!"
+        )
     st.rerun()
 
 
@@ -552,7 +548,9 @@ def waiver_form(
                 standing_range, today, today
             )
             if not range_complete:
-                st.error("Select a complete start and end date for the standing waiver.")
+                st.error(
+                    "Select a complete start and end date for the standing waiver."
+                )
             elif not standing_event_types:
                 st.error("Select at least one event type for the standing waiver.")
             else:

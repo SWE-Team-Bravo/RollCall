@@ -385,9 +385,7 @@ def test_submit_decision_skips_email_if_no_cadet_email():
 def test_submit_decision_approve_distributes_excused():
     pending_waiver = {"_id": "w1", "status": "pending"}
     with (
-        patch(
-            "services.waiver_review.get_waiver_by_id", return_value=pending_waiver
-        ),
+        patch("services.waiver_review.get_waiver_by_id", return_value=pending_waiver),
         patch("services.waiver_review.update_waiver", return_value=True),
         patch("services.waiver_review.create_waiver_approval", return_value=True),
         patch("services.waiver_review.send_waiver_decision_email"),
@@ -408,15 +406,11 @@ def test_submit_decision_approve_distributes_excused():
 def test_submit_decision_deny_does_not_distribute_when_was_pending():
     pending_waiver = {"_id": "w1", "status": "pending"}
     with (
-        patch(
-            "services.waiver_review.get_waiver_by_id", return_value=pending_waiver
-        ),
+        patch("services.waiver_review.get_waiver_by_id", return_value=pending_waiver),
         patch("services.waiver_review.update_waiver", return_value=True),
         patch("services.waiver_review.create_waiver_approval", return_value=True),
         patch("services.waiver_review.send_waiver_decision_email"),
-        patch(
-            "services.waiver_review.distribute_excused_status"
-        ) as mock_distribute,
+        patch("services.waiver_review.distribute_excused_status") as mock_distribute,
         patch("services.waiver_review.revert_excused_status") as mock_revert,
     ):
         submit_decision(
@@ -430,15 +424,11 @@ def test_submit_decision_deny_does_not_distribute_when_was_pending():
 def test_submit_decision_deny_reverts_when_previously_approved():
     approved_waiver = {"_id": "w1", "status": "approved"}
     with (
-        patch(
-            "services.waiver_review.get_waiver_by_id", return_value=approved_waiver
-        ),
+        patch("services.waiver_review.get_waiver_by_id", return_value=approved_waiver),
         patch("services.waiver_review.update_waiver", return_value=True),
         patch("services.waiver_review.create_waiver_approval", return_value=True),
         patch("services.waiver_review.send_waiver_decision_email"),
-        patch(
-            "services.waiver_review.distribute_excused_status"
-        ) as mock_distribute,
+        patch("services.waiver_review.distribute_excused_status") as mock_distribute,
         patch(
             "services.waiver_review.revert_excused_status", return_value=1
         ) as mock_revert,
@@ -454,15 +444,11 @@ def test_submit_decision_deny_reverts_when_previously_approved():
 def test_submit_decision_approve_skips_distribute_when_already_approved():
     approved_waiver = {"_id": "w1", "status": "approved"}
     with (
-        patch(
-            "services.waiver_review.get_waiver_by_id", return_value=approved_waiver
-        ),
+        patch("services.waiver_review.get_waiver_by_id", return_value=approved_waiver),
         patch("services.waiver_review.update_waiver", return_value=True),
         patch("services.waiver_review.create_waiver_approval", return_value=True),
         patch("services.waiver_review.send_waiver_decision_email"),
-        patch(
-            "services.waiver_review.distribute_excused_status"
-        ) as mock_distribute,
+        patch("services.waiver_review.distribute_excused_status") as mock_distribute,
         patch("services.waiver_review.revert_excused_status") as mock_revert,
     ):
         submit_decision(
