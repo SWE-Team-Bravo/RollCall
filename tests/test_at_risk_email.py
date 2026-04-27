@@ -377,9 +377,11 @@ def test_send_email_false_if_no_credentials():
 
 
 def test_send_email_false_on_exception():
-    with patch(
-        "utils.at_risk_email.smtplib.SMTP_SSL",
-        side_effect=Exception("Connection Failed"),
+    with (
+        patch(
+            "utils.email_utils.smtplib.SMTP_SSL",
+            side_effect=Exception("Connection Failed"),
+        ),
     ):
         result = send_email("test@rollcall.local", MagicMock())
         assert result is False
@@ -389,7 +391,7 @@ def test_send_email_returns_true_on_success():
     with (
         patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
         patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
-        patch("utils.at_risk_email.smtplib.SMTP_SSL") as mock_smtp,
+        patch("utils.email_utils.smtplib.SMTP_SSL") as mock_smtp,
     ):
         mock_smtp.return_value.__enter__.return_value = MagicMock()
         mock_smtp.return_value.__exit__.return_value = False
@@ -624,7 +626,7 @@ def test_send_to_student_sends_if_counts_increased():
         patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
         patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
         patch("utils.at_risk_email.set_at_risk_email_sent"),
-        patch("utils.at_risk_email.smtplib.SMTP_SSL") as mock_smtp,
+        patch("utils.email_utils.smtplib.SMTP_SSL") as mock_smtp,
     ):
         mock_smtp.return_value.__enter__.return_value = MagicMock()
         mock_smtp.return_value.__exit__.return_value = False
@@ -639,7 +641,7 @@ def test_send_to_student_sends_if_no_previous_record():
         patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
         patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
         patch("utils.at_risk_email.set_at_risk_email_sent"),
-        patch("utils.at_risk_email.smtplib.SMTP_SSL") as mock_smtp,
+        patch("utils.email_utils.smtplib.SMTP_SSL") as mock_smtp,
     ):
         mock_smtp.return_value.__enter__.return_value = MagicMock()
         mock_smtp.return_value.__exit__.return_value = False
@@ -653,7 +655,7 @@ def test_send_to_student_returns_false_on_exception():
         patch("utils.at_risk_email.SENDER_EMAIL", "test@gmail.com"),
         patch("utils.at_risk_email.SENDER_PASSWORD", "testpassword"),
         patch("utils.at_risk_email.get_cadet_by_id", return_value=cadet),
-        patch("utils.at_risk_email.smtplib.SMTP_SSL", side_effect=Exception("fail")),
+        patch("utils.email_utils.smtplib.SMTP_SSL", side_effect=Exception("fail")),
     ):
         result = send_to_student("c1", "cadet@rollcall.local", 8, 0)
         assert result is False

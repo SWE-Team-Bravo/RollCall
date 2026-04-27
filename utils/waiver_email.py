@@ -1,16 +1,15 @@
 from datetime import datetime, timezone
-import logging
 import os
-import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
+import smtplib
 from services.email_templates import get_content, get_email_template
 from utils.db_schema_crud import (
     update_waiver,
     get_waiver_by_id,
     get_users_by_role,
 )
+from utils.email_utils import send_with_retry
 from services.event_config import is_email_enabled
 
 
@@ -91,17 +90,11 @@ def send_waiver_decision_email(
     if waiver and waiver.get("email_sent"):
         return False
 
-    try:
-        msg = build_email(to_email, event_name, event_date, status, comments)
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-
+    msg = build_email(to_email, event_name, event_date, status, comments)
+    if send_with_retry(SENDER_EMAIL, SENDER_PASSWORD, to_email, msg):
         update_waiver(waiver_id, {"email_sent": True})
         return True
-    except Exception:
-        logging.exception("Failed to send waiver email to %s", to_email)
-        return False
+    return False
 
 
 def send_waiver_reminder_email(
@@ -120,20 +113,18 @@ def send_waiver_reminder_email(
     if not cadre_emails:
         return False
 
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            for email in cadre_emails:
-                msg = build_reminder_email(
-                    email, waiver_id, cadet_name, event_name, event_date, days_pending
-                )
-                server.sendmail(SENDER_EMAIL, email, msg.as_string())
+    any_sent = False
+    for email in cadre_emails:
+        msg = build_reminder_email(
+            email, waiver_id, cadet_name, event_name, event_date, days_pending
+        )
+        if send_with_retry(SENDER_EMAIL, SENDER_PASSWORD, email, msg):
+            any_sent = True
 
+    if any_sent:
         update_waiver(waiver_id, {"last_reminder_sent_at": datetime.now(timezone.utc)})
         return True
-    except Exception:
-        logging.exception("Failed to send waiver reminder for waiver %s", waiver_id)
-        return False
+    return False
 
 
 def send_test_email(to_email: str) -> tuple[bool, str]:
