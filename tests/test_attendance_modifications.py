@@ -138,6 +138,11 @@ def test_get_event_change_history_paginates_results(monkeypatch):
             ]
         ),
     )
+    monkeypatch.setattr(
+        modifications,
+        "get_attendance_record_by_event_cadet",
+        lambda event_id, cadet_id: {"status": "absent"},
+    )
 
     history = modifications.get_event_change_history(event_id, page=2, page_size=2)
 

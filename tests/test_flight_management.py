@@ -687,11 +687,13 @@ def test_get_selected_cadet_ids_handles_pandas_bool_values():
     assert selected_ids == ["cadet-1", "cadet-2"]
 
 
+@patch("services.flight_management.log_data_change")
 @patch("services.flight_management.assign_cadet_to_flight")
 @patch("services.flight_management.unassign_cadet_from_flight")
 def test_assign_selected_cadets_to_flight_returns_partial_warning(
     mock_unassign_cadet_from_flight,
     mock_assign_cadet_to_flight,
+    _mock_log,
 ):
     mock_assign_cadet_to_flight.side_effect = [None, ValueError("Database unavailable")]
 
@@ -718,8 +720,11 @@ def test_assign_selected_cadets_to_flight_warns_when_nothing_selected():
     assert message == "Select at least one cadet."
 
 
+@patch("services.flight_management.log_data_change")
 @patch("services.flight_management.unassign_cadet_from_flight")
-def test_unassign_selected_cadets_returns_success(mock_unassign_cadet_from_flight):
+def test_unassign_selected_cadets_returns_success(
+    mock_unassign_cadet_from_flight, _mock_log
+):
     level, message = unassign_selected_cadets(
         ["cadet-1"], {"cadet-1": {"name": "Jordan Lee"}}
     )
