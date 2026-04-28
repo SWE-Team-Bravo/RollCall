@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -10,7 +10,9 @@ from services.event_code_display import (
     build_fullscreen_code_html,
 )
 from services.event_codes import (
+    EVENT_CODE_VALID_AFTER_START_MINUTES,
     build_expires_at,
+    build_valid_expiration_times,
     create_code,
     expire_code,
     get_active_code,
@@ -48,7 +50,7 @@ col_event, col_tz = st.columns([2, 1])
 
 with col_event:
     event_labels = [
-        f"{e.get('event_type', '').upper()} | {e.get('start_date', '')} | {e.get('event_name', '')}"
+        f"{e.get('event_type', '').upper()} | {e.get('start_date', '')} UTC | {e.get('event_name', '')}"
         for e in all_events
     ]
     selected_label = st.selectbox(
@@ -59,44 +61,81 @@ with col_event:
 with col_tz:
     tz_name = st.selectbox("Timezone", TZ_OPTIONS, index=0)
 
-selected_event_start, selected_event_end = get_event_time_bounds(
+selected_event_start, _selected_event_end = get_event_time_bounds(
     selected_event,
     fallback_tz_name=tz_name,
 )
-max_expires_at = latest_allowed_expiry(selected_event_end)
+max_expires_at = latest_allowed_expiry(selected_event_start)
 if max_expires_at is not None:
-    local_event_end = max_expires_at.astimezone(ZoneInfo(tz_name))
-    st.caption("Codes must expire no later than the event end time.")
+    local_limit = max_expires_at.astimezone(ZoneInfo(tz_name))
+    st.caption(
+        "Codes must expire no later than "
+        f"{EVENT_CODE_VALID_AFTER_START_MINUTES} minutes after the event start time."
+    )
     if selected_event_start is not None:
         local_event_start = selected_event_start.astimezone(ZoneInfo(tz_name))
         st.caption(
-            "Selected event runs "
-            f"{local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')} to "
-            f"{local_event_end.strftime('%Y-%m-%d %I:%M %p %Z')}"
-        )
-    else:
-        st.caption(
-            f"Selected event ends at {local_event_end.strftime('%Y-%m-%d %I:%M %p %Z')}"
+            "Selected event starts at "
+            f"{local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')}; "
+            "latest valid expiration is "
+            f"{local_limit.strftime('%Y-%m-%d %I:%M %p %Z')}"
         )
 
-col_date, col_time = st.columns(2)
+default_expiry_local = (
+    max_expires_at.astimezone(ZoneInfo(tz_name)) if max_expires_at else None
+)
+exp_date = (
+    default_expiry_local.date()
+    if default_expiry_local
+    else datetime.now(timezone.utc).date()
+)
 
-with col_date:
-    exp_date = st.date_input("Expiration date", value=date.today())
+valid_expiration_times = build_valid_expiration_times(
+    exp_date,
+    max_expires_at,
+    tz_name,
+)
 
-with col_time:
-    exp_time = st.time_input("Expiration time", value=time(23, 59))
+if valid_expiration_times:
+    default_exp_time = (
+        default_expiry_local.time().replace(tzinfo=None, second=0, microsecond=0)
+        if default_expiry_local
+        else valid_expiration_times[-1]
+    )
+    default_exp_time_index = (
+        valid_expiration_times.index(default_exp_time)
+        if default_exp_time in valid_expiration_times
+        else len(valid_expiration_times) - 1
+    )
+    exp_time = st.selectbox(
+        "Expiration time",
+        valid_expiration_times,
+        index=default_exp_time_index,
+        format_func=lambda t: t.strftime("%H:%M"),
+    )
+else:
+    st.selectbox("Expiration time", ["No valid times"], disabled=True)
+    exp_time = None
 
-expires_at = build_expires_at(exp_date, exp_time, tz_name)
+expires_at = build_expires_at(exp_date, exp_time, tz_name) if exp_time else None
 
-if st.button("Generate New Code", type="primary", width="stretch"):
+if not valid_expiration_times:
+    st.warning("No valid expiration times remain for this event.")
+
+if st.button(
+    "Generate New Code",
+    type="primary",
+    width="stretch",
+    disabled=expires_at is None,
+):
+    assert expires_at is not None
     if not is_expiry_valid(expires_at, max_expires_at):
         if expires_at <= datetime.now(timezone.utc):
             st.error("Expiration must be in the future.")
         elif max_expires_at is not None:
             local_limit = max_expires_at.astimezone(ZoneInfo(tz_name))
             st.error(
-                "Expiration must be no later than the event end time: "
+                "Expiration must be no later than 10 minutes after the event starts: "
                 f"{local_limit.strftime('%Y-%m-%d %I:%M %p %Z')}."
             )
         else:
