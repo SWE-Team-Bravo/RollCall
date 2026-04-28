@@ -343,6 +343,13 @@ def test_get_flight_commander_details_returns_name_and_rank(
     assert rank == "300"
 
 
+def test_get_flight_commander_details_handles_missing_commander():
+    name, rank = get_flight_commander_details({})
+
+    assert name == "-"
+    assert rank == ""
+
+
 @patch("services.flight_management.get_user_by_id")
 @patch("services.flight_management.get_all_cadets")
 @patch("services.flight_management.get_all_flights")
@@ -638,6 +645,12 @@ def test_get_commander_member_table_builds_commander_row(
             "Current Flight": "Alpha Flight",
         }
     ]
+
+
+def test_get_commander_member_table_handles_missing_commander():
+    table = get_commander_member_table({"_id": "flight-alpha", "name": "Alpha Flight"})
+
+    assert table.empty
 
 
 def test_get_member_selection_table_marks_selected_rows():

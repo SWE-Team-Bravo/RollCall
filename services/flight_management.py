@@ -17,7 +17,11 @@ from utils.names import format_full_name
 
 
 def get_flight_commander_details(flight: dict) -> tuple[str, str]:
-    commander = get_cadet_by_id(flight["commander_cadet_id"])
+    commander_cadet_id = flight.get("commander_cadet_id")
+    if not commander_cadet_id:
+        return "-", ""
+
+    commander = get_cadet_by_id(commander_cadet_id)
     if commander is None:
         return "-", ""
 
@@ -375,7 +379,11 @@ def _build_member_table(
 
 
 def _get_commander_member_row(flight: dict) -> dict[str, str | bool] | None:
-    commander = get_cadet_by_id(flight["commander_cadet_id"])
+    commander_cadet_id = flight.get("commander_cadet_id")
+    if not commander_cadet_id:
+        return None
+
+    commander = get_cadet_by_id(commander_cadet_id)
     if commander is None:
         return None
 
