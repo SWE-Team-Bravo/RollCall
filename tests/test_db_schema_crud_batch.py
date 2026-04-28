@@ -2,6 +2,8 @@ from bson import ObjectId
 from unittest.mock import patch, MagicMock
 
 from utils.db_schema_crud import (
+    delete_cadet,
+    delete_user,
     get_cadet_absence_stats,
     get_users_by_emails,
     get_users_by_names,
@@ -209,3 +211,64 @@ class TestGetCadetAbsenceStats:
             in stage.get("$match", {}).get("$or", [])
             for stage in pre_group_stages
         )
+
+
+class TestDeleteUserCascade:
+    @patch("utils.db_schema_crud.get_collection")
+    def test_delete_user_deletes_linked_cadet_and_clears_flight_refs(
+        self, mock_get_col
+    ):
+        user_id = ObjectId()
+        cadet_id = ObjectId()
+        users_col = MagicMock()
+        cadets_col = MagicMock()
+        flights_col = MagicMock()
+        cadets_col.find_one.return_value = {"_id": cadet_id, "user_id": user_id}
+
+        collections = {
+            "users": users_col,
+            "cadets": cadets_col,
+            "flights": flights_col,
+        }
+        mock_get_col.side_effect = lambda name: collections[name]
+
+        result = delete_user(user_id)
+
+        assert result == users_col.delete_one.return_value
+        cadets_col.update_one.assert_called_once_with(
+            {"_id": cadet_id},
+            {"$unset": {"flight_id": ""}},
+        )
+        flights_col.update_many.assert_called_once_with(
+            {"commander_cadet_id": cadet_id},
+            {"$unset": {"commander_cadet_id": ""}},
+        )
+        cadets_col.delete_one.assert_called_once_with({"_id": cadet_id})
+        users_col.delete_one.assert_called_once_with({"_id": user_id})
+
+
+class TestDeleteCadetCascade:
+    @patch("utils.db_schema_crud.get_collection")
+    def test_delete_cadet_clears_flight_references_before_delete(self, mock_get_col):
+        cadet_id = ObjectId()
+        cadets_col = MagicMock()
+        flights_col = MagicMock()
+
+        collections = {
+            "cadets": cadets_col,
+            "flights": flights_col,
+        }
+        mock_get_col.side_effect = lambda name: collections[name]
+
+        result = delete_cadet(cadet_id)
+
+        assert result == cadets_col.delete_one.return_value
+        cadets_col.update_one.assert_called_once_with(
+            {"_id": cadet_id},
+            {"$unset": {"flight_id": ""}},
+        )
+        flights_col.update_many.assert_called_once_with(
+            {"commander_cadet_id": cadet_id},
+            {"$unset": {"commander_cadet_id": ""}},
+        )
+        cadets_col.delete_one.assert_called_once_with({"_id": cadet_id})

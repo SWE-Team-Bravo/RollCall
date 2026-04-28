@@ -129,7 +129,13 @@ def delete_user(user_id: str | ObjectId) -> DeleteResult | None:
     col = get_collection("users")
     if col is None:
         return None
-    return col.delete_one({"_id": ObjectId(user_id)})
+    user_object_id = ObjectId(user_id)
+
+    cadet = get_cadet_by_user_id(user_object_id)
+    if cadet is not None:
+        delete_cadet(cadet["_id"])
+
+    return col.delete_one({"_id": user_object_id})
 
 
 # -- Cadets
@@ -218,7 +224,27 @@ def delete_cadet(cadet_id: str | ObjectId) -> DeleteResult | None:
     col = get_collection("cadets")
     if col is None:
         return None
-    return col.delete_one({"_id": ObjectId(cadet_id)})
+    cadet_object_id = ObjectId(cadet_id)
+    _remove_cadet_flight_references(cadet_object_id)
+    return col.delete_one({"_id": cadet_object_id})
+
+
+def _remove_cadet_flight_references(cadet_id: str | ObjectId) -> None:
+    cadet_object_id = ObjectId(cadet_id)
+
+    cadets_col = get_collection("cadets")
+    if cadets_col is not None:
+        cadets_col.update_one(
+            {"_id": cadet_object_id},
+            {"$unset": {"flight_id": ""}},
+        )
+
+    flights_col = get_collection("flights")
+    if flights_col is not None:
+        flights_col.update_many(
+            {"commander_cadet_id": cadet_object_id},
+            {"$unset": {"commander_cadet_id": ""}},
+        )
 
 
 def create_cadet_if_not_exists(

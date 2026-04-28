@@ -290,6 +290,7 @@ def _render_delete_confirmation(
 
     st.warning(
         f"Type DELETE below to **permanently delete** user {summary['email']}. "
+        "Any linked cadet profile will also be deleted and removed from flights. "
         "This action cannot be undone.",
     )
     confirmation = st.text_input(
