@@ -152,8 +152,6 @@ def _show_recent_changes_feedback() -> None:
         st.info(message)
 
 
-_show_feedback()
-
 current_user = get_current_user()
 assert current_user is not None
 
@@ -332,6 +330,8 @@ def _render_attendance_roster() -> None:
                 f"Saved attendance for {save_result['changed_count']} cadet(s).",
             )
         st.rerun()
+
+    _show_feedback()
 
 
 _render_attendance_roster()

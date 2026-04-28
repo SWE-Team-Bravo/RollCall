@@ -51,6 +51,8 @@ if "gen_preview_params" not in st.session_state:
     st.session_state.gen_preview_params = None
 if "gen_schedule_success" not in st.session_state:
     st.session_state.gen_schedule_success = None
+if "schedule_config_success" not in st.session_state:
+    st.session_state.schedule_config_success = None
 
 st.title("Event Management")
 
@@ -180,11 +182,15 @@ with st.expander("Event Schedule Configuration", expanded=False):
             actor_user_id=current_user_doc.get("_id") if current_user_doc else None,
             actor_email=current_user_doc.get("email") if current_user_doc else None,
         ):
-            st.success("Schedule configuration saved!")
+            st.session_state.schedule_config_success = "Schedule configuration saved!"
             config = get_event_config() or {}
             st.rerun()
         else:
             st.error("Database unavailable — could not save configuration.")
+
+    if st.session_state.schedule_config_success:
+        st.success(st.session_state.schedule_config_success)
+        st.session_state.schedule_config_success = None
 
 st.divider()
 
@@ -565,10 +571,6 @@ with st.expander("Create One-Off Event", expanded=False):
         st.success(st.session_state.create_event_success)
         st.session_state.create_event_success = None
 
-if st.session_state.edit_event_success:
-    st.success(st.session_state.edit_event_success)
-    st.session_state.edit_event_success = None
-
 st.divider()
 
 # =============================================================================
@@ -576,7 +578,6 @@ st.divider()
 # =============================================================================
 
 st.subheader("Existing Events")
-st.caption("Start Date and End Date in the table below are shown in UTC.")
 
 events = get_all_events(include_archived=True)
 active_events = [event for event in events if not event.get("archived", False)]
@@ -621,6 +622,10 @@ else:
         if st.button("Edit Selected Event"):
             st.session_state.edit_event_id = selected_edit_event["_id"]
             st.rerun()
+
+        if st.session_state.edit_event_success:
+            st.success(st.session_state.edit_event_success)
+            st.session_state.edit_event_success = None
 
         if st.session_state.edit_event_id == selected_edit_event["_id"]:
             # Seed geofence session state from event data when first opening this edit
@@ -811,10 +816,6 @@ else:
     if not active_events:
         st.caption("No active events available to archive.")
     else:
-        if st.session_state.archive_event_success:
-            st.success(st.session_state.archive_event_success)
-            st.session_state.archive_event_success = None
-
         event_labels = [
             f"{e.get('_display_start', '—')} — {e.get('event_name', '—')}"
             for e in active_events
@@ -851,6 +852,10 @@ else:
             if st.button("Archive Selected Event"):
                 st.session_state.confirm_archive_event_id = selected_event["_id"]
                 st.rerun()
+
+        if st.session_state.archive_event_success:
+            st.success(st.session_state.archive_event_success)
+            st.session_state.archive_event_success = None
 
     # Keep archived events expander open when user has previously interacted with it
     _archived_expanded = (

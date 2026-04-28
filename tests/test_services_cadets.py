@@ -1,8 +1,9 @@
 from unittest.mock import patch
 
 import pandas as pd
+from pymongo.errors import DuplicateKeyError
 
-from services.cadets import get_cadet_export_df, validate_cadet_input
+from services.cadets import add_cadet_for_user, get_cadet_export_df, validate_cadet_input
 
 
 def test_valid_input_returns_true():
@@ -134,3 +135,52 @@ def test_get_cadet_export_df_uses_user_names_and_email():
     assert df["First Name"].iloc[0] == "Tyler"
     assert df["Last Name"].iloc[0] == "Brooks"
     assert df["Email"].iloc[0] == "cadet1@rollcall.local"
+
+
+def test_add_cadet_for_user_returns_clean_error_for_missing_user():
+    with patch("services.cadets.get_user_by_email", return_value=None):
+        ok, msg = add_cadet_for_user("missing@example.com", "100", "John", "Doe")
+
+    assert ok is False
+    assert msg == "User not found."
+
+
+def test_add_cadet_for_user_returns_clean_error_for_existing_profile():
+    user = {"_id": "user1"}
+    with (
+        patch("services.cadets.get_user_by_email", return_value=user),
+        patch("services.cadets.get_cadet_by_user_id", return_value={"_id": "cadet1"}),
+        patch("services.cadets.create_cadet") as mock_create_cadet,
+    ):
+        ok, msg = add_cadet_for_user("cadet@example.com", "100", "John", "Doe")
+
+    assert ok is False
+    assert msg == "A cadet profile already exists for this user."
+    mock_create_cadet.assert_not_called()
+
+
+def test_add_cadet_for_user_handles_duplicate_key_error():
+    user = {"_id": "user1"}
+    with (
+        patch("services.cadets.get_user_by_email", return_value=user),
+        patch("services.cadets.get_cadet_by_user_id", return_value=None),
+        patch("services.cadets.create_cadet", side_effect=DuplicateKeyError("dupe")),
+    ):
+        ok, msg = add_cadet_for_user("cadet@example.com", "100", "John", "Doe")
+
+    assert ok is False
+    assert msg == "A cadet profile already exists for this user."
+
+
+def test_add_cadet_for_user_returns_success_message_empty_on_create():
+    user = {"_id": "user1"}
+    with (
+        patch("services.cadets.get_user_by_email", return_value=user),
+        patch("services.cadets.get_cadet_by_user_id", return_value=None),
+        patch("services.cadets.create_cadet") as mock_create_cadet,
+    ):
+        ok, msg = add_cadet_for_user("cadet@example.com", "100", "John", "Doe")
+
+    assert ok is True
+    assert msg == ""
+    mock_create_cadet.assert_called_once_with("user1", "100", "John", "Doe", "cadet@example.com")

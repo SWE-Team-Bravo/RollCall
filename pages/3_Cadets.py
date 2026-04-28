@@ -67,15 +67,16 @@ def add_cadet():
         if submit_button:
             check, msg = validate_cadet_input(cadet_name, cadet_lastname, cadet_email)
             if check:
-                if add_cadet_for_user(
+                added, add_msg = add_cadet_for_user(
                     cadet_email, cadet_rank, cadet_name, cadet_lastname
-                ):
+                )
+                if added:
                     st.session_state.show_form = False
                     st.session_state.success_msg = "New cadet added successfully!"
                     st.session_state.success_time = time.time()
                     st.rerun()
                 else:
-                    st.error("User not found!")
+                    st.error(add_msg)
             else:
                 st.error(msg)
 
@@ -405,7 +406,6 @@ with tab_import:
     if "import_result" in st.session_state:
         result = st.session_state["import_result"]
         if result.get("created"):
-            st.success(f"Created {len(result['created'])} account(s).")
             rows = [
                 {
                     "Name": c["name"],
@@ -418,14 +418,11 @@ with tab_import:
             ]
             st.dataframe(rows, hide_index=True, width="stretch")
         if result.get("updated"):
-            st.success(f"Updated {len(result['updated'])} account(s).")
             rows = [
                 {"Name": c["name"], "Email": c["email"], "Rank": c["rank"]}
                 for c in result["updated"]
             ]
             st.dataframe(rows, hide_index=True, width="stretch")
-        if result.get("skipped"):
-            st.info(f"Skipped {len(result['skipped'])} account(s).")
         if result.get("errors"):
             st.error(f"{len(result['errors'])} error(s):")
             for err in result["errors"]:
@@ -487,6 +484,12 @@ with tab_import:
                     del st.session_state[key]
             st.rerun()
 
+        if result.get("created"):
+            st.success(f"Created {len(result['created'])} account(s).")
+        if result.get("updated"):
+            st.success(f"Updated {len(result['updated'])} account(s).")
+        if result.get("skipped"):
+            st.info(f"Skipped {len(result['skipped'])} account(s).")
     # ---- Step 1: Upload & preview ----
     # Hide the upload/preview UI while import results are being reviewed so
     # that reruns (e.g. retroactive email buttons) don't redraw it below.
