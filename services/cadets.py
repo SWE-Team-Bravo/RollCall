@@ -3,6 +3,7 @@ import secrets
 from typing import Any
 
 import pandas as pd
+from pymongo.errors import DuplicateKeyError
 
 from utils.audit_log import log_data_change, serialize_doc_for_audit
 from utils.db import get_collection
@@ -10,6 +11,7 @@ from utils.db_schema_crud import (
     assign_cadet_to_flight as db_assign_cadet_to_flight,
     create_cadet,
     get_cadet_by_id,
+    get_cadet_by_user_id,
     get_user_by_email,
     get_user_by_id,
     get_all_cadets,
@@ -111,18 +113,25 @@ def validate_cadet_input(
     return True, ""
 
 
-def add_cadet_for_user(email: str, rank: str, first_name: str, last_name: str) -> bool:
+def add_cadet_for_user(
+    email: str, rank: str, first_name: str, last_name: str
+) -> tuple[bool, str]:
     user = get_user_by_email(email)
     if user is None:
-        return False
-    create_cadet(
-        user["_id"],
-        rank,
-        first_name,
-        last_name,
-        email,
-    )
-    return True
+        return False, "User not found."
+    if get_cadet_by_user_id(user["_id"]) is not None:
+        return False, "A cadet profile already exists for this user."
+    try:
+        create_cadet(
+            user["_id"],
+            rank,
+            first_name,
+            last_name,
+            email,
+        )
+    except DuplicateKeyError:
+        return False, "A cadet profile already exists for this user."
+    return True, ""
 
 
 def get_cadet_export_df() -> pd.DataFrame | str:

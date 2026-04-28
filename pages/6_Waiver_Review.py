@@ -31,6 +31,11 @@ require_role("admin", "cadre", "waiver_reviewer")
 st.title("Waiver Review")
 st.caption("Review waiver requests and approve/deny with comments.")
 
+if "bulk_waiver_feedback" not in st.session_state:
+    st.session_state.bulk_waiver_feedback = None
+if "waiver_feedback" not in st.session_state:
+    st.session_state.waiver_feedback = None
+
 current_user = get_current_user()
 assert current_user is not None
 
@@ -137,10 +142,14 @@ if pending_items:
 
         if st.button("Apply to Selected", type="primary"):
             if bulk_decision == "Deny" and not bulk_comments.strip():
-                st.error("please provide comments when denying waivers.")
+                st.session_state.bulk_waiver_feedback = {
+                    "level": "error",
+                    "message": "Please provide comments when denying waivers.",
+                }
             else:
                 success_count = 0
                 fail_count = 0
+                warnings: list[str] = []
                 for w_id in selected_waiver_ids:
                     w = next(
                         (x for x in pending_items if str(x["waiver_id"]) == w_id), None
@@ -159,13 +168,33 @@ if pending_items:
                     if ok:
                         success_count += 1
                         if msg:
-                            st.warning(msg)
+                            warnings.append(msg)
                     else:
                         fail_count += 1
-                st.success(f"Applied to {success_count} waiver(s).")
+                parts: list[str] = []
+                if success_count:
+                    parts.append(f"Applied to {success_count} waiver(s).")
                 if fail_count:
-                    st.error(f"{fail_count} waiver(s) failed.")
-                st.rerun()
+                    parts.append(f"{fail_count} waiver(s) failed.")
+                if warnings:
+                    parts.extend(warnings)
+                st.session_state.bulk_waiver_feedback = {
+                    "level": "error" if fail_count else "success",
+                    "message": "\n".join(parts),
+                }
+            st.rerun()
+
+    feedback = st.session_state.bulk_waiver_feedback
+    if feedback:
+        level = feedback.get("level")
+        message = feedback.get("message")
+        if level == "success":
+            st.success(message)
+        elif level == "warning":
+            st.warning(message)
+        else:
+            st.error(message)
+        st.session_state.bulk_waiver_feedback = None
 
 st.divider()
 
@@ -213,7 +242,11 @@ for w in cast(list, paginated_rows["items"]):
 
             if submitted:
                 if decision == "Deny" and not comments.strip():
-                    st.error("Please provide comments when denying a waiver.")
+                    st.session_state.waiver_feedback = {
+                        "waiver_id": w["waiver_id"],
+                        "level": "error",
+                        "message": "Please provide comments when denying a waiver.",
+                    }
                 else:
                     success, err = submit_decision(
                         waiver_id=w["waiver_id"],
@@ -225,12 +258,34 @@ for w in cast(list, paginated_rows["items"]):
                         event_date=w["event_date"],
                     )
                     if success:
-                        st.success("Saved.")
+                        msg = "Saved."
                         if err:
-                            st.warning(err)
+                            msg += f"\n{err}"
+                        st.session_state.waiver_feedback = {
+                            "waiver_id": w["waiver_id"],
+                            "level": "success",
+                            "message": msg,
+                        }
                         st.rerun()
                     else:
-                        st.error(err)
+                        st.session_state.waiver_feedback = {
+                            "waiver_id": w["waiver_id"],
+                            "level": "error",
+                            "message": err,
+                        }
+                        st.rerun()
+
+            feedback = st.session_state.waiver_feedback
+            if feedback and str(feedback.get("waiver_id")) == str(w["waiver_id"]):
+                level = feedback.get("level")
+                message = feedback.get("message")
+                if level == "success":
+                    st.success(message)
+                elif level == "warning":
+                    st.warning(message)
+                else:
+                    st.error(message)
+                st.session_state.waiver_feedback = None
 
 st.divider()
 render_pagination_controls("waiver_review", paginated_rows)

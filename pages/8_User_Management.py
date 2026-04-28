@@ -334,11 +334,6 @@ st.caption("Create, edit, disable, and enable user accounts and roles.")
 if "admin_users_success" not in st.session_state:
     st.session_state["admin_users_success"] = None
 
-if st.session_state["admin_users_success"]:
-    st.success(st.session_state["admin_users_success"])
-    st.session_state["admin_users_success"] = None
-
-
 # ----------------------------
 # Create New User
 # ----------------------------
@@ -555,6 +550,10 @@ else:
                 st.session_state["admin_users_confirm_delete"] = None
                 st.session_state["admin_users_last_temp_pw"] = None
                 st.rerun()
+
+        if st.session_state.get("admin_users_success"):
+            st.success(st.session_state["admin_users_success"])
+            st.session_state["admin_users_success"] = None
 
     editing_id = st.session_state.get("admin_users_editing")
     confirm_id = st.session_state.get("admin_users_confirm_status_change")

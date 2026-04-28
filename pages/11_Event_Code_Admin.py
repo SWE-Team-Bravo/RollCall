@@ -76,9 +76,9 @@ if max_expires_at is not None:
         local_event_start = selected_event_start.astimezone(ZoneInfo(tz_name))
         st.caption(
             "Selected event starts at "
-            f"{local_event_start.strftime('%Y-%m-%d %I:%M %p %Z')}; "
+            f"{local_event_start.strftime('%Y-%m-%d %H:%M %Z')}; "
             "latest valid expiration is "
-            f"{local_limit.strftime('%Y-%m-%d %I:%M %p %Z')}"
+            f"{local_limit.strftime('%Y-%m-%d %H:%M %Z')}"
         )
 
 default_expiry_local = (

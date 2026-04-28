@@ -61,13 +61,34 @@ def forget_flight_expanded(flight_id: str) -> None:
     st.session_state.expanded_flight_ids = sorted(expanded_ids)
 
 
-def set_flight_feedback(flight_id: str, level: str, message: str) -> None:
+def set_flight_feedback(
+    flight_id: str, level: str, message: str, location: str
+) -> None:
     st.session_state.flight_feedback = {
         "flight_id": flight_id,
         "level": level,
         "message": message,
+        "location": location,
     }
     keep_flight_expanded(flight_id)
+
+
+def render_flight_feedback(flight_id: str, location: str) -> bool:
+    feedback = st.session_state.flight_feedback
+    if not feedback or feedback.get("flight_id") != flight_id:
+        return False
+    if feedback.get("location") != location:
+        return False
+
+    level = feedback.get("level")
+    message = feedback.get("message")
+    if level == "success":
+        st.success(message)
+    elif level == "warning":
+        st.warning(message)
+    else:
+        st.error(message)
+    return True
 
 
 def get_assign_selection_key(flight_id: str) -> str:
@@ -168,18 +189,6 @@ else:
             expander = st.expander(expander_label)
 
         with expander:
-            feedback = st.session_state.flight_feedback
-            if feedback and feedback.get("flight_id") == flight_id:
-                level = feedback.get("level")
-                message = feedback.get("message")
-                if level == "success":
-                    st.success(message)
-                elif level == "warning":
-                    st.warning(message)
-                else:
-                    st.error(message)
-                rendered_feedback = True
-
             st.caption(
                 f"Commander: {commander_name}"
                 + (f" ({commander_rank})" if commander_rank else "")
@@ -255,6 +264,10 @@ else:
                     disabled=True,
                 )
 
+            rendered_feedback = (
+                render_flight_feedback(flight_id, "assign") or rendered_feedback
+            )
+
             if assign_clicked:
                 keep_flight_expanded(flight_id)
                 st.session_state[assign_selection_key] = selected_cadet_ids
@@ -265,7 +278,7 @@ else:
                     actor_email=_get_actor_email(),
                 )
                 clear_flight_table_state(flight_id)
-                set_flight_feedback(flight_id, level, message)
+                set_flight_feedback(flight_id, level, message, "assign")
                 st.rerun()
 
             st.markdown("**Cadets in this Flight**")
@@ -332,10 +345,14 @@ else:
                         actor_email=_get_actor_email(),
                     )
                     clear_flight_table_state(flight_id)
-                    set_flight_feedback(flight_id, level, message)
+                    set_flight_feedback(flight_id, level, message, "unassign")
                     st.rerun()
             else:
                 st.caption("No cadets assigned yet beyond the commander.")
+
+            rendered_feedback = (
+                render_flight_feedback(flight_id, "unassign") or rendered_feedback
+            )
 
             st.divider()
             if st.session_state.confirm_delete_flight_id == flight_id:
