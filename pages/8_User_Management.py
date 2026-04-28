@@ -478,11 +478,11 @@ else:
                     "Name": s.get("name", ""),
                     "Email": s.get("email", ""),
                     "Role": s.get("role_label", s.get("role", "")) or "-",
-                    "Status": s.get("status", "Active"),
+                    "Account Status": s.get("status", "Active"),
                 }
                 for s in page_filtered
             ],
-            columns=pd.Index(["Name", "Email", "Role", "Status"]),
+            columns=pd.Index(["Name", "Email", "Role", "Account Status"]),
         )
         st.dataframe(df, hide_index=True, width="stretch")
         render_pagination_controls("admin_users", paginated_filtered)

@@ -31,6 +31,7 @@ from services.cadets import (
 )
 
 from services.account_settings import build_profile_updates
+from services.admin_users import confirm_destructive_action, is_user_disabled
 
 from utils.export import to_excel
 from utils.names import format_full_name
@@ -186,12 +187,21 @@ def edit_cadet(cadet):
 
 def remove_cadet(cadet):
     cadet_id = str(cadet["_id"])
+    cadet_name = format_full_name(cadet, default="this cadet")
     st.warning(
-        f"Are you sure you want to delete {cadet.get('first_name', '')} {cadet.get('last_name', '')}?"
+        f"Type DELETE below to permanently delete **{cadet_name}'s cadet profile**. "
+        "This action cannot be undone."
+    )
+    confirmation = st.text_input(
+        "Confirm deletion", key=f"confirm_delete_input_{cadet_id}"
     )
     col1, col2, spacer = st.columns([2, 2, 10])
 
-    if col1.button("Yes", key=f"confirm_{cadet_id}"):
+    if col1.button("Confirm Delete", type="primary", key=f"confirm_{cadet_id}"):
+        if not confirm_destructive_action(confirmation):
+            st.error("Confirmation text does not match 'DELETE'.")
+            return
+
         result = delete_cadet(cadet_id)
         if result and result.deleted_count > 0:
             st.session_state.pop("selected_cadet_id", None)
@@ -231,6 +241,7 @@ def show_cadets():
 
     rows: list[dict[str, str | int]] = []
     cadet_by_id: dict[str, dict] = {}
+    user_by_cadet_id: dict[str, dict] = {}
     cadet_ids: list[str] = []
     for i, cadet in enumerate(cadets):
         cid = str(cadet.get("_id"))
@@ -244,6 +255,8 @@ def show_cadets():
                 user_doc = get_user_by_id(user_id)
         except Exception:
             user_doc = None
+        if user_doc is not None:
+            user_by_cadet_id[cid] = user_doc
 
         source = user_doc or cadet
         rows.append(
@@ -254,6 +267,9 @@ def show_cadets():
                 "Email": str(source.get("email", "") or ""),
                 "Rank": str(cadet.get("rank", "") or ""),
                 "Level": (RANK_TO_LEVEL.get(str(cadet.get("rank")), "")).capitalize(),
+                "Account Status": "Disabled"
+                if user_doc and is_user_disabled(user_doc)
+                else "Active",
             }
         )
 
@@ -274,7 +290,17 @@ def show_cadets():
 
     df = pd.DataFrame(
         page_rows,
-        columns=pd.Index(["No.", "First Name", "Last Name", "Email", "Rank", "Level"]),
+        columns=pd.Index(
+            [
+                "No.",
+                "First Name",
+                "Last Name",
+                "Email",
+                "Rank",
+                "Level",
+                "Account Status",
+            ]
+        ),
     )
     st.dataframe(df, hide_index=True, width="stretch")
     render_pagination_controls("cadet_management", paginated_rows)
@@ -283,20 +309,15 @@ def show_cadets():
 
     def _cadet_label(cadet_id: str) -> str:
         c = cadet_by_id.get(cadet_id, {})
-        user_doc = None
-        try:
-            user_id = c.get("user_id")
-            if user_id is not None:
-                user_doc = get_user_by_id(user_id)
-        except Exception:
-            user_doc = None
+        user_doc = user_by_cadet_id.get(cadet_id)
 
         source = user_doc or c
         first = str(source.get("first_name", "") or "").strip()
         last = str(source.get("last_name", "") or "").strip()
         email = str(source.get("email", "") or "").strip()
         name = f"{first} {last}".strip() or "Unknown"
-        return f"{name} ({email})".strip()
+        label = f"{name} ({email})".strip()
+        return f"{label} [Disabled]" if user_doc and is_user_disabled(user_doc) else label
 
     if not page_ids:
         return
@@ -314,6 +335,9 @@ def show_cadets():
         index=selected_index,
     )
     st.session_state.selected_cadet_id = selected_id
+    selected_user = user_by_cadet_id.get(str(selected_id))
+    if selected_user and is_user_disabled(selected_user):
+        st.warning("This cadet profile is linked to a disabled user account.")
 
     action_col1, action_col2, _ = st.columns([2, 2, 10])
     with action_col1:
