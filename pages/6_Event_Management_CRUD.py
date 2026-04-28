@@ -634,8 +634,8 @@ else:
                 st.session_state.edit_geofence_lon = selected_edit_event.get(
                     "geofence_lon"
                 )
-                st.session_state.edit_geofence_radius = selected_edit_event.get(
-                    "geofence_radius_meters", 150
+                st.session_state.edit_geofence_radius = (
+                    selected_edit_event.get("geofence_radius_meters") or 150
                 )
                 st.session_state.edit_geofence_init_id = st.session_state.edit_event_id
 
@@ -649,7 +649,7 @@ else:
                 st.caption("Click the map to update the geofence center.")
                 _elat = st.session_state.get("edit_geofence_lat")
                 _elon = st.session_state.get("edit_geofence_lon")
-                _erad = st.session_state.get("edit_geofence_radius", 150)
+                _erad = st.session_state.get("edit_geofence_radius") or 150
                 _ehas_pin = _elat is not None and _elon is not None
                 _ecenter: list[float] = (
                     [cast(float, _elat), cast(float, _elon)]
@@ -781,7 +781,7 @@ else:
                         _egeo,
                         st.session_state.get("edit_geofence_lat") if _egeo else None,
                         st.session_state.get("edit_geofence_lon") if _egeo else None,
-                        int(st.session_state.get("edit_geofence_radius", 150)),
+                        int(st.session_state.get("edit_geofence_radius") or 150),
                         new_start_time,
                         new_end_time,
                         actor_user_id=current_user_doc.get("_id")
