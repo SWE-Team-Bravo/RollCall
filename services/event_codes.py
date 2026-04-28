@@ -16,6 +16,9 @@ from utils.db_schema_crud import (
     get_event_by_id,
 )
 
+EVENT_CODE_VALID_AFTER_START_MINUTES = 10
+EVENT_CODE_EXPIRY_STEP_MINUTES = 5
+
 
 def generate_code() -> str:
     """Generate a random 6-digit numeric code."""
@@ -29,17 +32,67 @@ def build_expires_at(exp_date: date, exp_time: time, tz_name: str) -> datetime:
     return local_dt.astimezone(timezone.utc)
 
 
-def latest_allowed_expiry(event_end: datetime | None) -> datetime | None:
-    """Codes must expire by the event end time."""
-    if event_end is None:
+def _ceil_to_minute_step(dt: datetime, step_minutes: int) -> datetime:
+    rounded = dt.replace(second=0, microsecond=0)
+    if dt > rounded:
+        rounded += timedelta(minutes=1)
+
+    minutes = rounded.hour * 60 + rounded.minute
+    remainder = minutes % step_minutes
+    if remainder:
+        rounded += timedelta(minutes=step_minutes - remainder)
+    return rounded
+
+
+def build_valid_expiration_times(
+    exp_date: date,
+    latest_expires_at: datetime | None,
+    tz_name: str,
+    *,
+    now: datetime | None = None,
+    step_minutes: int = EVENT_CODE_EXPIRY_STEP_MINUTES,
+) -> list[time]:
+    """Return valid local expiration times for a date in small dropdown steps."""
+    if step_minutes <= 0:
+        raise ValueError("step_minutes must be positive")
+
+    tz = ZoneInfo(tz_name)
+    now_local = ensure_utc(now or datetime.now(timezone.utc)).astimezone(tz)
+    day_start = datetime.combine(exp_date, time.min).replace(tzinfo=tz)
+    day_end = datetime.combine(exp_date, time(23, 59)).replace(tzinfo=tz)
+    latest_local = (
+        ensure_utc(latest_expires_at).astimezone(tz) if latest_expires_at else day_end
+    )
+
+    start = max(day_start, now_local + timedelta(microseconds=1))
+    end = min(day_end, latest_local)
+    first = _ceil_to_minute_step(start, step_minutes)
+    if first > end:
+        return []
+
+    options: list[time] = []
+    current = first
+    while current <= end:
+        options.append(current.time().replace(second=0, microsecond=0))
+        current += timedelta(minutes=step_minutes)
+
+    end_time = end.time().replace(second=0, microsecond=0)
+    if options[-1] != end_time:
+        options.append(end_time)
+    return options
+
+
+def latest_allowed_expiry(event_start: datetime | None) -> datetime | None:
+    """Codes must expire shortly after the event start time."""
+    if event_start is None:
         return None
-    return ensure_utc(event_end)
+    return ensure_utc(event_start) + timedelta(minutes=EVENT_CODE_VALID_AFTER_START_MINUTES)
 
 
 def is_expiry_valid(
     expires_at: datetime, latest_expires_at: datetime | None = None
 ) -> bool:
-    """Return True if expires_at is in the future and not beyond the event end."""
+    """Return True if expires_at is in the future and not beyond the event code cutoff."""
     expires_at = ensure_utc(expires_at)
     if expires_at <= datetime.now(timezone.utc):
         return False

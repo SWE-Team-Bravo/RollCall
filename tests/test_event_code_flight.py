@@ -7,7 +7,9 @@ from bson import ObjectId
 import services.event_codes as event_codes_svc
 import utils.db_schema_crud as crud
 from services.event_codes import (
+    EVENT_CODE_VALID_AFTER_START_MINUTES,
     build_expires_at,
+    build_valid_expiration_times,
     is_expiry_valid,
     latest_allowed_expiry,
 )
@@ -294,6 +296,45 @@ def test_build_expires_at_preserves_date():
     assert result.day == 15
 
 
+def test_build_valid_expiration_times_uses_five_minute_steps_until_cutoff():
+    now = datetime(2026, 4, 28, 13, 15, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 28, 13, 30, tzinfo=timezone.utc)
+
+    assert build_valid_expiration_times(
+        date(2026, 4, 28),
+        cutoff,
+        "UTC",
+        now=now,
+    ) == [time(13, 20), time(13, 25), time(13, 30)]
+
+
+def test_build_valid_expiration_times_excludes_times_after_cutoff():
+    now = datetime(2026, 4, 28, 13, 29, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 28, 13, 30, tzinfo=timezone.utc)
+
+    assert build_valid_expiration_times(
+        date(2026, 4, 28),
+        cutoff,
+        "UTC",
+        now=now,
+    ) == [time(13, 30)]
+
+
+def test_build_valid_expiration_times_returns_empty_after_cutoff():
+    now = datetime(2026, 4, 28, 13, 31, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 28, 13, 30, tzinfo=timezone.utc)
+
+    assert (
+        build_valid_expiration_times(
+            date(2026, 4, 28),
+            cutoff,
+            "UTC",
+            now=now,
+        )
+        == []
+    )
+
+
 def test_is_expiry_valid_future_returns_true():
     assert is_expiry_valid(datetime.now(timezone.utc) + timedelta(minutes=5)) is True
 
@@ -306,24 +347,32 @@ def test_is_expiry_valid_now_returns_false():
     assert is_expiry_valid(datetime.now(timezone.utc)) is False
 
 
-def test_is_expiry_valid_rejects_expiry_after_event_end():
-    event_end = datetime.now(timezone.utc) + timedelta(minutes=10)
-    expires_at = event_end + timedelta(seconds=1)
-    assert is_expiry_valid(expires_at, event_end) is False
+def test_is_expiry_valid_rejects_expiry_after_event_code_cutoff():
+    cutoff = datetime.now(timezone.utc) + timedelta(minutes=10)
+    expires_at = cutoff + timedelta(seconds=1)
+    assert is_expiry_valid(expires_at, cutoff) is False
 
 
-def test_is_expiry_valid_allows_expiry_at_event_end():
-    event_end = datetime.now(timezone.utc) + timedelta(minutes=10)
-    assert is_expiry_valid(event_end, event_end) is True
+def test_is_expiry_valid_allows_expiry_at_event_code_cutoff():
+    cutoff = datetime.now(timezone.utc) + timedelta(minutes=10)
+    assert is_expiry_valid(cutoff, cutoff) is True
 
 
-def test_latest_allowed_expiry_returns_none_without_end():
+def test_latest_allowed_expiry_returns_none_without_start():
     assert latest_allowed_expiry(None) is None
 
 
+def test_latest_allowed_expiry_uses_ten_minutes_after_event_start():
+    event_start = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    assert latest_allowed_expiry(event_start) == event_start + timedelta(
+        minutes=EVENT_CODE_VALID_AFTER_START_MINUTES
+    )
+
+
 def test_latest_allowed_expiry_normalizes_naive_datetime():
-    naive_end = datetime(2026, 4, 21, 12, 0, 0)
-    result = latest_allowed_expiry(naive_end)
+    naive_start = datetime(2026, 4, 21, 12, 0, 0)
+    result = latest_allowed_expiry(naive_start)
     assert result is not None
     assert result.tzinfo == timezone.utc
 
