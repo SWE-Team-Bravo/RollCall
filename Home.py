@@ -16,10 +16,11 @@ start_scheduler()
 
 user = get_current_user()
 
-login = st.Page("pages/0_Login.py", title="Login", icon="🔑")
+login = st.Page("pages/0_Login.py", title="Login")
+credits = st.Page("pages/Credits.py", title="Credits", url_path="credits")
 
 if not user:
-    pg = st.navigation([login])
+    pg = st.navigation([login, credits])
 else:
     roles = set(user["roles"])
 
@@ -118,6 +119,8 @@ else:
         pages = [account_settings]
     else:
         pages.append(account_settings)
+
+    pages.append(credits)
 
     if not pages:
         pages = [login]
