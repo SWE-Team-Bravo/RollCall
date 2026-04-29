@@ -135,7 +135,7 @@ if st.button(
         elif max_expires_at is not None:
             local_limit = max_expires_at.astimezone(ZoneInfo(tz_name))
             st.error(
-                "Expiration must be no later than 10 minutes after the event starts: "
+                f"Expiration must be no later than {EVENT_CODE_VALID_AFTER_START_MINUTES} minutes after the event starts: "
                 f"{local_limit.strftime('%Y-%m-%d %I:%M %p %Z')}."
             )
         else:
