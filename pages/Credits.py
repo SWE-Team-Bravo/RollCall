@@ -163,7 +163,7 @@ components.html(
 <script>
   let reel = document.getElementById('reel');
   let y = window.innerHeight;
-  let speed = 4.5;
+  let speed = 2.5;
 
   (function tick() {
     y -= speed;
